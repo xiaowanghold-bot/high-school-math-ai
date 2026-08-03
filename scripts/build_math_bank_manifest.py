@@ -37,7 +37,7 @@ def classify_module(filename: str) -> tuple[str, str]:
 
 
 def classify_version(filename: str) -> str:
-    if "学生版" in filename or "原卷版" in filename:
+    if "学生版" in filename or "原卷" in filename:
         return "student_or_question_only"
     if "解析" in filename or "老师版" in filename or "教师版" in filename or "答案" in filename:
         return "teacher_or_solved"
@@ -48,6 +48,7 @@ OVERRIDE_ESTIMATES = {
     "大题 圆锥曲线（椭圆、双曲线、抛物线）（精选30题）（学生版）(1).pdf": 30,
     "新高考数学概率黄金32题（教师版）(1).pdf": 32,
     "数学-湖北省武汉市2025届高中毕业生四月调研考试（武汉四调）试卷和答案.pdf": 19,
+    "（原卷）高一数学题型汇编（不等式、函数和三角函数）（原卷）.pdf": 674,
 }
 
 

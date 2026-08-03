@@ -1,0 +1,55 @@
+{
+  "pair_id": "source-pair-high1-inequality-functions-trigonometry-v1",
+  "schema_version": "0.1",
+  "status": "structural_pair_verified",
+  "question_document": {
+    "file_id": "USRPDF-028",
+    "filename": "（原卷）高一数学题型汇编（不等式、函数和三角函数）（原卷）.pdf",
+    "source_path": "D:/高中数学/2026-08/（原卷）高一数学题型汇编（不等式、函数和三角函数）（原卷）.pdf",
+    "role": "question_only",
+    "pages": 395,
+    "outline_top_level": 9,
+    "text_extraction_class": "text_layer_good"
+  },
+  "solution_document": {
+    "file_id": "USRPDF-027",
+    "filename": "（解析）高一数学题型汇编（不等式、函数和三角函数）（解析）(1).pdf",
+    "source_path": "D:/高中数学/2026-08/（解析）高一数学题型汇编（不等式、函数和三角函数）（解析）(1).pdf",
+    "role": "answer_and_solution_reference",
+    "pages": 603,
+    "outline_top_level": 9,
+    "answer_markers": 674,
+    "text_extraction_class": "text_layer_good"
+  },
+  "matching": {
+    "expected_unique_questions": 674,
+    "page_offset_supported": false,
+    "key_fields": [
+      "chapter_code",
+      "section_code",
+      "type_heading",
+      "item_kind",
+      "local_item_number"
+    ],
+    "extracted_exact_heading_key_overlap": 327,
+    "manual_spot_checks": [
+      {
+        "question_page": 7,
+        "solution_page": 2,
+        "section": "1.1.1 基础运用类型",
+        "result": "matched"
+      }
+    ],
+    "required_confidence_before_import": 0.98,
+    "unmatched_items_action": "teacher_review_queue"
+  },
+  "ingestion_policy": {
+    "question_facts_from": "question_document",
+    "source_answer_may_seed_verification_from": "solution_document",
+    "source_solution_text": "reference_only_do_not_publish",
+    "independent_solution_required": true,
+    "independent_math_verification_required": true,
+    "teacher_review_required": true,
+    "deduplication_rule": "count_the_pair_as_one_unique_question_collection"
+  }
+}

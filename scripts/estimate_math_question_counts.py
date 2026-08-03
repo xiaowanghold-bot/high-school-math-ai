@@ -11,7 +11,7 @@ PATTERNS = {
     "answer_markers": re.compile(r"【\s*答案\s*】"),
     "analysis_markers": re.compile(r"【\s*分析\s*】"),
     "solution_markers": re.compile(r"【\s*(?:解析|详解|解答)\s*】"),
-    "example_markers": re.compile(r"(?:【\s*)?例\s*\d+(?:[-—]\d+)?(?:\s*】)?"),
+    "example_markers": re.compile(r"(?:【\s*)?例(?:题)?\s*\d+(?:[-—]\d+)?(?:\s*】)?"),
     "numbered_question_markers": re.compile(r"(?m)^\s*\d{1,3}\s*[\.．、]\s*"),
 }
 
@@ -31,7 +31,7 @@ def main() -> None:
         counts = {key: len(pattern.findall(text)) for key, pattern in PATTERNS.items()}
 
         title = str(audit["filename"])
-        is_student = "学生版" in title or "原卷版" in title
+        is_student = "学生版" in title or "原卷" in title
         candidates = [
             counts["answer_markers"],
             counts["solution_markers"],
@@ -80,4 +80,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
