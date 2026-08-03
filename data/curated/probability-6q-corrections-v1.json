@@ -1,0 +1,166 @@
+{
+  "package_id": "curated-probability-6q-v1",
+  "schema_version": "0.1",
+  "source_document": "新高考数学概率黄金32题（教师版）(1).pdf",
+  "source_pages_reviewed": [3, 4, 5, 6, 7, 8, 9],
+  "content_policy": "Only question facts were reconstructed. Solutions were independently authored and must be teacher-reviewed.",
+  "candidates": [
+    {
+      "question_id": "q_pilot_probability_05",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "甲、乙进行7局4胜制乒乓球比赛。（1）某局8:8后，甲连续发2球，再由乙连续发2球；甲发球时甲得分概率为3/5，乙发球时乙得分概率为1/2，各球独立。求甲以11:9获胜的概率。（2）本场前两局甲胜，后续每局甲、乙获胜概率分别为2/3、1/3且相互独立。设又进行X局后比赛结束，求X的分布列与数学期望。",
+        "latex": "甲、乙进行 $7$ 局 $4$ 胜制乒乓球比赛。（1）某局 $8:8$ 后，甲连续发 $2$ 球，再由乙连续发 $2$ 球；甲发球时甲得分概率为 $\\frac35$，乙发球时乙得分概率为 $\\frac12$，各球独立。求甲以 $11:9$ 获胜的概率。（2）本场前两局甲胜，后续每局甲、乙获胜概率分别为 $\\frac23,\\frac13$ 且相互独立。设又进行 $X$ 局后比赛结束，求 $X$ 的分布列与数学期望。"
+      },
+      "options": [],
+      "source_answer": "（1）21/100；（2）P(X=2,3,4,5)=4/9,8/27,13/81,8/81，E(X)=236/81",
+      "expected_canonical_value": "composite:{\"distribution\":{\"2\":\"4/9\",\"3\":\"8/27\",\"4\":\"13/81\",\"5\":\"8/81\"},\"expectation\":\"236/81\",\"part1\":\"21/100\"}",
+      "computed_answer_display": "（1）21/100；（2）X=2,3,4,5，概率依次为4/9、8/27、13/81、8/81，E(X)=236/81",
+      "solution": {
+        "method": "末球约束与停止时刻枚举",
+        "steps_latex": [
+          "（1）从 $8:8$ 到 $11:9$ 共打四球，末球必须由甲得到，前三球恰有一球由乙得到，三条互斥路径之和为 $\\frac{21}{100}$。",
+          "（2）后续比赛在甲再胜两局或乙胜四局时停止。递归枚举得 $P(X=2)=\\frac49$，$P(X=3)=\\frac8{27}$，$P(X=4)=\\frac{13}{81}$，$P(X=5)=\\frac8{81}$。",
+          "$E(X)=\\frac{236}{81}$。"
+        ],
+        "final_answer": "（1）21/100；（2）见分布列，E(X)=236/81",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "seven_game_match_remaining_length"},
+      "source": {"source_question_number": "5", "source_page_start": 3, "source_page_end": 4, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_06",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "甲、乙、丙参加自由式滑雪初赛，均需两轮获胜才进决赛。甲每轮胜率3/4；乙两轮胜率4/5、5/8；丙两轮胜率p、3/2-p，其中0<p<3/4。（1）谁最可能进决赛？（2）若三人都进决赛的概率为5/32，设晋级人数为ξ，求ξ的分布列。",
+        "latex": "甲、乙、丙参加自由式滑雪初赛，均需两轮获胜才进决赛。甲每轮胜率 $\\frac34$；乙两轮胜率 $\\frac45,\\frac58$；丙两轮胜率 $p,\\frac32-p$，其中 $0<p<\\frac34$。（1）谁最可能进决赛？（2）若三人都进决赛的概率为 $\\frac5{32}$，设晋级人数为 $\\xi$，求 $\\xi$ 的分布列。"
+      },
+      "options": [],
+      "source_answer": "（1）甲；（2）p=2/3，P(ξ=0,1,2,3)=7/72,11/32,29/72,5/32",
+      "expected_canonical_value": "composite:{\"distribution\":{\"0\":\"7/72\",\"1\":\"11/32\",\"2\":\"29/72\",\"3\":\"5/32\"},\"p\":\"2/3\",\"part1\":\"甲\"}",
+      "computed_answer_display": "（1）甲；（2）p=2/3，ξ=0,1,2,3，概率依次为7/72、11/32、29/72、5/32",
+      "solution": {
+        "method": "晋级概率比较与伯努利卷积",
+        "steps_latex": [
+          "三人的晋级概率分别为 $\\frac9{16},\\frac12,p(\\frac32-p)$；在允许区间内第三项小于 $\\frac9{16}$，故甲最大。",
+          "由三人同时晋级概率为 $\\frac5{32}$ 得 $18p^2-27p+10=0$，结合概率约束取 $p=\\frac23$。",
+          "将晋级概率 $\\frac9{16},\\frac12,\\frac59$ 的三个独立伯努利变量卷积，得到分布列。"
+        ],
+        "final_answer": "甲；p=2/3，分布列见结果",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "three_athlete_final_qualification"},
+      "source": {"source_question_number": "6", "source_page_start": 4, "source_page_end": 5, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_07",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "专业队员甲与业余队员乙、丙比赛。乙、丙轮流对阵甲；甲连胜两场则专业队胜，甲连负两场则业余队胜，三场未分胜负则平局。乙胜甲概率为1/3，丙胜甲概率为p，其中1/3<p<1/2，各场独立。（1）比较首场安排乙或丙时业余队获胜概率并作最优决策。（2）胜队与负队总奖金4.5万元，平局总奖金3.6万元，求采用最优决策时总奖金X的期望范围。",
+        "latex": "专业队员甲与业余队员乙、丙比赛。乙、丙轮流对阵甲；甲连胜两场则专业队胜，甲连负两场则业余队胜，三场未分胜负则平局。乙胜甲概率为 $\\frac13$，丙胜甲概率为 $p$，其中 $\\frac13<p<\\frac12$，各场独立。（1）比较首场安排乙或丙时业余队获胜概率并作最优决策。（2）胜队与负队总奖金 $4.5$ 万元，平局总奖金 $3.6$ 万元，求采用最优决策时总奖金 $X$ 的期望范围。"
+      },
+      "options": [],
+      "source_answer": "首场安排乙；两种安排胜率分别为5p/9、-p²/3+2p/3；E(X)=22/5-3p/10，范围(17/4,43/10)",
+      "expected_canonical_value": "composite:{\"expectation\":\"22/5-3p/10\",\"expectation_range\":\"(17/4,43/10)\",\"optimal_first_player\":\"乙\",\"win_if_b_first\":\"5p/9\",\"win_if_c_first\":\"-p^2/3+2p/3\"}",
+      "computed_answer_display": "首场安排乙；E(X)=22/5-3p/10，E(X)∈(17/4,43/10)万元",
+      "solution": {
+        "method": "比赛路径比较与参数期望",
+        "steps_latex": [
+          "首场安排乙、丙时业余队胜率分别为 $P_1=\\frac59p$、$P_2=-\\frac13p^2+\\frac23p$。",
+          "$P_1-P_2=\\frac13p(p-\\frac13)>0$，故首场应安排乙。",
+          "在最优安排下 $E(X)=4.5P(\\text{非平局})+3.6P(\\text{平局})=\\frac{22}{5}-\\frac3{10}p$。",
+          "由 $\\frac13<p<\\frac12$ 得 $E(X)\\in(\\frac{17}{4},\\frac{43}{10})$ 万元。"
+        ],
+        "final_answer": "首场安排乙；E(X)∈(17/4,43/10)万元",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "amateur_team_optimal_prize_range"},
+      "source": {"source_question_number": "7", "source_page_start": 5, "source_page_end": 6, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_08",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "甲、乙争夺乒乓球冠军，采用三局两胜制，每局甲、乙胜率分别为3/5、2/5且相互独立。（1）求甲夺冠概率。（2）盒内初有6个新球；新球使用一局后变旧球，旧球再使用一局后成为废球并丢弃；每局前从盒内等可能取一球，赛后按规则放回或丢弃。设决出冠军后盒内新球数为X，求X的分布列与数学期望。",
+        "latex": "甲、乙争夺乒乓球冠军，采用三局两胜制，每局甲、乙胜率分别为 $\\frac35,\\frac25$ 且相互独立。（1）求甲夺冠概率。（2）盒内初有 $6$ 个新球；新球使用一局后变旧球，旧球再使用一局后成为废球并丢弃；每局前从盒内等可能取一球，赛后按规则放回或丢弃。设决出冠军后盒内新球数为 $X$，求 $X$ 的分布列与数学期望。"
+      },
+      "options": [],
+      "source_answer": "（1）81/125；（2）P(X=3,4,5)=4/15,97/150,13/150，E(X)=191/50",
+      "expected_canonical_value": "composite:{\"champion_a\":\"81/125\",\"distribution\":{\"3\":\"4/15\",\"4\":\"97/150\",\"5\":\"13/150\"},\"expectation\":\"191/50\"}",
+      "computed_answer_display": "（1）81/125；（2）X=3,4,5，概率依次为4/15、97/150、13/150，E(X)=191/50",
+      "solution": {
+        "method": "比赛与球状态联合递归",
+        "steps_latex": [
+          "甲以两局或三局夺冠的路径合计为 $P=\\frac{81}{125}$。",
+          "以双方胜局数、盒内新球数和旧球数为联合状态；每局同时枚举比赛胜负与抽中新球或旧球。",
+          "在任一方先胜两局时合并终止状态，得到 $P(X=3)=\\frac4{15}$，$P(X=4)=\\frac{97}{150}$，$P(X=5)=\\frac{13}{150}$，$E(X)=\\frac{191}{50}$。"
+        ],
+        "final_answer": "（1）81/125；（2）见分布列，E(X)=191/50",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "best_of_three_ball_urn"},
+      "source": {"source_question_number": "8", "source_page_start": 6, "source_page_end": 7, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_09",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "冬季两项20km男子个人赛滑行5圈，前4圈后各射击5发，每脱靶1发罚时1分钟。甲每圈比乙慢36秒；甲、乙每发命中率分别为4/5、3/4，射击用时相同且各发独立。（1）若前三轮射击罚时相同，求甲胜乙的概率。（2）仅从最终用时考虑，谁的水平更高？说明理由。",
+        "latex": "冬季两项 $20\\,\\mathrm{km}$ 男子个人赛滑行 $5$ 圈，前 $4$ 圈后各射击 $5$ 发，每脱靶 $1$ 发罚时 $1$ 分钟。甲每圈比乙慢 $36$ 秒；甲、乙每发命中率分别为 $\\frac45,\\frac34$，射击用时相同且各发独立。（1）若前三轮射击罚时相同，求甲胜乙的概率。（2）仅从最终用时考虑，谁的水平更高？说明理由。"
+      },
+      "options": [],
+      "source_answer": "（1）69/12500；（2）乙水平更高",
+      "expected_canonical_value": "composite:{\"expected_penalty_a_minutes\":\"4\",\"expected_penalty_b_minutes\":\"5\",\"higher_level\":\"乙\",\"part1\":\"69/12500\",\"ski_disadvantage_a_minutes\":\"3\"}",
+      "computed_answer_display": "（1）69/12500；（2）乙的期望总用时更少，水平更高",
+      "solution": {
+        "method": "二项分布枚举与期望比较",
+        "steps_latex": [
+          "前三轮罚时相同后，甲需在最后 $5$ 发中比乙多命中至少 $4$ 发，枚举 $(5,1),(5,0),(4,0)$ 三种命中数组合，得 $P=\\frac{69}{12500}$。",
+          "全程甲、乙期望罚时分别为 $20(1-\\frac45)=4$ 分钟和 $20(1-\\frac34)=5$ 分钟。",
+          "甲滑雪总计慢 $5\\times36$ 秒即 $3$ 分钟，因此甲期望总用时仍比乙多 $2$ 分钟，乙水平更高。"
+        ],
+        "final_answer": "（1）69/12500；（2）乙水平更高",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "biathlon_penalty_comparison"},
+      "source": {"source_question_number": "9", "source_page_start": 7, "source_page_end": 7, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_10",
+      "disposition": "source_inconsistency_detected",
+      "stem": {
+        "plain_text": "甲、乙、丙按圆桌位置进行竞答。每轮由当前掷骰者按奇偶选择逆时针或顺时针对手，下一轮由被选中的对手掷骰。甲胜乙、甲胜丙、乙胜丙的概率分别为2/3、1/3、1/2，各场独立；某人累计2胜即晋级。（1）求比赛进行2场且甲晋级的概率；（2）已知比赛恰好进行3场后结束，设甲获胜场数为X，求X的条件分布列与数学期望。",
+        "latex": "甲、乙、丙按圆桌位置进行竞答。每轮由当前掷骰者按奇偶选择逆时针或顺时针对手，下一轮由被选中的对手掷骰。甲胜乙、甲胜丙、乙胜丙的概率分别为 $\\frac23,\\frac13,\\frac12$，各场独立；某人累计 $2$ 胜即晋级。（1）求比赛进行 $2$ 场且甲晋级的概率；（2）已知比赛恰好进行 $3$ 场后结束，设甲获胜场数为 $X$，求 $X$ 的条件分布列与数学期望。"
+      },
+      "options": [],
+      "source_answer": "来源解析给出P(X=0,1,2)=13/144,107/144,1/6，E(X)=155/144",
+      "expected_canonical_value": "composite:{\"conditional_distribution\":{\"0\":\"13/144\",\"1\":\"107/144\",\"2\":\"1/6\"},\"conditional_expectation\":\"155/144\",\"part1\":\"5/36\",\"probability_game_ends_in_three\":\"59/144\"}",
+      "computed_answer_display": "（1）5/36；（2）正确条件分布为13/59、22/59、24/59，E(X)=70/59",
+      "solution": {
+        "method": "完整状态树与条件概率归一",
+        "steps_latex": [
+          "枚举掷骰者、所选对手、胜者和累计胜场，得比赛两场且甲晋级的概率为 $\\frac5{36}$。",
+          "比赛恰好三场结束的概率为 $\\frac{59}{144}$；同时 $P(X=0,Y=3)=\\frac{13}{144}$，$P(X=1,Y=3)=\\frac{11}{72}$，$P(X=2,Y=3)=\\frac16$。",
+          "按 $Y=3$ 归一，正确条件分布为 $P(X=0\\mid Y=3)=\\frac{13}{59}$，$P(X=1\\mid Y=3)=\\frac{22}{59}$，$P(X=2\\mid Y=3)=\\frac{24}{59}$。",
+          "$E(X\\mid Y=3)=\\frac{70}{59}$。来源解析未进行条件归一，不能直接采用。"
+        ],
+        "final_answer": "（1）5/36；（2）来源解析有误，正确条件分布见独立验证结果",
+        "author_type": "independent_system_draft",
+        "review_status": "source_issue_confirmed"
+      },
+      "verification_spec": {"rule": "three_player_quiz_state_tree"},
+      "adaptation_candidate": {
+        "change": "保留题干，将第（2）问明确为条件分布并采用独立状态树结果",
+        "result": "P(X=0,1,2|恰好三场结束)=13/59,22/59,24/59，E(X)=70/59",
+        "requires_teacher_approval": true
+      },
+      "source": {"source_question_number": "10", "source_page_start": 8, "source_page_end": 9, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    }
+  ]
+}

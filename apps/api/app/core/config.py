@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     probability_curation_json: Path = Field(
         default=PROJECT_ROOT / "data" / "curated" / "probability-4q-corrections-v1.json"
     )
+    probability_curation_2_json: Path = Field(
+        default=PROJECT_ROOT / "data" / "curated" / "probability-6q-corrections-v1.json"
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

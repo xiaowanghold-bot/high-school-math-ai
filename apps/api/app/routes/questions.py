@@ -32,6 +32,8 @@ def get_question_bank() -> QuestionBank:
         bank.apply_curation_package(settings.set_curation_json, MathVerifier())
     if settings.probability_curation_json.exists():
         bank.apply_curation_package(settings.probability_curation_json, MathVerifier())
+    if settings.probability_curation_2_json.exists():
+        bank.apply_curation_package(settings.probability_curation_2_json, MathVerifier())
     return bank
 
 
@@ -64,6 +66,17 @@ def apply_probability_curation() -> CurationResult:
     try:
         return get_question_bank().apply_curation_package(
             settings.probability_curation_json, MathVerifier()
+        )
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/question-bank/apply-probability-curation-2", response_model=CurationResult)
+def apply_probability_curation_2() -> CurationResult:
+    settings = get_settings()
+    try:
+        return get_question_bank().apply_curation_package(
+            settings.probability_curation_2_json, MathVerifier()
         )
     except QuestionBankError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -41,6 +41,12 @@ class MathVerifier:
             "server_scoring_threshold_game": self._server_scoring_threshold_game,
             "best_of_five_league_points": self._best_of_five_league_points,
             "chess_tiebreak_game_count": self._chess_tiebreak_game_count,
+            "seven_game_match_remaining_length": self._seven_game_match_remaining_length,
+            "three_athlete_final_qualification": self._three_athlete_final_qualification,
+            "amateur_team_optimal_prize_range": self._amateur_team_optimal_prize_range,
+            "best_of_three_ball_urn": self._best_of_three_ball_urn,
+            "biathlon_penalty_comparison": self._biathlon_penalty_comparison,
+            "three_player_quiz_state_tree": self._three_player_quiz_state_tree,
         }
 
     def verify(self, candidate: dict[str, Any]) -> VerificationReport:
@@ -294,3 +300,173 @@ class MathVerifier:
             "expectation": MathVerifier._fraction(expectation),
         }
         return MathVerifier._canonical_composite(parts), ["慢棋和棋后，前两局快棋决定是否继续；超快棋只在前三局均和时出现。", "恰好三局晋级要求慢棋和、第一局快棋和、第二局快棋胜。"], {"parts": parts}
+
+    @staticmethod
+    def _seven_game_match_remaining_length(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        serve_a_win = Fraction(3, 5)
+        receive_a_win = Fraction(1, 2)
+        first_three = (serve_a_win, serve_a_win, receive_a_win)
+        part1 = Fraction()
+        for lost_index in range(3):
+            probability = Fraction(1)
+            for index, a_wins in enumerate(first_three):
+                probability *= (1 - a_wins) if index == lost_index else a_wins
+            part1 += probability * receive_a_win
+
+        distribution: dict[int, Fraction] = {}
+
+        def finish(wins_a: int, wins_b: int, games: int, probability: Fraction) -> None:
+            if wins_a == 2 or wins_b == 4:
+                distribution[games] = distribution.get(games, Fraction()) + probability
+                return
+            finish(wins_a + 1, wins_b, games + 1, probability * Fraction(2, 3))
+            finish(wins_a, wins_b + 1, games + 1, probability * Fraction(1, 3))
+
+        finish(0, 0, 0, Fraction(1))
+        expectation = sum(Fraction(games) * probability for games, probability in distribution.items())
+        parts = {
+            "part1": MathVerifier._fraction(part1),
+            "distribution": {str(games): MathVerifier._fraction(probability) for games, probability in sorted(distribution.items())},
+            "expectation": MathVerifier._fraction(expectation),
+        }
+        return MathVerifier._canonical_composite(parts), ["从 8:8 到 11:9 必须再打四球，末球由甲得分，前三球恰有一球由乙得分。", "前两局甲已胜，后续比赛在甲再胜两局或乙胜四局时停止；用递归枚举终止局数。"], {"parts": parts}
+
+    @staticmethod
+    def _three_athlete_final_qualification(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        discriminant = 27 * 27 - 4 * 18 * 10
+        roots = (
+            Fraction(27 - math.isqrt(discriminant), 36),
+            Fraction(27 + math.isqrt(discriminant), 36),
+        )
+        valid_roots = [root for root in roots if Fraction(1, 2) < root < Fraction(3, 4)]
+        p = valid_roots[0]
+        qualification = (Fraction(9, 16), Fraction(1, 2), p * (Fraction(3, 2) - p))
+        distribution = {0: Fraction(1)}
+        for probability in qualification:
+            updated: dict[int, Fraction] = {}
+            for count, current in distribution.items():
+                updated[count] = updated.get(count, Fraction()) + current * (1 - probability)
+                updated[count + 1] = updated.get(count + 1, Fraction()) + current * probability
+            distribution = updated
+        parts = {
+            "part1": "甲",
+            "p": MathVerifier._fraction(p),
+            "distribution": {str(count): MathVerifier._fraction(probability) for count, probability in sorted(distribution.items())},
+        }
+        return MathVerifier._canonical_composite(parts), ["三人晋级概率分别为 9/16、1/2 和 p(3/2-p)，在允许区间内甲最大。", "由三人都晋级的概率为 5/32 解二次方程，并按概率约束筛得 p=2/3。", "将三个独立伯努利变量卷积得到晋级人数分布。"], {"roots": [MathVerifier._fraction(root) for root in roots], "qualification_probabilities": [MathVerifier._fraction(value) for value in qualification], "parts": parts}
+
+    @staticmethod
+    def _amateur_team_optimal_prize_range(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        parts = {
+            "optimal_first_player": "乙",
+            "win_if_b_first": "5p/9",
+            "win_if_c_first": "-p^2/3+2p/3",
+            "expectation": "22/5-3p/10",
+            "expectation_range": "(17/4,43/10)",
+        }
+        return MathVerifier._canonical_composite(parts), ["两种首场安排的业余队获胜概率之差为 p(p-1/3)/3；因 1/3<p<1/2，应安排乙首场出赛。", "总奖金在分出胜负时为 4.5 万元，平局时为 3.6 万元。", "代入非平局概率得 E(X)=22/5-3p/10，结合 p 的开区间得到 (17/4,43/10)。"], {"parts": parts, "parameter_interval": "(1/3,1/2)"}
+
+    @staticmethod
+    def _best_of_three_ball_urn(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        terminals: dict[tuple[str, int], Fraction] = {}
+
+        def play(wins_a: int, wins_b: int, new: int, old: int, probability: Fraction) -> None:
+            total = new + old
+            ball_outcomes: list[tuple[int, int, Fraction]] = []
+            if new:
+                ball_outcomes.append((new - 1, old + 1, Fraction(new, total)))
+            if old:
+                ball_outcomes.append((new, old - 1, Fraction(old, total)))
+            for next_new, next_old, ball_probability in ball_outcomes:
+                for winner, game_probability in (("甲", Fraction(3, 5)), ("乙", Fraction(2, 5))):
+                    next_wins_a = wins_a + int(winner == "甲")
+                    next_wins_b = wins_b + int(winner == "乙")
+                    branch = probability * ball_probability * game_probability
+                    if next_wins_a == 2 or next_wins_b == 2:
+                        key = (winner, next_new)
+                        terminals[key] = terminals.get(key, Fraction()) + branch
+                    else:
+                        play(next_wins_a, next_wins_b, next_new, next_old, branch)
+
+        play(0, 0, 6, 0, Fraction(1))
+        champion_a = sum(probability for (winner, _), probability in terminals.items() if winner == "甲")
+        distribution: dict[int, Fraction] = {}
+        for (_, new), probability in terminals.items():
+            distribution[new] = distribution.get(new, Fraction()) + probability
+        expectation = sum(Fraction(new) * probability for new, probability in distribution.items())
+        parts = {
+            "champion_a": MathVerifier._fraction(champion_a),
+            "distribution": {str(new): MathVerifier._fraction(probability) for new, probability in sorted(distribution.items())},
+            "expectation": MathVerifier._fraction(expectation),
+        }
+        return MathVerifier._canonical_composite(parts), ["同时枚举比赛胜负状态和盒内新球、旧球数量；新球使用后转为旧球，旧球再次使用后移出。", "在任一选手先胜两局时终止，并按剩余新球数合并路径。"], {"terminal_states": {f"{winner}:{new}": MathVerifier._fraction(probability) for (winner, new), probability in sorted(terminals.items())}, "parts": parts}
+
+    @staticmethod
+    def _biathlon_penalty_comparison(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        probability_a_wins = Fraction()
+        for hits_a in range(6):
+            probability_hits_a = Fraction(math.comb(5, hits_a)) * Fraction(4, 5) ** hits_a * Fraction(1, 5) ** (5 - hits_a)
+            for hits_b in range(6):
+                if hits_a - hits_b <= 3:
+                    continue
+                probability_hits_b = Fraction(math.comb(5, hits_b)) * Fraction(3, 4) ** hits_b * Fraction(1, 4) ** (5 - hits_b)
+                probability_a_wins += probability_hits_a * probability_hits_b
+        expected_penalty_a = Fraction(20) * Fraction(1, 5)
+        expected_penalty_b = Fraction(20) * Fraction(1, 4)
+        ski_disadvantage_a = Fraction(36 * 5, 60)
+        parts = {
+            "part1": MathVerifier._fraction(probability_a_wins),
+            "expected_penalty_a_minutes": MathVerifier._fraction(expected_penalty_a),
+            "expected_penalty_b_minutes": MathVerifier._fraction(expected_penalty_b),
+            "ski_disadvantage_a_minutes": MathVerifier._fraction(ski_disadvantage_a),
+            "higher_level": "乙",
+        }
+        return MathVerifier._canonical_composite(parts), ["前三轮罚时相同后，甲在最后一轮要追回 3 分钟滑雪差距，需比乙多命中至少 4 发。", "枚举两人最后 5 发的二项分布得到甲获胜概率。", "全程期望罚时甲为 4 分钟、乙为 5 分钟，但甲滑雪慢 3 分钟，因此乙的期望总用时少 2 分钟。"], {"parts": parts}
+
+    @staticmethod
+    def _three_player_quiz_state_tree(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        players = ("甲", "乙", "丙")
+        counterclockwise = {"甲": "乙", "乙": "丙", "丙": "甲"}
+        clockwise = {"甲": "丙", "丙": "乙", "乙": "甲"}
+
+        def win_probability(player: str, opponent: str) -> Fraction:
+            pair = {player, opponent}
+            if pair == {"甲", "乙"}:
+                return Fraction(2, 3) if player == "甲" else Fraction(1, 3)
+            if pair == {"甲", "丙"}:
+                return Fraction(1, 3) if player == "甲" else Fraction(2, 3)
+            return Fraction(1, 2)
+
+        terminals: dict[tuple[int, str, int], Fraction] = {}
+
+        def play(roller: str, wins: dict[str, int], games: int, probability: Fraction) -> None:
+            for opponent in (counterclockwise[roller], clockwise[roller]):
+                for winner in (roller, opponent):
+                    other = opponent if winner == roller else roller
+                    branch = probability * Fraction(1, 2) * win_probability(winner, other)
+                    next_wins = dict(wins)
+                    next_wins[winner] += 1
+                    next_games = games + 1
+                    if next_wins[winner] == 2:
+                        key = (next_games, winner, next_wins["甲"])
+                        terminals[key] = terminals.get(key, Fraction()) + branch
+                    else:
+                        play(opponent, next_wins, next_games, branch)
+
+        play("甲", {player: 0 for player in players}, 0, Fraction(1))
+        part1 = sum(probability for (games, winner, _), probability in terminals.items() if games == 2 and winner == "甲")
+        probability_three = sum(probability for (games, _, _), probability in terminals.items() if games == 3)
+        conditional_distribution: dict[int, Fraction] = {}
+        joint_distribution: dict[int, Fraction] = {}
+        for wins_a in (0, 1, 2):
+            joint = sum(probability for (games, _, count), probability in terminals.items() if games == 3 and count == wins_a)
+            joint_distribution[wins_a] = joint
+            conditional_distribution[wins_a] = joint / probability_three
+        expectation = sum(Fraction(wins) * probability for wins, probability in conditional_distribution.items())
+        parts = {
+            "part1": MathVerifier._fraction(part1),
+            "probability_game_ends_in_three": MathVerifier._fraction(probability_three),
+            "conditional_distribution": {str(wins): MathVerifier._fraction(probability) for wins, probability in conditional_distribution.items()},
+            "conditional_expectation": MathVerifier._fraction(expectation),
+        }
+        return MathVerifier._canonical_composite(parts), ["以掷骰者、三人累计胜场和比赛场数为状态，枚举至某人累计两胜。", "比赛恰好三场结束的概率为 59/144；按该事件归一后，甲胜场数 0、1、2 的条件概率分别为 13/59、22/59、24/59。", "来源解析把部分联合概率与补余概率混合成分布列，未按已知条件归一。"], {"joint_distribution_for_three_games": {str(wins): MathVerifier._fraction(probability) for wins, probability in joint_distribution.items()}, "source_claimed_distribution": {"0": "13/144", "1": "107/144", "2": "1/6"}, "parts": parts}

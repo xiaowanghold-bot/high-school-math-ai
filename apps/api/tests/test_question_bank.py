@@ -12,6 +12,7 @@ from app.modules.question_bank import QuestionBank, QuestionBankError, ReviewCom
 PILOT_BATCH = PROJECT_ROOT / "data" / "pilot" / "batch-2026-08-001-30q.json"
 SET_CURATION = PROJECT_ROOT / "data" / "curated" / "set-10q-corrections-v1.json"
 PROBABILITY_CURATION = PROJECT_ROOT / "data" / "curated" / "probability-4q-corrections-v1.json"
+PROBABILITY_CURATION_2 = PROJECT_ROOT / "data" / "curated" / "probability-6q-corrections-v1.json"
 
 
 def make_bank(tmp_path: Path) -> QuestionBank:
@@ -94,6 +95,29 @@ def test_probability_composite_questions_are_independently_verified(tmp_path: Pa
     assert bank.get_question("q_pilot_probability_04").raw["verification"][
         "computed_answer"
     ].endswith("E(X)=40/27")
+
+
+def test_remaining_probability_questions_include_source_error_isolation(tmp_path: Path) -> None:
+    bank = make_bank(tmp_path)
+    bank.import_batch(PILOT_BATCH)
+
+    first = bank.apply_curation_package(PROBABILITY_CURATION_2, MathVerifier())
+    second = bank.apply_curation_package(PROBABILITY_CURATION_2, MathVerifier())
+
+    assert first.applied_count == 6
+    assert first.passed_count == 5
+    assert first.inconsistency_count == 1
+    assert second.applied_count == 0
+    assert second.skipped_count == 6
+    assert bank.get_question("q_pilot_probability_08").verification_status == "passed"
+    flawed = bank.get_question("q_pilot_probability_10")
+    assert flawed.status == "rejected"
+    assert flawed.verification_status == "source_inconsistency_detected"
+    assert flawed.raw["verification"]["computed_canonical_value"] == (
+        'composite:{"conditional_distribution":{"0":"13/59","1":"22/59","2":"24/59"},'
+        '"conditional_expectation":"70/59","part1":"5/36",'
+        '"probability_game_ends_in_three":"59/144"}'
+    )
 
 
 def test_teacher_cannot_approve_before_independent_verification(tmp_path: Path) -> None:
