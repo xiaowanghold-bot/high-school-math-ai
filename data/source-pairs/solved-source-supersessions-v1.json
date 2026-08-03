@@ -1,0 +1,74 @@
+{
+  "registry_id": "solved-source-supersessions-v1",
+  "schema_version": "0.1",
+  "status": "verified",
+  "policy": {
+    "default_ingestion": "use_complete_solved_document",
+    "superseded_document_use": "audit_and_fallback_only",
+    "delete_superseded_files": false,
+    "count_each_group_once": true,
+    "source_solution_text": "reference_only_do_not_publish",
+    "independent_solution_required": true,
+    "independent_math_verification_required": true,
+    "teacher_review_required": true
+  },
+  "supersessions": [
+    {
+      "group_id": "conic-sections-selected-30",
+      "expected_unique_questions": 30,
+      "superseded": {
+        "file_id": "USRPDF-008",
+        "filename": "大题 圆锥曲线（椭圆、双曲线、抛物线）（精选30题）（学生版）(1).pdf",
+        "role": "question_only_archive"
+      },
+      "preferred": {
+        "file_id": "USRPDF-029",
+        "filename": "大题 圆锥曲线（椭圆、双曲线、抛物线）（精选30题）（解析版）.pdf",
+        "role": "complete_question_and_solution_reference"
+      },
+      "verification": {
+        "status": "visual_and_structural_match",
+        "spot_check": "both page 1 begin with the same questions 1 and 2",
+        "page_offset_supported": false
+      }
+    },
+    {
+      "group_id": "triangle-solving-classification",
+      "expected_unique_questions": 90,
+      "superseded": {
+        "file_id": "USRPDF-026",
+        "filename": "重难点培优 解三角形解答题题型全归纳（学生版）(1).pdf",
+        "role": "question_only_archive"
+      },
+      "preferred": {
+        "file_id": "USRPDF-030",
+        "filename": "重难点培优 解三角形解答题题型全归纳（解析版）.pdf",
+        "role": "complete_question_and_solution_reference"
+      },
+      "verification": {
+        "status": "visual_and_structural_match",
+        "spot_check": "same seven type headings and same first trigonometric-transformation question",
+        "page_offset_supported": false
+      }
+    },
+    {
+      "group_id": "solid-geometry-ten-types",
+      "expected_unique_questions": 33,
+      "superseded": {
+        "file_id": "USRPDF-024",
+        "filename": "立体几何必考经典解答题全归类【十大题型】（举一反三）（新高考专用）（原卷版）(1).pdf",
+        "role": "question_only_archive"
+      },
+      "preferred": {
+        "file_id": "USRPDF-031",
+        "filename": "立体几何必考经典解答题全归类【十大题型】（举一反三）（新高考专用）（解析版）.pdf",
+        "role": "complete_question_and_solution_reference"
+      },
+      "verification": {
+        "status": "visual_and_structural_match",
+        "spot_check": "same ten type headings and same first volume problem",
+        "page_offset_supported": false
+      }
+    }
+  ]
+}
