@@ -1,0 +1,10 @@
+source_id,name,url,source_type,scope,stated_license,commercial_status,initial_use,required_action
+SRC-001,普通高中课程方案和数学课程标准（2017年版2020年修订）,https://jsj.moe.gov.cn/n2/1/1/1507.shtml,官方规范文件,高中数学课程结构与内容要求,官方文件版权声明,限制性使用,知识体系依据,"仅引用和结构化概括，不整本复制；上线前法务确认"
+SRC-002,人教A版普通高中数学教材,https://www.pep.com.cn/,商业教材,必修两册与选择性必修三册,版权教材,未授权,目录映射,"联系出版社或获得正式许可；不得抓取扫描教材进入公共库"
+SRC-003,GAOKAO-Bench,https://github.com/OpenLMLab/GAOKAO-Bench,公开评测数据,2010至2022年高考试题2811道,Apache-2.0仓库,待核验底层内容,离线评测与标签研究,"核验原始试题及解析权利链，保留许可证和NOTICE"
+SRC-004,CMM-Math,https://huggingface.co/datasets/ecnu-icalk/cmm-math,公开多模态数据,小学至高中约2.8万题,BSD-3-Clause数据页,待溯源审计,OCR标签和验证实验,"抽样核验题目与图片来源，确认许可覆盖数据内容"
+SRC-005,CMMaTH,https://github.com/zzli2022/CMMaTH,公开评测数据,中文K12多模态约2.38万题,未发现清晰数据许可,不可用于商业库,离线评测候选,"向作者确认许可；未获书面许可前不得商业展示或训练"
+SRC-006,DeepMind Mathematics Dataset,https://github.com/google-deepmind/mathematics_dataset,程序化生成器,代数算术微积分概率等,Apache-2.0,可用但需本地化,验证器与合成基础题实验,"保留许可证与NOTICE，审查生成题的教学适配性"
+SRC-007,用户现有题库,D:/高中数学/2026-08,用户提供资源,首批27份PDF共1596页,用户声明题目内容可使用但PDF整体不可商用,题目级条件性候选,题干选项答案的隔离结构化试点,"不复制封面版式水印题型讲义和原解析；解析与标签重新生成；保留文件页码和来源追溯；最终商业发布按公司法律审查规则执行"
+SRC-008,签约教师原创题与教案,,原创内容,人教A版与新高考I卷,合同约定,授权后可商用,核心商业题库,"签署著作权许可或转让条款，保存作者和审核记录"
+SRC-009,AI与程序生成题,,生成内容,按知识点和题型生成,平台生成规则,审核后可用,补充题库,"进行查重、数学验证、教师审核和AI标识，不模仿特定教辅表达"

@@ -1,0 +1,3487 @@
+{
+  "batch_id": "batch-2026-08-001-pilot-30q",
+  "schema_version": "0.1-pilot",
+  "created_at": "2026-08-03T01:37:30+00:00",
+  "publication_status": "private_not_publishable",
+  "rights_boundary": {
+    "basis": "用户声明题目内容可使用，但PDF整体不可商用",
+    "included": [
+      "题干事实",
+      "选项",
+      "客观答案",
+      "必要图形的后续重绘"
+    ],
+    "excluded": [
+      "PDF整体",
+      "原版式",
+      "封面",
+      "水印",
+      "讲义文字",
+      "原解析表述"
+    ]
+  },
+  "quality_gate": "公式校正、答案独立验算、题源归因和教师审核全部完成后方可发布",
+  "question_count": 30,
+  "questions": [
+    {
+      "id": "q_pilot_set_1_1",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2022·天津·统考高考真题）设全集U ={-2,-1,0,1,2 } ，集合 A={0,1,2}, B={−1,2} ，则 A∩(∁ B ) =（ ）\nU",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "{0，1}"
+        },
+        {
+          "key": "B",
+          "plain_text": "{0,1,2}"
+        },
+        {
+          "key": "C",
+          "plain_text": "{−1,1,2}"
+        },
+        {
+          "key": "D",
+          "plain_text": "{0,−1,1,2}"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "A",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "1-1",
+        "source_reference": "2022·天津·统考高考真题",
+        "source_page_start": 1,
+        "source_page_end": 1,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法一 集合运算综合"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_1_2",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·贵州毕节·统考一模）设集合 A ={−2,−1,0,1,2} ，B = { x | 2x2 −5x ≤ 0 } ，则 A∩(∁ B )= （ ）\nR",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "{0,1,2}"
+        },
+        {
+          "key": "B",
+          "plain_text": "{1,2}"
+        },
+        {
+          "key": "C",
+          "plain_text": "{−2,−1,0}"
+        },
+        {
+          "key": "D",
+          "plain_text": "{−2,−1}"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "D",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "1-2",
+        "source_reference": "2023·贵州毕节·统考一模",
+        "source_page_start": 1,
+        "source_page_end": 2,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法一 集合运算综合"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_1_3",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·全国·模拟预测）已知集合 A = x x2 − 3x + 2≥ 0 ，B = y y = 2x ，则 A∩∁ B = （ ）\nR",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "[ 2,+∞)"
+        },
+        {
+          "key": "B",
+          "plain_text": "(−∞,0]"
+        },
+        {
+          "key": "C",
+          "plain_text": "(−∞,0)"
+        },
+        {
+          "key": "D",
+          "plain_text": "(−∞,0]∪[2,+∞)"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "B",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "1-3",
+        "source_reference": "2023·全国·模拟预测",
+        "source_page_start": 2,
+        "source_page_end": 2,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法一 集合运算综合"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_1_4",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·湖南长沙·统考一模）设集合 A ={(x, y) y = x } ，B = {(x,y) y = x3 } ，则 A∩B的元素个数是\n（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "1"
+        },
+        {
+          "key": "B",
+          "plain_text": "2"
+        },
+        {
+          "key": "C",
+          "plain_text": "3"
+        },
+        {
+          "key": "D",
+          "plain_text": "4"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "C",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "1-4",
+        "source_reference": "2023·湖南长沙·统考一模",
+        "source_page_start": 2,
+        "source_page_end": 2,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法一 集合运算综合"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_2_1",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·甘肃兰州·校考一模）已知集合 A = { x∈R log (2− x) < 2 } ，B ={−1,0,1,2,3} ，则 A∩B真子\n2\n集的个数（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "8"
+        },
+        {
+          "key": "B",
+          "plain_text": "7"
+        },
+        {
+          "key": "C",
+          "plain_text": "4"
+        },
+        {
+          "key": "D",
+          "plain_text": "6"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "B",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "2-1",
+        "source_reference": "2023·甘肃兰州·校考一模",
+        "source_page_start": 2,
+        "source_page_end": 2,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法二 （真）子集问题"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_2_2",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·广东深圳·统考一模）满足等式 {0,1}∪ X = { x∈R x3 = x } 的集合 X 共有（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "1 个"
+        },
+        {
+          "key": "B",
+          "plain_text": "2 个"
+        },
+        {
+          "key": "C",
+          "plain_text": "3 个"
+        },
+        {
+          "key": "D",
+          "plain_text": "4 个"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "D",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "2-2",
+        "source_reference": "2023·广东深圳·统考一模",
+        "source_page_start": 2,
+        "source_page_end": 3,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法二 （真）子集问题"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_2_3",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·山东·潍坊一中校联考模拟预测）设集合M = { x∈Z∣x2 <100 < 2x} ，则M 的所有子集的个\n数为（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "3"
+        },
+        {
+          "key": "B",
+          "plain_text": "4"
+        },
+        {
+          "key": "C",
+          "plain_text": "8"
+        },
+        {
+          "key": "D",
+          "plain_text": "16"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "C",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "2-3",
+        "source_reference": "2023·山东·潍坊一中校联考模拟预测",
+        "source_page_start": 3,
+        "source_page_end": 3,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法二 （真）子集问题"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_2_4",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·江西景德镇·统考模拟预测）已知集合 A ={a,b} 的所有非空子集的元素之和等于 12，则a+b\n等于（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "1"
+        },
+        {
+          "key": "B",
+          "plain_text": "3"
+        },
+        {
+          "key": "C",
+          "plain_text": "4"
+        },
+        {
+          "key": "D",
+          "plain_text": "6"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "D",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "2-4",
+        "source_reference": "2023·江西景德镇·统考模拟预测",
+        "source_page_start": 3,
+        "source_page_end": 3,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法二 （真）子集问题"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_3_1",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·四川绵阳·统考模拟预测）已知 A = { 1,4,m2} ，B ={1,m} ，若 B ⊆ A，则m = （ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "0 或 4"
+        },
+        {
+          "key": "B",
+          "plain_text": "1 或 4"
+        },
+        {
+          "key": "C",
+          "plain_text": "0"
+        },
+        {
+          "key": "D",
+          "plain_text": "4"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "A",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "3-1",
+        "source_reference": "2023·四川绵阳·统考模拟预测",
+        "source_page_start": 3,
+        "source_page_end": 3,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法三 集合求参"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_set_3_2",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（2023·全国·模拟预测）已知集合 A ={x∈Z|−1< x < 3} ，B ={x|3x−a ≥0} ，且 A∩B ={1,2} ，则\na 的取值范围为（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "(0,1)"
+        },
+        {
+          "key": "B",
+          "plain_text": "(0,1 ]"
+        },
+        {
+          "key": "C",
+          "plain_text": "(0,3 ]"
+        },
+        {
+          "key": "D",
+          "plain_text": "(0,3)"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "C",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "必修第一册",
+        "chapter": "第一章 集合与常用逻辑用语",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_sets_and_logic"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 2,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf",
+        "source_question_number": "3-2",
+        "source_reference": "2023·全国·模拟预测",
+        "source_page_start": 3,
+        "source_page_end": 4,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "考法三 集合求参"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_01",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "甲、乙、丙三位同学进行羽毛球比赛，约定赛制如下：\n累计负两场者被淘汰：比赛前抽签决定首先比赛的两人，另一人轮空；每场比赛的胜者与轮空者进\n行下一场比赛，负者下一场轮空，直至有一人被淘汰；当一人被淘汰后，剩余的两人继续比赛，直至\n其中一人被淘汰，另一人最终获胜，比赛结束．\n1\n经抽签，甲、乙首先比赛，丙轮空．设每场比赛双方获胜的概率都为 ．\n2\n(1)求甲连胜四场的概率；\n(2)求需要进行第五场比赛的概率；\n(3)求丙最终获胜的概率．\n1",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "1",
+        "source_reference": null,
+        "source_page_start": 1,
+        "source_page_end": 1,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_02",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "某运动会中，新增加的“趣味乒乓球单打”是这届运动会的热门项目，比赛规则如下：两人对\n垒，开局前抽签决定由谁先发球 (机会均等)，此后均由每个球的赢球者发下一个球，对于每一个\n球，若发球者赢此球，发球者得 1 分，对手得 0 分；若对手赢得此球，发球者得 0 分，对手得 2 分．\n当有一人累计得分超过 5 分时，比赛就结束，得分高者获胜．已知在选手甲和乙的对垒中，发球\n一方赢得此球的概率都是0.6，各球结果相互独立．\n(1)假设开局前抽签结果是甲发第一个球，求比赛出现比分2：2的概率；\n(2) 已知现在比分 3：3，接下来由甲发球，两人又打了 X 个球后比赛结束，求 X 的分布列及数学期\n望．",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "2",
+        "source_reference": "机会均等",
+        "source_page_start": 2,
+        "source_page_end": 2,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_03",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "甲、乙运动员进行乒乓球友谊赛，每场比赛采用 5局3胜制(即有一运动员先胜3局即获胜，比\n赛结束)．比赛排名采用积分制，积分规则如下：比赛中，以 3：0 或 3：1 取胜的运动员积 3 分，负\n者积 0 分，以 3：2 取胜的运动员积 2 分，负者积 1 分，已知甲、乙两人比赛，甲每局获胜的概率为\n1\n．\n3\n(1)甲、乙两人比赛1场后，求甲的积分 X的概率分布列和数学期望；\n(2)甲、乙两人比赛2场后，求两人积分相等的概率．",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "3",
+        "source_reference": "即有一运动员先胜3局即获胜，比\n赛结束",
+        "source_page_start": 2,
+        "source_page_end": 3,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_04",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "某地举行象棋比赛，淘汰赛阶段的比赛规则是：两人一组，先胜一局者进入复赛，败者淘汰．\n比赛双方首先进行一局慢棋比赛，若和棋，则加赛快棋；若连续两局快棋都是和棋，则再加赛一局\n1\n超快棋，超快棋只有胜与负两种结果．在甲与乙的比赛中，甲慢棋比赛胜与和的概率分别为 ，\n2\n1 1 1\n，快棋比赛胜与和的概率均为 ，超快棋比赛胜的概率为 ，且各局比赛相互独立．\n3 3 4\n(1)求甲恰好经过三局进入复赛的概率；\n(2)记淘汰赛阶段甲与乙比赛的局数为X，求 X的概率分布列和数学期望．",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "4",
+        "source_reference": null,
+        "source_page_start": 3,
+        "source_page_end": 3,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_05",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "第 56 届世界乒乓球锦标赛将于 2022 年在中国成都举办，国球运动又一次掀起热潮．现有甲\n乙两人进行乒乓球比赛，比赛采用7局4胜制，每局为11分制，每赢一球得1分．\n(1)已知某局比赛中双方比分为 8：8，此时甲先连续发球2次，然后乙连续发球2次，甲发球时甲得\n3 1\n分的概率为 ，乙发球时乙得分的概率为 ，各球的结果相互独立，当任何一方的积分达到 11分\n5 2\n且领先对方2分时，该局比赛结束，求该局比赛甲以11：9获胜的概率；\n2\n(2)已知在本场比赛中，前两局甲获胜，在后续比赛中，每局比赛甲获胜的概率为 ，乙获胜的概率\n3\n1\n为 ，且每局比赛的结果相互独立．两人又进行了 X局后比赛结束，求 X的分布列与数学期望．\n3",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "5",
+        "source_reference": null,
+        "source_page_start": 3,
+        "source_page_end": 4,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_06",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "第 24 届冬季奥林匹克运动会 (The XXIV Olympic Winter Games)，即 2022 年北京冬季奥\n运会，于2022年2月4日星期五开幕，2月20日星期日闭幕．北京冬季奥运会设7个大项，15个\n分项，109 个小项．北京赛区承办所有的冰上项目；延庆赛区承办雪车、雪橇及高山滑雪项目；张\n家口赛区的崇礼区承办除雪车、雪橇及高山滑雪之外的所有雪上项目．某运动队拟派出甲、乙、\n丙三人去参加自由式滑雪．比赛分为初赛和决赛，其中初赛有两轮，只有两轮都获胜才能进入决\n3\n赛．已知甲在每轮比赛中获胜的概率均为 ；乙在第一轮和第二轮比赛中获胜的概率分别为\n4\n4 5 3 3\n和 ；丙在第一轮和第二轮获胜的概率分别是 p和 - p，其中0< p< ．\n5 8 2 4\n(1)甲、乙、丙三人中，谁进入决赛的可能性最大；\n5\n(2)若甲、乙、丙三人都进入决赛的概率为 ，设进入决赛的人数为ξ，求ξ的分布列．\n32\n3 3 9",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "6",
+        "source_reference": "The XXIV Olympic Winter Games",
+        "source_page_start": 4,
+        "source_page_end": 5,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_07",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "2022年北京冬奥会后，由一名高山滑雪运动员甲组成的专业队，与两名高山滑雪爱好者乙、丙\n组成的业余队进行友谊比赛，约定赛制如下：业余队中的两名队员轮流与甲进行比赛，若甲连续\n赢两场，则专业队获胜；若甲连续输两场，则业余队获胜；若比赛三场还没有决出胜负，则视为平\n局，比赛结束．\n1\n已知各场比赛相互独立，每场比赛都分出胜负，且甲与乙比赛，乙赢的概率为 ；甲与丙比赛，丙\n3\n1 1\n赢的概率为 p，其中 < p< ．\n3 2\n(1) 若第一场比赛，业余队可以安排乙与甲进行比赛，也可以安排丙与甲进行比赛，请分别计算两\n种安排下业余队获胜的概率；若以获胜概率大为最优决策，问：业余队第一场应该安排乙还是丙与\n甲进行比赛？\n(2) 为了激励专业队和业余队，赛事组织规定：比赛结束时，胜队获奖金 3 万元，负队获奖金 1.5 万\n元；若平局，两队各获奖金1.8万元．\n在比赛前，已知业余队采用了(1)中的最优决策与甲进行比赛，设赛事组织预备支付的奖金金额共\n计X万元，求 X的数学期望E(X)的取值范围．\n1 2 1",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "7",
+        "source_reference": null,
+        "source_page_start": 5,
+        "source_page_end": 6,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_08",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "甲、乙两名选手争夺一场乒乓球比赛的冠军．比赛采取三局两胜制，即某选手率先获得两局\n胜利时比赛结束，且该选手夺得冠军．根据两人以往对战的经历，甲、乙在一局比赛中获胜的概\n3 2\n率分别为 ， ，且每局比赛的结果相互独立．\n5 5\n(1)求甲夺得冠军的概率；\n(2)比赛开始前，工作人员买来一盒新球，共有6个．新球在一局比赛中使用后成为“旧球”，“旧球”\n再在一局比赛中使用后成为“废球”．每局比赛前裁判员从盒中随机取出一颗球用于比赛，且局中\n不换球，该局比赛后，如果这颗球成为废球，则直接丢弃，否则裁判员将其放回盒中．记甲、乙决出\n冠军后，盒内新球的数量为 X，求随机变量 X的分布列与数学期望．",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "8",
+        "source_reference": null,
+        "source_page_start": 6,
+        "source_page_end": 7,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_09",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "冬季两项是第24届北京冬奥会的比赛项目之一，它把越野滑雪和射击两种特点不同的竞赛项\n目结合在一起．其中20km男子个人赛的规则如下：\n①共滑行5圈(每圈4km)，前4圈每滑行1圈射击一次，每次5发子弹；\n②射击姿势及顺序为：第1圈滑行后卧射，第2圈滑行后立射，第3圈滑行后卧射，第4圈滑行后立\n射，第5圈滑行直达终点；\n③如果选手有n发子弹未命中目标，将被罚时n分钟；\n④最终用时为滑雪用时、射击用时和被罚时间之和，最终用时少者获胜．\n已知甲、乙两人参加比赛，甲滑雪每圈比乙慢 36 秒，甲、乙两人每发子弹命中目标的概率分别为\n4 3\n和 ．假设甲、乙两人的射击用时相同，且每发子弹是否命中目标互不影响．\n5 4\n(1)若在前三次射击中，甲、乙两人的被罚时间相同，求甲胜乙的概率；\n(2)若仅从最终用时考虑，甲、乙两位选手哪个水平更高？说明理由．",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "9",
+        "source_reference": "每圈4km",
+        "source_page_start": 7,
+        "source_page_end": 7,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_probability_10",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "甲、乙、丙三人参加学校“元旦嘉年华”竞答游戏，活动的规则为：甲、乙、丙三人先分别坐在圆\n桌的 A，B，C 三点，第一轮从甲开始通过掷骰子决定甲的竞答对手，如果点数是奇数，则按逆时\n针选择乙，如果是偶数，则按顺时针选丙，下一轮由上一轮掷骰子选中的对手继续通过掷骰子决\n定竞答对手，如果点数是奇数按逆时针选对手，点数是偶数按顺时针选对手，已知每场竞答甲对\n2 1 1\n乙、甲对丙、乙对丙获胜的概率分别为 ， ， 且甲、乙、丙之间竞答互不影响，各轮游戏亦互\n3 3 2\n不影响，比赛中某选手累计获胜场数达到2场，游戏结束，该选手为晋级选手．\n(1)求比赛进行了2场且甲晋级的概率；\n(2)当比赛进行了3场后结束，记甲获胜的场数为 X，求 X的分布列与数学期望．\n1 2 1 2 1 1 1 1 5",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "composite",
+      "options": [],
+      "answer": {
+        "type": "composite",
+        "value": null,
+        "status": "requires_independent_verification",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第三册",
+        "chapter": "第七章 随机变量及其分布",
+        "section": null,
+        "knowledge_point_ids": [
+          "kp_probability",
+          "kp_random_variable_distribution"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 4,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "新高考数学概率黄金32题（教师版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\新高考数学概率黄金32题（教师版）(1).pdf",
+        "source_question_number": "10",
+        "source_reference": null,
+        "source_page_start": 8,
+        "source_page_end": 9,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．比赛类题目(共10小题)"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_01",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（23-24 高二下·湖南长沙·期中）已知方程mx2 +(2m-1) y2 =1表示焦点在 y 轴上的椭圆，则m 的取值范\n围是（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "0, 1"
+        },
+        {
+          "key": "B",
+          "plain_text": "1 ,1"
+        },
+        {
+          "key": "C",
+          "plain_text": "(1,+∞)"
+        },
+        {
+          "key": "D",
+          "plain_text": "(0,1)\nè 2ø è2 ø"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "B",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "1",
+        "source_reference": "23-24 高二下·湖南长沙·期中",
+        "source_page_start": 1,
+        "source_page_end": 1,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．椭圆定义求参范围（共 2 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_02",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（23-24 高二上·北京海淀·期中）若 + =1表示焦点在 x 轴上的椭圆，则实数a的取值范围是（ ）\na2 a+2",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "(-2,+∞)"
+        },
+        {
+          "key": "B",
+          "plain_text": "(-∞,-1)\nU\n(2,+∞)"
+        },
+        {
+          "key": "C",
+          "plain_text": "(-2,-1)È(2,+∞)"
+        },
+        {
+          "key": "D",
+          "plain_text": "任意实数R"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "C",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "2",
+        "source_reference": "23-24 高二上·北京海淀·期中",
+        "source_page_start": 1,
+        "source_page_end": 2,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "一．椭圆定义求参范围（共 2 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_03",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（22-23 高二上·北京·期中）数学家华罗庚曾说：“数缺形时少直观，形少数时难入微”.事实上，很多代数\n问题可以转化为几何问题加以解决，例如，与 (x-a)2+(y -b)2 相关的代数问题，可以转化为点 A(x, y)与\n点B(a,b)之间距离的几何问题.结合上述观点，可求得方程 x2 +4x+5 + x2 -4x+5 = 6的解是（ ）\n3 62 3 62 6 5 6 5",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": ""
+        },
+        {
+          "key": "B",
+          "plain_text": "±"
+        },
+        {
+          "key": "C",
+          "plain_text": ""
+        },
+        {
+          "key": "D",
+          "plain_text": "±\n4 4 5 5"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "D",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "3",
+        "source_reference": "22-23 高二上·北京·期中",
+        "source_page_start": 2,
+        "source_page_end": 2,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "二． 椭圆定义（共 2 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_04",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（23-24 高二上·山东聊城·期中）已知圆C :(x - 2)2 + y2 = 64，F (-2,0)为圆内一点，将圆折起使得圆周过\n点F （如图），然后将纸片展开，得到一条折痕l ，这样继续下去将会得到若干折痕，观察这些折痕围成的\n轮廓是一条圆锥曲线，则该圆锥曲线的方程为（ ）\nx2 y2 x2",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "+ =1"
+        },
+        {
+          "key": "B",
+          "plain_text": "+ y2 =1\n16 12 4\nx2 y2 x2 y2"
+        },
+        {
+          "key": "C",
+          "plain_text": "+ =1"
+        },
+        {
+          "key": "D",
+          "plain_text": "+ =1\n4 3 16 4\n学学科科网网（（北北京京））股股份份有有限限公公司司"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "A",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "4",
+        "source_reference": "23-24 高二上·山东聊城·期中",
+        "source_page_start": 2,
+        "source_page_end": 3,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "二． 椭圆定义（共 2 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_05",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（23-24 高二上·浙江·期中）已知点F 为椭圆C : + =1的右焦点，点P是椭圆C 上的动点，点Q 是\n25 16\nPF\n圆M :(x+3)2 + y2 =1上的动点，则 的最小值是（ ）\nPQ\n1 2 2 8",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": ""
+        },
+        {
+          "key": "B",
+          "plain_text": ""
+        },
+        {
+          "key": "C",
+          "plain_text": ""
+        },
+        {
+          "key": "D",
+          "plain_text": "2 9 3 3"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "B",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "source_inconsistency_detected",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正",
+          "原资料第5题答案栏为B，但详解末尾写“故选C”；详解计算结果2/9与B项一致"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "5",
+        "source_reference": "23-24 高二上·浙江·期中",
+        "source_page_start": 3,
+        "source_page_end": 4,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "三．焦半径范围最值 （共 3 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_06",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（23-24 高二上·安徽·期中）已知椭圆C : + =1的左焦点为F ，若点 P 在椭圆 C 上，则 PF 的最大值\n1 1\n16 7\n为（ ）\n15",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "1"
+        },
+        {
+          "key": "B",
+          "plain_text": "5"
+        },
+        {
+          "key": "C",
+          "plain_text": "7"
+        },
+        {
+          "key": "D",
+          "plain_text": "2"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "C",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "6",
+        "source_reference": "23-24 高二上·安徽·期中",
+        "source_page_start": 4,
+        "source_page_end": 4,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "三．焦半径范围最值 （共 3 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_07",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（23-24 高二上·湖南常德·期中）已知 P 是椭圆 C： + =1上一点，点 P 在直线 l：4x+3y -21= 0 上\n4 3\n的射影为 Q，F 是椭圆 C 的右焦点，则 PQ - PF 的最小值为（ ）\n3",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "1"
+        },
+        {
+          "key": "B",
+          "plain_text": "-1"
+        },
+        {
+          "key": "C",
+          "plain_text": ""
+        },
+        {
+          "key": "D",
+          "plain_text": "2\n2"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "A",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "7",
+        "source_reference": "23-24 高二上·湖南常德·期中",
+        "source_page_start": 4,
+        "source_page_end": 5,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "三．焦半径范围最值 （共 3 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_08",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（21-22 高二上·广东广州·期中）已知F ,F 是椭圆C : + =1的两个焦点，点M 在C 上，则 MF × MF\n1 2 1 2\n16 12\n的最大值为（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "28"
+        },
+        {
+          "key": "B",
+          "plain_text": "16"
+        },
+        {
+          "key": "C",
+          "plain_text": "12"
+        },
+        {
+          "key": "D",
+          "plain_text": "9"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "B",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "8",
+        "source_reference": "21-22 高二上·广东广州·期中",
+        "source_page_start": 5,
+        "source_page_end": 5,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "四．椭圆第一定义求最值范围（共 2 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_09",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（20-21 高二上·江苏·期中）已知椭圆 + =1的右焦点为F, A是椭圆上一点，点M (0,4)，则 AMF 的\nV\n16 7\n周长最大值为（ ）",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "14"
+        },
+        {
+          "key": "B",
+          "plain_text": "16"
+        },
+        {
+          "key": "C",
+          "plain_text": "18"
+        },
+        {
+          "key": "D",
+          "plain_text": "20"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "C",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_formula_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算",
+          "PDF文本层含未映射公式字符或分式错行，须对照原页校正"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "9",
+        "source_reference": "20-21 高二上·江苏·期中",
+        "source_page_start": 5,
+        "source_page_end": 6,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "四．椭圆第一定义求最值范围（共 2 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    },
+    {
+      "id": "q_pilot_ellipse_10",
+      "status": "imported",
+      "visibility": "private",
+      "language": "zh-CN",
+      "stem": {
+        "plain_text": "（22-23 高二上·安徽合肥·期中）椭圆 + =1 (m > 0) 的焦点为 F ， F ，与 y 轴的一个交点为 A，\nm2 +1 m2 1 2\np\n若ÐF AF = ，则 m=（ ）\n1 2 2",
+        "latex": null,
+        "assets": []
+      },
+      "question_type": "single_choice",
+      "options": [
+        {
+          "key": "A",
+          "plain_text": "1"
+        },
+        {
+          "key": "B",
+          "plain_text": "2"
+        },
+        {
+          "key": "C",
+          "plain_text": "3"
+        },
+        {
+          "key": "D",
+          "plain_text": "2"
+        }
+      ],
+      "answer": {
+        "type": "option",
+        "value": "A",
+        "status": "source_answer_extracted",
+        "alternatives": []
+      },
+      "solutions": [
+        {
+          "method": null,
+          "steps_latex": [],
+          "final_answer": null,
+          "author_type": "not_imported",
+          "review_status": "to_be_regenerated_and_verified"
+        }
+      ],
+      "curriculum": {
+        "curriculum_version": "CN-HS-MATH-2017-2020",
+        "textbook": "PEP-A",
+        "volume": "选择性必修第一册",
+        "chapter": "第三章 圆锥曲线的方程",
+        "section": "3.1 椭圆",
+        "knowledge_point_ids": [
+          "kp_ellipse"
+        ],
+        "prerequisite_ids": [],
+        "mapping_status": "pilot_candidate"
+      },
+      "exam": {
+        "paper_family": "新高考全国I卷适配候选",
+        "region": null,
+        "year": null,
+        "original_score": null,
+        "competency_tags": []
+      },
+      "pedagogy": {
+        "difficulty": 3,
+        "difficulty_confidence": 0.45,
+        "estimated_minutes": null,
+        "methods": [],
+        "common_errors": [],
+        "usage_scenarios": [
+          "题库检索候选"
+        ]
+      },
+      "verification": {
+        "status": "needs_math_review",
+        "methods": [
+          "source_boundary_check"
+        ],
+        "details": [
+          "未导入原解析；解析须独立生成并验算"
+        ]
+      },
+      "source": {
+        "source_id": "SRC-007",
+        "document_name": "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "document_path": "D:\\高中数学\\2026-08\\椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf",
+        "source_question_number": "10",
+        "source_reference": "22-23 高二上·安徽合肥·期中",
+        "source_page_start": 6,
+        "source_page_end": 6,
+        "license_status": "question_content_user_declared_usable",
+        "allowed_uses": [
+          "extract_question_facts",
+          "display_question",
+          "adapt_question",
+          "model_training_question_only"
+        ],
+        "excluded_material": [
+          "PDF整体",
+          "版式",
+          "封面",
+          "水印",
+          "讲义文字",
+          "原解析表述"
+        ],
+        "attribution_required": "to_be_confirmed_per_original_question_source",
+        "proof_document_id": "user-declaration-2026-08-03"
+      },
+      "provenance": {
+        "created_by": "import_pipeline",
+        "derived_from_question_ids": [],
+        "model_run_id": null,
+        "duplicate_cluster_id": null,
+        "extraction_method": "pypdf_text_boundary_v0.1",
+        "topic_heading": "五．椭圆求 a、b、c（共 2 小题）"
+      },
+      "reviews": [],
+      "created_at": "2026-08-03T01:37:30+00:00",
+      "updated_at": "2026-08-03T01:37:30+00:00"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "input": "D:\\Vibecoding\\data\\pilot\\batch-2026-08-001-30q.json",
+  "valid": true,
+  "question_count": 30,
+  "errors": [],
+  "warnings": [
+    "q_pilot_ellipse_05: 检出原资料答案/详解表述不一致"
+  ],
+  "verification_status_counts": {
+    "needs_math_review": 11,
+    "needs_formula_review": 18,
+    "source_inconsistency_detected": 1
+  },
+  "answer_status_counts": {
+    "source_answer_extracted": 20,
+    "requires_independent_verification": 10
+  },
+  "source_counts": {
+    "专题01 集合与逻辑用语（选填题7种考法）（老师版）(1).pdf": 10,
+    "新高考数学概率黄金32题（教师版）(1).pdf": 10,
+    "椭圆性质（考题猜想，易错必刷30题13种题型）（解析版）(1).pdf": 10
+  },
+  "exact_duplicate_stem_count": 0,
+  "excluded_material_leak_count": 0
+}

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "math-ai-api"
+version = "0.1.0"
+description = "FastAPI backend for the high-school math teacher workspace"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.141.1",
+  "pydantic-settings>=2.10,<3",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

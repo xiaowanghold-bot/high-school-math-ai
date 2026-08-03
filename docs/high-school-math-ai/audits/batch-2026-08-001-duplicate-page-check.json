@@ -1,0 +1,13 @@
+{
+  "split_mismatches": [
+    {
+      "filename": "（解析）高一数学题型汇编（不等式、函数和三角函数）（解析）(1).pdf",
+      "expected": 603,
+      "segments": 605
+    }
+  ],
+  "cross_file_duplicate_groups": 0,
+  "cross_file_duplicate_page_instances": 0,
+  "file_pairs": [],
+  "groups": []
+}

@@ -1,0 +1,11 @@
+{
+  "name": "high-school-math-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @math-ai/web dev",
+    "build:web": "pnpm --filter @math-ai/web build",
+    "typecheck:web": "pnpm --filter @math-ai/web typecheck"
+  }
+}
