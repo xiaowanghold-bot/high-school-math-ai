@@ -35,7 +35,7 @@ def test_question_bank_stats_and_search_endpoints() -> None:
 
     assert stats_response.status_code == 200
     assert stats_response.json()["total"] == 30
-    assert stats_response.json()["by_verification_status"]["passed"] == 9
+    assert stats_response.json()["by_verification_status"]["passed"] == 13
     assert batches_response.status_code == 200
     assert batches_response.json()[0]["declared_count"] == 30
     assert search_response.status_code == 200

@@ -1,0 +1,110 @@
+{
+  "package_id": "curated-probability-4q-v1",
+  "schema_version": "0.1",
+  "source_document": "新高考数学概率黄金32题（教师版）(1).pdf",
+  "source_pages_reviewed": [1, 2, 3],
+  "content_policy": "Only question facts were reconstructed. Solutions were independently authored and must be teacher-reviewed.",
+  "candidates": [
+    {
+      "question_id": "q_pilot_probability_01",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "甲、乙、丙三位同学进行羽毛球比赛。累计负两场者被淘汰；首场由甲、乙比赛，丙轮空；此后每场胜者与轮空者比赛，负者下一场轮空。每场双方获胜概率均为1/2且相互独立。（1）求甲连胜四场的概率；（2）求需要进行第五场比赛的概率；（3）求丙最终获胜的概率。",
+        "latex": "甲、乙、丙三位同学进行羽毛球比赛。累计负两场者被淘汰；首场由甲、乙比赛，丙轮空；此后每场胜者与轮空者比赛，负者下一场轮空。每场双方获胜概率均为 $\\frac12$ 且相互独立。（1）求甲连胜四场的概率；（2）求需要进行第五场比赛的概率；（3）求丙最终获胜的概率。"
+      },
+      "options": [],
+      "source_answer": "（1）1/16；（2）3/4；（3）7/16",
+      "expected_canonical_value": "composite:{\"part1\":\"1/16\",\"part2\":\"3/4\",\"part3\":\"7/16\"}",
+      "computed_answer_display": "（1）1/16；（2）3/4；（3）7/16",
+      "solution": {
+        "method": "状态枚举",
+        "steps_latex": [
+          "（1）甲连胜四场要求前四场均由甲取胜，所以 $P=(\\frac12)^4=\\frac1{16}$。",
+          "（2）以三人的累计负场数为状态枚举四场内结束的路径，其概率为 $\\frac14$，故需要第五场的概率为 $1-\\frac14=\\frac34$。",
+          "（3）枚举全部终止状态并合并丙获胜的路径，得到 $P(\\text{丙最终获胜})=\\frac7{16}$。"
+        ],
+        "final_answer": "（1）1/16；（2）3/4；（3）7/16",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "fair_three_player_two_loss_tournament"},
+      "source": {"source_question_number": "1", "source_page_start": 1, "source_page_end": 1, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_02",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "趣味乒乓球比赛中，每球胜者发下一球；发球者赢球得1分，对手赢球得2分；有人累计得分超过5分时比赛结束。发球方每球获胜概率为0.6，各球独立。（1）若甲发第一球，求比赛出现2:2的概率；（2）比分3:3且接下来甲发球，设又打X个球后结束，求X的分布列与数学期望。",
+        "latex": "趣味乒乓球比赛中，每球胜者发下一球；发球者赢球得 $1$ 分，对手赢球得 $2$ 分；有人累计得分超过 $5$ 分时比赛结束。发球方每球获胜概率为 $0.6$，各球独立。（1）若甲发第一球，求比赛出现 $2:2$ 的概率；（2）比分 $3:3$ 且接下来甲发球，设又打 $X$ 个球后结束，求 $X$ 的分布列与数学期望。"
+      },
+      "options": [],
+      "source_answer": "（1）38/125；（2）P(X=2)=6/25，P(X=3)=77/125，P(X=4)=18/125，E(X)=363/125",
+      "expected_canonical_value": "composite:{\"distribution\":{\"2\":\"6/25\",\"3\":\"77/125\",\"4\":\"18/125\"},\"expectation\":\"363/125\",\"part1\":\"38/125\"}",
+      "computed_answer_display": "（1）38/125；（2）X=2,3,4，概率依次为6/25、77/125、18/125，E(X)=363/125",
+      "solution": {
+        "method": "互斥路径与有限状态枚举",
+        "steps_latex": [
+          "（1）出现 $2:2$ 的两条互斥得分路径给出 $P=0.6^2\\times0.4+0.4^2=\\frac{38}{125}$。",
+          "（2）从 $3:3$ 且甲发球开始逐球枚举，$X$ 只可能取 $2,3,4$。",
+          "$P(X=2)=\\frac6{25},\\ P(X=3)=\\frac{77}{125},\\ P(X=4)=\\frac{18}{125}$。",
+          "$E(X)=2\\times\\frac6{25}+3\\times\\frac{77}{125}+4\\times\\frac{18}{125}=\\frac{363}{125}$。"
+        ],
+        "final_answer": "（1）38/125；（2）见分布列，E(X)=363/125",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "server_scoring_threshold_game"},
+      "source": {"source_question_number": "2", "source_page_start": 2, "source_page_end": 2, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_03",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "甲、乙进行乒乓球友谊赛，每场采用5局3胜制。3:0或3:1取胜者积3分、负者0分；3:2取胜者积2分、负者1分。甲每局获胜概率为1/3，各局独立。（1）一场后求甲的积分X的分布列和数学期望；（2）两场后求两人积分相等的概率。",
+        "latex": "甲、乙进行乒乓球友谊赛，每场采用 $5$ 局 $3$ 胜制。$3:0$ 或 $3:1$ 取胜者积 $3$ 分、负者 $0$ 分；$3:2$ 取胜者积 $2$ 分、负者 $1$ 分。甲每局获胜概率为 $\\frac13$，各局独立。（1）一场后求甲的积分 $X$ 的分布列和数学期望；（2）两场后求两人积分相等的概率。"
+      },
+      "options": [],
+      "source_answer": "P(X=0)=16/27，P(X=1)=16/81，P(X=2)=8/81，P(X=3)=1/9，E(X)=59/81；两场后积分相等概率1120/6561",
+      "expected_canonical_value": "composite:{\"distribution\":{\"0\":\"16/27\",\"1\":\"16/81\",\"2\":\"8/81\",\"3\":\"1/9\"},\"equal_after_two\":\"1120/6561\",\"expectation\":\"59/81\"}",
+      "computed_answer_display": "X=0,1,2,3，概率依次为16/27、16/81、8/81、1/9；E(X)=59/81；两场后积分相等概率1120/6561",
+      "solution": {
+        "method": "比赛终止比分分类与卷积",
+        "steps_latex": [
+          "按甲以 $0:3,1:3,2:3,3:2,3:1,3:0$ 结束比赛的互斥情形分类，得到单场积分分布。",
+          "$P(X=0)=\\frac{16}{27},\\ P(X=1)=\\frac{16}{81},\\ P(X=2)=\\frac8{81},\\ P(X=3)=\\frac19$。",
+          "$E(X)=\\frac{59}{81}$。两场后双方积分相等等价于甲两场积分之和为 $3$，由卷积得 $\\frac{1120}{6561}$。"
+        ],
+        "final_answer": "见分布列；E(X)=59/81；两场后积分相等概率为1120/6561",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "best_of_five_league_points"},
+      "source": {"source_question_number": "3", "source_page_start": 2, "source_page_end": 3, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_pilot_probability_04",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "象棋淘汰赛先进行一局慢棋，和棋则加赛快棋；若连续两局快棋均和棋，再加赛一局只有胜负的超快棋。甲慢棋胜、和概率分别为1/2、1/3；快棋胜、和概率均为1/3；超快棋胜概率为1/4，各局独立。（1）求甲恰好经过三局进入复赛的概率；（2）设比赛局数为X，求X的分布列和数学期望。",
+        "latex": "象棋淘汰赛先进行一局慢棋，和棋则加赛快棋；若连续两局快棋均和棋，再加赛一局只有胜负的超快棋。甲慢棋胜、和概率分别为 $\\frac12,\\frac13$；快棋胜、和概率均为 $\\frac13$；超快棋胜概率为 $\\frac14$，各局独立。（1）求甲恰好经过三局进入复赛的概率；（2）设比赛局数为 $X$，求 $X$ 的分布列和数学期望。"
+      },
+      "options": [],
+      "source_answer": "（1）1/27；（2）P(X=1)=2/3，P(X=2)=2/9，P(X=3)=2/27，P(X=4)=1/27，E(X)=40/27",
+      "expected_canonical_value": "composite:{\"advance_in_three\":\"1/27\",\"distribution\":{\"1\":\"2/3\",\"2\":\"2/9\",\"3\":\"2/27\",\"4\":\"1/27\"},\"expectation\":\"40/27\"}",
+      "computed_answer_display": "（1）1/27；（2）X=1,2,3,4，概率依次为2/3、2/9、2/27、1/27，E(X)=40/27",
+      "solution": {
+        "method": "条件路径分类",
+        "steps_latex": [
+          "（1）恰好三局且甲晋级要求慢棋和、第一局快棋和、第二局快棋胜，故 $P=(\\frac13)^3=\\frac1{27}$。",
+          "$P(X=1)=\\frac23,\\ P(X=2)=\\frac29,\\ P(X=3)=\\frac2{27},\\ P(X=4)=\\frac1{27}$。",
+          "$E(X)=1\\times\\frac23+2\\times\\frac29+3\\times\\frac2{27}+4\\times\\frac1{27}=\\frac{40}{27}$。"
+        ],
+        "final_answer": "（1）1/27；（2）见分布列，E(X)=40/27",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "chess_tiebreak_game_count"},
+      "source": {"source_question_number": "4", "source_page_start": 3, "source_page_end": 3, "source_reference": null, "attribution_required": "to_be_confirmed"}
+    }
+  ]
+}

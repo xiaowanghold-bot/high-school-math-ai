@@ -30,6 +30,8 @@ def get_question_bank() -> QuestionBank:
         bank.import_batch(settings.pilot_batch_json)
     if settings.set_curation_json.exists():
         bank.apply_curation_package(settings.set_curation_json, MathVerifier())
+    if settings.probability_curation_json.exists():
+        bank.apply_curation_package(settings.probability_curation_json, MathVerifier())
     return bank
 
 
@@ -52,6 +54,17 @@ def apply_set_curation() -> CurationResult:
     settings = get_settings()
     try:
         return get_question_bank().apply_curation_package(settings.set_curation_json, MathVerifier())
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/question-bank/apply-probability-curation", response_model=CurationResult)
+def apply_probability_curation() -> CurationResult:
+    settings = get_settings()
+    try:
+        return get_question_bank().apply_curation_package(
+            settings.probability_curation_json, MathVerifier()
+        )
     except QuestionBankError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

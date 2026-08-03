@@ -11,6 +11,7 @@ from app.modules.question_bank import QuestionBank, QuestionBankError, ReviewCom
 
 PILOT_BATCH = PROJECT_ROOT / "data" / "pilot" / "batch-2026-08-001-30q.json"
 SET_CURATION = PROJECT_ROOT / "data" / "curated" / "set-10q-corrections-v1.json"
+PROBABILITY_CURATION = PROJECT_ROOT / "data" / "curated" / "probability-4q-corrections-v1.json"
 
 
 def make_bank(tmp_path: Path) -> QuestionBank:
@@ -71,6 +72,28 @@ def test_curation_package_is_independently_verified_and_idempotent(tmp_path: Pat
     flawed = bank.get_question("q_pilot_set_3_1")
     assert flawed.status == "rejected"
     assert flawed.raw["verification"]["computed_canonical_value"] == "set:0,1,4"
+
+
+def test_probability_composite_questions_are_independently_verified(tmp_path: Path) -> None:
+    bank = make_bank(tmp_path)
+    bank.import_batch(PILOT_BATCH)
+
+    first = bank.apply_curation_package(PROBABILITY_CURATION, MathVerifier())
+    second = bank.apply_curation_package(PROBABILITY_CURATION, MathVerifier())
+
+    assert first.applied_count == 4
+    assert first.passed_count == 4
+    assert first.inconsistency_count == 0
+    assert second.applied_count == 0
+    assert second.skipped_count == 4
+    tournament = bank.get_question("q_pilot_probability_01")
+    assert tournament.verification_status == "passed"
+    assert tournament.raw["verification"]["computed_canonical_value"] == (
+        'composite:{"part1":"1/16","part2":"3/4","part3":"7/16"}'
+    )
+    assert bank.get_question("q_pilot_probability_04").raw["verification"][
+        "computed_answer"
+    ].endswith("E(X)=40/27")
 
 
 def test_teacher_cannot_approve_before_independent_verification(tmp_path: Path) -> None:
