@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     probability_curation_2_json: Path = Field(
         default=PROJECT_ROOT / "data" / "curated" / "probability-6q-corrections-v1.json"
     )
+    function_pilot_batch_json: Path = Field(
+        default=PROJECT_ROOT / "data" / "pilot" / "function-properties-5q-v1.json"
+    )
+    function_curation_json: Path = Field(
+        default=PROJECT_ROOT / "data" / "curated" / "function-properties-5q-corrections-v1.json"
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -95,6 +95,12 @@ h1 { margin: 0; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-s
 .question-filters { display: grid; grid-template-columns: minmax(280px, 1fr) 260px 180px auto; gap: 10px; background: white; border: 1px solid var(--line); border-radius: 13px; padding: 12px; margin-bottom: 16px; }
 .question-filters select, .search-field { min-width: 0; height: 42px; border: 1px solid var(--line); border-radius: 9px; background: #f9fafc; color: #526078; }
 .question-filters select { padding: 0 11px; }
+.module-shortcuts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: -4px 0 16px; }
+.module-shortcuts > span { color: var(--muted); font-size: 11px; margin-right: 2px; }
+.module-shortcuts button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #59647a; padding: 7px 11px; cursor: pointer; }
+.module-shortcuts button:hover, .module-shortcuts button.active { color: var(--blue); border-color: #aebcf1; background: #edf1ff; }
+.module-shortcuts small { min-width: 18px; border-radius: 999px; background: #eef0f5; color: #6b7488; padding: 1px 5px; font-size: 9px; }
+.module-shortcuts button.active small { background: #dce5ff; color: var(--blue); }
 .search-field { display: flex; align-items: center; gap: 9px; padding: 0 12px; }
 .search-field span { color: #8994a6; }.search-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: var(--ink); }
 .question-layout { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(370px, .82fr); gap: 16px; align-items: start; }

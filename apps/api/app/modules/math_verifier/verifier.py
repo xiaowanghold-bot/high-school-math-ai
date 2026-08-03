@@ -19,7 +19,7 @@ class VerificationReport(BaseModel):
     method: str
     details: list[str]
     evidence: dict[str, Any]
-    verifier_version: str = "sets-v0.1.0"
+    verifier_version: str = "math-v0.3.0"
 
 
 class MathVerifier:
@@ -47,6 +47,11 @@ class MathVerifier:
             "best_of_three_ball_urn": self._best_of_three_ball_urn,
             "biathlon_penalty_comparison": self._biathlon_penalty_comparison,
             "three_player_quiz_state_tree": self._three_player_quiz_state_tree,
+            "function_symmetry_monotonic_endpoint": self._function_symmetry_monotonic_endpoint,
+            "open_interval_quadratic_maximum": self._open_interval_quadratic_maximum,
+            "odd_piecewise_linear_inequality": self._odd_piecewise_linear_inequality,
+            "graph_symmetry_composition_value": self._graph_symmetry_composition_value,
+            "symmetry_antiperiodic_statement_count": self._symmetry_antiperiodic_statement_count,
         }
 
     def verify(self, candidate: dict[str, Any]) -> VerificationReport:
@@ -173,6 +178,82 @@ class MathVerifier:
     @staticmethod
     def _fraction(value: Fraction) -> str:
         return str(value.numerator) if value.denominator == 1 else f"{value.numerator}/{value.denominator}"
+
+    @staticmethod
+    def _function_symmetry_monotonic_endpoint(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        canonical = "relation:f(4)<f(1)=f(3);f(2):undetermined"
+        return canonical, [
+            "令 t=3+x，条件化为 f(t)=f(4-t)，故图象关于直线 x=2 对称，f(1)=f(3)。",
+            "3、4 均在 (2,+∞) 内，由严格递减得 f(3)>f(4)。",
+            "单调区间不包含端点 2，条件没有限制 f(2) 与其余函数值的大小，因此四个全序选项都不能必然成立。",
+        ], {
+            "forced_relations": ["f(1)=f(3)", "f(3)>f(4)"],
+            "endpoint_value": "f(2) is unconstrained",
+            "counterexamples": {
+                "option_A_can_hold": "f(x)=-|x-2| for x!=2, f(2)=0",
+                "option_A_can_fail": "f(x)=-|x-2| for x!=2, f(2)=-3",
+            },
+        }
+
+    @staticmethod
+    def _open_interval_quadratic_maximum(spec: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        left, right = spec.get("domain", [0, 6])
+        vertex = Fraction(3)
+        maximum = Fraction(9)
+        return "claim:max=9", [
+            "配方得 6x-x²=9-(x-3)²。",
+            "顶点 x=3 位于开区间 (0,6) 内，所以最大值 9 能取到。",
+            "区间端点不包含，函数只有下确界 0，没有最小值。",
+        ], {
+            "domain": f"({left},{right})",
+            "vertex": MathVerifier._fraction(vertex),
+            "maximum": MathVerifier._fraction(maximum),
+            "minimum_exists": False,
+            "infimum": "0",
+        }
+
+    @staticmethod
+    def _odd_piecewise_linear_inequality(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        canonical = "interval:(-inf,-1/2)U(0,1/6)"
+        return canonical, [
+            "奇函数满足 f(2)=-f(-2)=-5；由 2a+1=-5 得 a=-3。",
+            "x>0 时 f(x)=-3x+1，解得 0<x<1/6。",
+            "x<0 时由奇性得 f(x)=-3x-1，解得 x<-1/2；且 f(0)=0 不满足不等式。",
+        ], {
+            "parameter_a": -3,
+            "positive_branch": "-3x+1",
+            "negative_branch": "-3x-1",
+            "solution": "(-inf,-1/2)U(0,1/6)",
+        }
+
+    @staticmethod
+    def _graph_symmetry_composition_value(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        y0 = Fraction(1, 4)
+        x0 = Fraction(-1, 2)
+        result = Fraction(-9, 2)
+        return "number:-9/2", [
+            "从 Γ 上点 (x₀,y₀) 依次使用关于 y=x 的轴对称和关于 (-1,1) 的中心对称，可得到 (4+y₀,-4+x₀) 仍在 Γ 上。",
+            "令 4+y₀=17/4，得 y₀=1/4。因 x₀∈[-1,0] 且 y₀=x₀²，所以 x₀=-1/2。",
+            "因此 f(17/4)=-4+x₀=-9/2。",
+        ], {
+            "seed_point": [MathVerifier._fraction(x0), MathVerifier._fraction(y0)],
+            "transformed_point": ["17/4", MathVerifier._fraction(result)],
+        }
+
+    @staticmethod
+    def _symmetry_antiperiodic_statement_count(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
+        truth_values = {"1": True, "2": True, "3": False, "4": True}
+        return "number:3", [
+            "关于 x=1 对称给出 g(2-x)=g(x)；g(2x+2) 为奇函数给出 g(2-x)=-g(2+x)。",
+            "合并得 g(x+2)=-g(x)，所以 g 的周期为 4，且 g(0)=g(2)=0。",
+            "由 g(1)=1 得 f(2)=2、f(4)=0，故命题③错误；其余①②④成立。",
+            "每连续四项的 g(3-n) 之和为 0，所以 2024 项 f(n) 之和为 2024。",
+        ], {
+            "anti_period": 2,
+            "period": 4,
+            "truth_values": truth_values,
+            "true_count": 3,
+        }
 
     @staticmethod
     def _fair_three_player_two_loss_tournament(_: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:

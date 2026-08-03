@@ -68,6 +68,14 @@ const blockerLabels: Record<string, string> = {
   question_rejected: "题目已被拒绝",
 };
 
+const moduleShortcuts = [
+  { label: "全部", chapter: "" },
+  { label: "集合", chapter: "第一章 集合与常用逻辑用语" },
+  { label: "函数", chapter: "第三章 函数的概念与性质" },
+  { label: "圆锥曲线", chapter: "第三章 圆锥曲线的方程" },
+  { label: "概率", chapter: "第七章 随机变量及其分布" },
+];
+
 export default function SearchPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [items, setItems] = useState<Question[]>([]);
@@ -216,12 +224,30 @@ export default function SearchPage() {
         </select>
         <select value={verification} onChange={(event) => setVerification(event.target.value)} aria-label="按验证状态筛选">
           <option value="">全部质量状态</option>
+          <option value="passed">验证通过</option>
           <option value="needs_formula_review">待公式校正</option>
           <option value="needs_math_review">待数学验算</option>
           <option value="source_inconsistency_detected">来源存在矛盾</option>
         </select>
         <button className="primary-button" type="submit">检索</button>
       </form>
+
+      <nav className="module-shortcuts" aria-label="按数学模块快速筛选">
+        <span>快速进入</span>
+        {moduleShortcuts.map((item) => (
+          <button
+            className={chapter === item.chapter ? "active" : ""}
+            key={item.label}
+            type="button"
+            onClick={() => setChapter(item.chapter)}
+          >
+            {item.label}
+            {item.chapter && stats?.by_chapter[item.chapter] !== undefined
+              ? <small>{stats.by_chapter[item.chapter]}</small>
+              : null}
+          </button>
+        ))}
+      </nav>
 
       <div className="question-layout">
         <section className="question-results" aria-label="题目列表">
@@ -245,7 +271,7 @@ export default function SearchPage() {
         <aside className="question-detail" aria-label="题目审核详情">
           {!detail && <div className="empty-state"><strong>请选择一道题</strong><p>右侧将显示来源、答案与审核动作。</p></div>}
           {detail && <>
-            <header className="detail-heading"><div><p>{detail.volume}</p><h2>{detail.chapter}</h2></div><span>难度 {detail.difficulty}</span></header>
+            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><span>难度 {detail.difficulty}</span></header>
             {detail.verification_status === "passed"
               ? <div className="verification-passed"><strong>独立验证通过</strong><p>公式已对照原页重建，答案已由规则模块独立计算并匹配唯一选项。</p></div>
               : <div className="formula-warning"><strong>{verificationLabels[detail.verification_status]}</strong><p>{detail.verification_status === "source_inconsistency_detected" ? "独立计算与来源选项不一致，该题已隔离，不能审核发布。" : "当前文本来自PDF定位层，必须对照原页重建公式后才能公开展示。"}</p></div>}

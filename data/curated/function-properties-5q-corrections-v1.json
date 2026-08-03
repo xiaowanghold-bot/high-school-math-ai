@@ -1,0 +1,138 @@
+{
+  "package_id": "curated-function-properties-5q-v1",
+  "schema_version": "0.1",
+  "source_document": "函数性质的八大题型综合应用（解析版）(1).pdf",
+  "source_pages_reviewed": [3, 5, 6, 8, 10, 12, 13],
+  "content_policy": "Only question facts were reconstructed. Solutions were independently authored and must be teacher-reviewed.",
+  "candidates": [
+    {
+      "question_id": "q_function_properties_01",
+      "disposition": "source_inconsistency_detected",
+      "stem": {
+        "plain_text": "（2023·广东深圳·统考模拟预测）已知函数 f(x) 的定义域为 R，对任意 x∈R 都有 f(3+x)=f(1-x)，且 f(x) 在 (2,+∞) 上单调递减，则 f(1)、f(2) 与 f(4) 的大小关系为（ ）",
+        "latex": "（2023·广东深圳·统考模拟预测）已知函数 $f(x)$ 的定义域为 $\\mathbb R$，对任意 $x\\in\\mathbb R$ 都有 $f(3+x)=f(1-x)$，且 $f(x)$ 在 $(2,+\\infty)$ 上单调递减，则 $f(1),f(2),f(4)$ 的大小关系为（ ）"
+      },
+      "options": [
+        {"key": "A", "plain_text": "f(4)<f(1)<f(2)", "latex": "$f(4)<f(1)<f(2)$", "canonical_value": "relation:f(4)<f(1)<f(2)"},
+        {"key": "B", "plain_text": "f(2)<f(1)<f(4)", "latex": "$f(2)<f(1)<f(4)$", "canonical_value": "relation:f(2)<f(1)<f(4)"},
+        {"key": "C", "plain_text": "f(1)<f(2)<f(4)", "latex": "$f(1)<f(2)<f(4)$", "canonical_value": "relation:f(1)<f(2)<f(4)"},
+        {"key": "D", "plain_text": "f(4)<f(2)<f(1)", "latex": "$f(4)<f(2)<f(1)$", "canonical_value": "relation:f(4)<f(2)<f(1)"}
+      ],
+      "source_answer": "A",
+      "solution": {
+        "method": "对称性、开区间单调性与反例",
+        "steps_latex": [
+          "令 $t=3+x$，则 $f(t)=f(4-t)$，所以图象关于直线 $x=2$ 对称，$f(1)=f(3)$。",
+          "因为 $3,4\\in(2,+\\infty)$ 且函数严格递减，所以 $f(3)>f(4)$。",
+          "条件未规定端点 $x=2$ 的函数值，$f(2)$ 可任意改变而不破坏已知条件，因此不能确定三者的全序，四个选项均不必然成立。"
+        ],
+        "final_answer": "无必然正确选项；只能确定 f(4)<f(1)=f(3)",
+        "author_type": "independent_system_draft",
+        "review_status": "source_issue_confirmed"
+      },
+      "verification_spec": {"rule": "function_symmetry_monotonic_endpoint"},
+      "adaptation_candidate": {
+        "change": "将单调区间改为 [2,+∞)，或在题干中补充 f(2)>f(1)",
+        "result": "补充条件后可得到选项 A",
+        "requires_teacher_approval": true
+      },
+      "source": {"source_question_number": "题型1-例1", "source_page_start": 3, "source_page_end": 3, "source_reference": "2023·广东深圳·统考模拟预测", "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_function_properties_02",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "（2023·江西九江·校考模拟预测）若 0<x<6，则 6x-x² 有（ ）",
+        "latex": "（2023·江西九江·校考模拟预测）若 $0<x<6$，则 $6x-x^2$ 有（ ）"
+      },
+      "options": [
+        {"key": "A", "plain_text": "最小值3", "latex": "最小值 $3$", "canonical_value": "claim:min=3"},
+        {"key": "B", "plain_text": "最大值3", "latex": "最大值 $3$", "canonical_value": "claim:max=3"},
+        {"key": "C", "plain_text": "最小值9", "latex": "最小值 $9$", "canonical_value": "claim:min=9"},
+        {"key": "D", "plain_text": "最大值9", "latex": "最大值 $9$", "canonical_value": "claim:max=9"}
+      ],
+      "source_answer": "D",
+      "solution": {
+        "method": "二次函数配方与开区间端点",
+        "steps_latex": ["$6x-x^2=9-(x-3)^2\\le 9$。", "$x=3\\in(0,6)$，所以最大值 $9$ 能够取到。", "当 $x$ 趋近于 $0$ 或 $6$ 时函数值趋近于 $0$，但端点不在定义域内，故没有最小值。"],
+        "final_answer": "D",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "open_interval_quadratic_maximum", "domain": [0, 6]},
+      "source": {"source_question_number": "题型2-例1", "source_page_start": 5, "source_page_end": 6, "source_reference": "2023·江西九江·校考模拟预测", "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_function_properties_03",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "（2023·广东东莞市校联考一模）已知函数 f(x) 是定义在 R 上的奇函数，当 x>0 时，f(x)=ax+1。若 f(-2)=5，则不等式 f(x)>1/2 的解集为（ ）",
+        "latex": "（2023·广东东莞市校联考一模）已知函数 $f(x)$ 是定义在 $\\mathbb R$ 上的奇函数，当 $x>0$ 时，$f(x)=ax+1$。若 $f(-2)=5$，则不等式 $f(x)>\\frac12$ 的解集为（ ）"
+      },
+      "options": [
+        {"key": "A", "plain_text": "(-∞,-1/2)∪(0,1/6)", "latex": "$(-\\infty,-\\frac12)\\cup(0,\\frac16)$", "canonical_value": "interval:(-inf,-1/2)U(0,1/6)"},
+        {"key": "B", "plain_text": "(-1/2,0)∪(0,1/6)", "latex": "$(-\\frac12,0)\\cup(0,\\frac16)$", "canonical_value": "interval:(-1/2,0)U(0,1/6)"},
+        {"key": "C", "plain_text": "(-∞,-1/2)∪(1/6,+∞)", "latex": "$(-\\infty,-\\frac12)\\cup(\\frac16,+\\infty)$", "canonical_value": "interval:(-inf,-1/2)U(1/6,+inf)"},
+        {"key": "D", "plain_text": "(-1/2,0)∪(1/6,+∞)", "latex": "$(-\\frac12,0)\\cup(\\frac16,+\\infty)$", "canonical_value": "interval:(-1/2,0)U(1/6,+inf)"}
+      ],
+      "source_answer": "A",
+      "solution": {
+        "method": "奇函数分段重建",
+        "steps_latex": ["由奇性得 $f(2)=-5$，所以 $2a+1=-5$，$a=-3$。", "$x>0$ 时 $f(x)=-3x+1$，不等式解为 $0<x<\\frac16$。", "$x<0$ 时 $f(x)=-3x-1$，不等式解为 $x<-\\frac12$；$f(0)=0$ 不满足。"],
+        "final_answer": "A",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "odd_piecewise_linear_inequality"},
+      "source": {"source_question_number": "题型3-例1", "source_page_start": 8, "source_page_end": 8, "source_reference": "2023·广东东莞市校联考一模", "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_function_properties_04",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "（2023·江西赣州·统考二模）已知函数 f(x) 的图象既关于点(-1,1)对称，又关于直线 y=x 对称，且当 x∈[-1,0] 时 f(x)=x²，则 f(17/4)=（ ）",
+        "latex": "（2023·江西赣州·统考二模）已知函数 $f(x)$ 的图象既关于点 $(-1,1)$ 对称，又关于直线 $y=x$ 对称，且当 $x\\in[-1,0]$ 时 $f(x)=x^2$，则 $f(\\frac{17}{4})=$（ ）"
+      },
+      "options": [
+        {"key": "A", "plain_text": "-19/4", "latex": "$-\\frac{19}{4}$", "canonical_value": "number:-19/4"},
+        {"key": "B", "plain_text": "-9/2", "latex": "$-\\frac92$", "canonical_value": "number:-9/2"},
+        {"key": "C", "plain_text": "-7/2", "latex": "$-\\frac72$", "canonical_value": "number:-7/2"},
+        {"key": "D", "plain_text": "-17/4", "latex": "$-\\frac{17}{4}$", "canonical_value": "number:-17/4"}
+      ],
+      "source_answer": "B",
+      "solution": {
+        "method": "图象对称变换复合",
+        "steps_latex": ["设 $(x_0,y_0)$ 在图象上，且 $x_0\\in[-1,0]$、$y_0=x_0^2$。", "复合两种对称变换可得 $(4+y_0,-4+x_0)$ 仍在图象上。", "令 $4+y_0=\\frac{17}{4}$，得 $y_0=\\frac14$，结合区间取 $x_0=-\\frac12$，所以函数值为 $-4+x_0=-\\frac92$。"],
+        "final_answer": "B",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "graph_symmetry_composition_value"},
+      "source": {"source_question_number": "题型4-例1", "source_page_start": 10, "source_page_end": 10, "source_reference": "2023·江西赣州·统考二模", "attribution_required": "to_be_confirmed"}
+    },
+    {
+      "question_id": "q_function_properties_05",
+      "disposition": "verified_candidate",
+      "stem": {
+        "plain_text": "（2023·四川宜宾·统考一模）已知函数 f(x)、g(x) 的定义域为 R，g(x) 的图象关于 x=1 对称，且 g(2x+2) 为奇函数，g(1)=1，f(x)=g(3-x)+1。判断：①g(-3)=g(5)；②g(2024)=0；③f(2)+f(4)=-4；④Σ(n=1到2024)f(n)=2024。正确命题的个数为（ ）",
+        "latex": "（2023·四川宜宾·统考一模）已知函数 $f(x),g(x)$ 的定义域为 $\\mathbb R$，$g(x)$ 的图象关于 $x=1$ 对称，且 $g(2x+2)$ 为奇函数，$g(1)=1$，$f(x)=g(3-x)+1$。判断：①$g(-3)=g(5)$；②$g(2024)=0$；③$f(2)+f(4)=-4$；④$\\sum_{n=1}^{2024}f(n)=2024$。正确命题的个数为（ ）"
+      },
+      "options": [
+        {"key": "A", "plain_text": "1", "latex": "$1$", "canonical_value": "number:1"},
+        {"key": "B", "plain_text": "2", "latex": "$2$", "canonical_value": "number:2"},
+        {"key": "C", "plain_text": "3", "latex": "$3$", "canonical_value": "number:3"},
+        {"key": "D", "plain_text": "4", "latex": "$4$", "canonical_value": "number:4"}
+      ],
+      "source_answer": "C",
+      "solution": {
+        "method": "对称关系合成与反周期",
+        "steps_latex": ["由关于 $x=1$ 对称及 $g(2x+2)$ 为奇函数，得到 $g(x+2)=-g(x)$，故周期为 $4$。", "因此①成立；又有 $g(0)=g(2)=0$，所以②成立。", "$f(2)=g(1)+1=2$，$f(4)=g(-1)+1=0$，故③不成立。", "每连续四项的 $g(3-n)$ 之和为 $0$，所以 $2024$ 项 $f(n)$ 的和为 $2024$，④成立。"],
+        "final_answer": "C",
+        "author_type": "independent_system_draft",
+        "review_status": "ready_for_teacher_review"
+      },
+      "verification_spec": {"rule": "symmetry_antiperiodic_statement_count"},
+      "source": {"source_question_number": "题型5-例1", "source_page_start": 12, "source_page_end": 13, "source_reference": "2023·四川宜宾·统考一模", "attribution_required": "to_be_confirmed"}
+    }
+  ]
+}

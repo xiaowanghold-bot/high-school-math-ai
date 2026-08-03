@@ -13,6 +13,8 @@ PILOT_BATCH = PROJECT_ROOT / "data" / "pilot" / "batch-2026-08-001-30q.json"
 SET_CURATION = PROJECT_ROOT / "data" / "curated" / "set-10q-corrections-v1.json"
 PROBABILITY_CURATION = PROJECT_ROOT / "data" / "curated" / "probability-4q-corrections-v1.json"
 PROBABILITY_CURATION_2 = PROJECT_ROOT / "data" / "curated" / "probability-6q-corrections-v1.json"
+FUNCTION_PILOT = PROJECT_ROOT / "data" / "pilot" / "function-properties-5q-v1.json"
+FUNCTION_CURATION = PROJECT_ROOT / "data" / "curated" / "function-properties-5q-corrections-v1.json"
 
 
 def make_bank(tmp_path: Path) -> QuestionBank:
@@ -118,6 +120,30 @@ def test_remaining_probability_questions_include_source_error_isolation(tmp_path
         '"conditional_expectation":"70/59","part1":"5/36",'
         '"probability_game_ends_in_three":"59/144"}'
     )
+
+
+def test_function_properties_batch_is_imported_verified_and_isolates_open_endpoint_error(
+    tmp_path: Path,
+) -> None:
+    bank = make_bank(tmp_path)
+    imported = bank.import_batch(FUNCTION_PILOT)
+
+    first = bank.apply_curation_package(FUNCTION_CURATION, MathVerifier())
+    second = bank.apply_curation_package(FUNCTION_CURATION, MathVerifier())
+
+    assert imported.created_count == 5
+    assert first.applied_count == 5
+    assert first.passed_count == 4
+    assert first.inconsistency_count == 1
+    assert second.applied_count == 0
+    assert second.skipped_count == 5
+    flawed = bank.get_question("q_function_properties_01")
+    assert flawed.status == "rejected"
+    assert flawed.verification_status == "source_inconsistency_detected"
+    assert flawed.raw["verification"]["computed_canonical_value"] == (
+        "relation:f(4)<f(1)=f(3);f(2):undetermined"
+    )
+    assert bank.get_question("q_function_properties_05").verification_status == "passed"
 
 
 def test_teacher_cannot_approve_before_independent_verification(tmp_path: Path) -> None:
