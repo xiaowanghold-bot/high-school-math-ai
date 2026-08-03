@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+from functools import lru_cache
+
+from fastapi import APIRouter, HTTPException, Query
+
+from app.core.config import get_settings
+from app.modules.lesson_plans import (
+    LessonPlanGenerationRequest,
+    LessonPlanList,
+    LessonPlanProviderError,
+    LessonPlanStudio,
+    LessonPlanStudioError,
+    LessonPlanUpdateCommand,
+    LessonPlanView,
+    OpenAIResponsesLessonPlanProvider,
+    TemplateLessonPlanProvider,
+)
+from app.routes.curriculum import _catalog_for_path
+from app.routes.questions import get_question_bank
+
+
+router = APIRouter(prefix="/lesson-plans", tags=["lesson-plans"])
+
+
+@lru_cache
+def get_lesson_plan_studio() -> LessonPlanStudio:
+    settings = get_settings()
+    use_openai = settings.lesson_plan_provider == "openai" or (
+        settings.lesson_plan_provider == "auto" and bool(settings.openai_api_key)
+    )
+    provider = (
+        OpenAIResponsesLessonPlanProvider(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            reasoning_effort=settings.openai_reasoning_effort,
+            timeout_seconds=settings.openai_timeout_seconds,
+        )
+        if use_openai
+        else TemplateLessonPlanProvider()
+    )
+    return LessonPlanStudio(
+        database_path=settings.lesson_plan_db,
+        curriculum_catalog=_catalog_for_path(str(settings.curriculum_csv.resolve())),
+        question_bank=get_question_bank(),
+        provider=provider,
+    )
+
+
+@router.get("", response_model=LessonPlanList)
+def list_lesson_plans(limit: int = Query(default=30, ge=1, le=100)) -> LessonPlanList:
+    return get_lesson_plan_studio().list(limit=limit)
+
+
+@router.post("/generate", response_model=LessonPlanView, status_code=201)
+def generate_lesson_plan(command: LessonPlanGenerationRequest) -> LessonPlanView:
+    try:
+        return get_lesson_plan_studio().create(command)
+    except LessonPlanStudioError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LessonPlanProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/{lesson_plan_id}", response_model=LessonPlanView)
+def get_lesson_plan(lesson_plan_id: str) -> LessonPlanView:
+    try:
+        return get_lesson_plan_studio().get(lesson_plan_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="教案不存在") from exc
+
+
+@router.patch("/{lesson_plan_id}", response_model=LessonPlanView)
+def update_lesson_plan(
+    lesson_plan_id: str, command: LessonPlanUpdateCommand
+) -> LessonPlanView:
+    try:
+        return get_lesson_plan_studio().update(lesson_plan_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="教案不存在") from exc
+    except LessonPlanStudioError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

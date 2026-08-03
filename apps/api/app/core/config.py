@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     question_bank_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "question-bank.sqlite3"
     )
+    lesson_plan_db: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "lesson-plans.sqlite3"
+    )
+    lesson_plan_provider: str = "auto"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5.6-terra"
+    openai_reasoning_effort: str = "low"
+    openai_timeout_seconds: int = 90
     pilot_batch_json: Path = Field(
         default=PROJECT_ROOT / "data" / "pilot" / "batch-2026-08-001-30q.json"
     )

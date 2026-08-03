@@ -43,3 +43,34 @@ def test_question_bank_stats_and_search_endpoints() -> None:
     payload = search_response.json()
     assert payload["total"] == 10
     assert len(payload["items"]) == 5
+
+
+def test_lesson_plan_generation_and_update_endpoints() -> None:
+    generated_response = client.post(
+        "/api/v1/lesson-plans/generate",
+        json={
+            "curriculum_node_id": "pep_a_r1_c3_s2",
+            "lesson_type": "new_lesson",
+            "duration_minutes": 45,
+            "student_profile": "高一平行班，基础中等",
+            "focus": "突出单调性定义与图象直观之间的联系",
+            "question_count": 2,
+        },
+    )
+
+    assert generated_response.status_code == 201
+    plan = generated_response.json()
+    assert plan["curriculum"]["section"] == "函数的基本性质"
+    assert plan["generation"]["provider"] == "local_template"
+    assert len(plan["content"]["recommended_questions"]) == 2
+    assert sum(item["minutes"] for item in plan["content"]["teaching_flow"]) == 45
+
+    plan["content"]["title"] = "函数基本性质教学设计（教师修订）"
+    update_response = client.patch(
+        f"/api/v1/lesson-plans/{plan['lesson_plan_id']}",
+        json={"content": plan["content"], "editor_id": "owner_teacher"},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["version"] == 2
+    assert update_response.json()["content"]["title"].endswith("教师修订）")
