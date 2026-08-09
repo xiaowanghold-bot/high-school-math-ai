@@ -6,6 +6,8 @@ from app.modules.exam_papers import (
     ExamPaperComposer,
     ExamPaperComposeCommand,
     ExamPaperComposeError,
+    ExamPaperTemplateCatalog,
+    ExamPaperTemplateComposeCommand,
     ExamPaperTypeQuota,
 )
 from app.modules.question_bank.schemas import QuestionSearchPage, QuestionSummary
@@ -66,6 +68,16 @@ class ComposerQuestionBank:
             page=page,
             page_size=page_size,
         )
+
+
+class TemplateQuestionBank(ComposerQuestionBank):
+    def __init__(self) -> None:
+        self.questions = [
+            *[question(f"s{index}", "single_choice", 1 + index % 4, "基础模块") for index in range(1, 9)],
+            *[question(f"m{index}", "multiple_choice", 2 + index % 3, "综合模块") for index in range(1, 4)],
+            *[question(f"f{index}", "fill_blank", 2 + index % 3, "综合模块") for index in range(1, 4)],
+            *[question(f"o{index}", "composite", 2 + index % 3, "主干模块") for index in range(1, 6)],
+        ]
 
 
 def command(**updates) -> ExamPaperComposeCommand:
@@ -152,3 +164,50 @@ def test_compose_http_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = response.json()
     assert payload["actual_score"] == 40
     assert len(payload["items"]) == 4
+
+
+def test_recent_gaokao_template_has_auditable_19_question_structure() -> None:
+    template = ExamPaperTemplateCatalog().get("gaokao-i-recent-19q-v1")
+
+    assert sum(section.count for section in template.sections) == 19
+    assert sum(score for section in template.sections for score in section.item_scores) == 150
+    assert template.duration_minutes == 120
+    assert template.structure_status == "recent_reference"
+    assert len(template.evidence_urls) >= 2
+
+
+def test_template_composition_preserves_section_scores_and_composite_alias() -> None:
+    composer = ExamPaperComposer(TemplateQuestionBank())
+
+    proposal = composer.compose_template(
+        ExamPaperTemplateComposeCommand(
+            template_id="gaokao-i-recent-19q-v1",
+            seed="gaokao-template-test",
+        )
+    )
+
+    assert proposal.template_id == "gaokao-i-recent-19q-v1"
+    assert proposal.actual_score == 150
+    assert len(proposal.items) == 19
+    assert [item.score for item in proposal.items[:8]] == [5] * 8
+    assert [item.score for item in proposal.items[8:11]] == [6] * 3
+    assert [item.score for item in proposal.items[11:14]] == [5] * 3
+    assert [item.score for item in proposal.items[14:]] == [13, 15, 15, 17, 17]
+    assert all(item.question.question_type == "composite" for item in proposal.items[14:])
+
+
+def test_template_endpoint_lists_and_composes(monkeypatch: pytest.MonkeyPatch) -> None:
+    composer = ExamPaperComposer(TemplateQuestionBank())
+    monkeypatch.setattr(exam_paper_routes, "get_exam_paper_composer", lambda: composer)
+    client = TestClient(app)
+
+    listing = client.get("/api/v1/exam-papers/templates")
+    response = client.post(
+        "/api/v1/exam-papers/compose-template",
+        json={"template_id": "gaokao-i-recent-19q-v1", "seed": "http-template"},
+    )
+
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+    assert response.status_code == 200
+    assert response.json()["actual_score"] == 150

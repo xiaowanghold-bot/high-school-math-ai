@@ -12,10 +12,15 @@ from app.modules.exam_papers.schemas import (
     ExamPaperReviewPolicy,
     ExamPaperSummary,
     ExamPaperTypeQuota,
+    ExamPaperTemplate,
+    ExamPaperTemplateComposeCommand,
+    ExamPaperTemplateList,
+    ExamPaperTemplateSection,
     ExamPaperUpdateCommand,
     ExamPaperView,
 )
 from app.modules.exam_papers.studio import ExamPaperStudio, ExamPaperStudioError
+from app.modules.exam_papers.templates import ExamPaperTemplateCatalog, ExamPaperTemplateError
 
 __all__ = [
     "ExamPaperComposer",
@@ -34,6 +39,12 @@ __all__ = [
     "ExamPaperStudioError",
     "ExamPaperSummary",
     "ExamPaperTypeQuota",
+    "ExamPaperTemplate",
+    "ExamPaperTemplateCatalog",
+    "ExamPaperTemplateComposeCommand",
+    "ExamPaperTemplateError",
+    "ExamPaperTemplateList",
+    "ExamPaperTemplateSection",
     "ExamPaperUpdateCommand",
     "ExamPaperView",
 ]

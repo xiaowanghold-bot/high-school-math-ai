@@ -9,7 +9,10 @@ from app.modules.exam_papers.schemas import (
     ExamPaperComposeCommand,
     ExamPaperProposal,
     ExamPaperProposalItem,
+    ExamPaperTemplateComposeCommand,
+    ExamPaperTypeQuota,
 )
+from app.modules.exam_papers.templates import ExamPaperTemplateCatalog
 from app.modules.question_bank.schemas import QuestionSummary
 
 
@@ -43,8 +46,33 @@ class ExamPaperComposer:
         "composite": 12,
     }
 
-    def __init__(self, question_bank) -> None:
+    def __init__(self, question_bank, template_catalog: ExamPaperTemplateCatalog | None = None) -> None:
         self.question_bank = question_bank
+        self.template_catalog = template_catalog or ExamPaperTemplateCatalog()
+
+    def compose_template(self, command: ExamPaperTemplateComposeCommand) -> ExamPaperProposal:
+        template = self.template_catalog.get(command.template_id)
+        proposal = self.compose(
+            ExamPaperComposeCommand(
+                target_score=template.target_score,
+                difficulty_profile=template.difficulty_profile,
+                type_quotas=[
+                    ExamPaperTypeQuota(
+                        question_type=section.question_type,
+                        count=section.count,
+                    )
+                    for section in template.sections
+                ],
+                chapters=command.chapters,
+                review_policy=command.review_policy,
+                exclude_question_ids=command.exclude_question_ids,
+                item_scores=[score for section in template.sections for score in section.item_scores],
+                seed=command.seed,
+            )
+        )
+        return proposal.model_copy(
+            update={"template_id": template.template_id, "template_name": template.name}
+        )
 
     def compose(self, command: ExamPaperComposeCommand) -> ExamPaperProposal:
         total_count = sum(quota.count for quota in command.type_quotas)
@@ -56,8 +84,16 @@ class ExamPaperComposer:
         candidates = self._verified_candidates(command)
         chapter_usage: Counter[str] = Counter()
         selections: list[tuple[QuestionSummary, int]] = []
+        canonical_types = [self._canonical_type(quota.question_type) for quota in command.type_quotas]
+        if len(canonical_types) != len(set(canonical_types)):
+            raise ExamPaperComposeError("综合题与解答题属于同一组卷题型，不能重复设置")
         for quota in command.type_quotas:
-            matching = [item for item in candidates if item.question_type == quota.question_type]
+            canonical_type = self._canonical_type(quota.question_type)
+            matching = [
+                item
+                for item in candidates
+                if self._canonical_type(item.question_type) == canonical_type
+            ]
             if len(matching) < quota.count:
                 label = self._question_type_label(quota.question_type)
                 raise ExamPaperComposeError(
@@ -79,9 +115,12 @@ class ExamPaperComposer:
                 chapter_usage[selected.chapter or "未分类"] += 1
                 selections.append((selected, target))
 
-        scores = self._allocate_scores(
+        scores = command.item_scores or self._allocate_scores(
             command.target_score,
-            [self.TYPE_SCORE_WEIGHTS.get(item.question_type, 10) for item, _ in selections],
+            [
+                self.TYPE_SCORE_WEIGHTS.get(self._canonical_type(item.question_type), 10)
+                for item, _ in selections
+            ],
         )
         items = [
             ExamPaperProposalItem(
@@ -214,3 +253,7 @@ class ExamPaperComposer:
             "open_response": "解答题",
             "composite": "综合题",
         }.get(question_type, question_type)
+
+    @staticmethod
+    def _canonical_type(question_type: str) -> str:
+        return "open_response" if question_type == "composite" else question_type

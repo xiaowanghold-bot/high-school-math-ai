@@ -126,6 +126,7 @@ class ExamPaperComposeCommand(BaseModel):
     chapters: list[str] = Field(default_factory=list, max_length=12)
     review_policy: ExamPaperReviewPolicy = "approved_only"
     exclude_question_ids: list[str] = Field(default_factory=list, max_length=100)
+    item_scores: list[float] = Field(default_factory=list, max_length=50)
     seed: str = Field(default="default", max_length=120)
 
     @model_validator(mode="after")
@@ -137,6 +138,16 @@ class ExamPaperComposeCommand(BaseModel):
             raise ValueError("自动组卷最多选择 50 道题")
         if self.target_score * 2 != round(self.target_score * 2):
             raise ValueError("目标总分必须以 0.5 分为最小单位")
+        total_count = sum(item.count for item in self.type_quotas)
+        if self.item_scores:
+            if len(self.item_scores) != total_count:
+                raise ValueError("固定分值数量必须与题目总数一致")
+            if any(score < 0.5 or score > 50 for score in self.item_scores):
+                raise ValueError("固定分值必须介于 0.5 至 50 分")
+            if any(score * 2 != round(score * 2) for score in self.item_scores):
+                raise ValueError("固定分值必须以 0.5 分为最小单位")
+            if abs(sum(self.item_scores) - self.target_score) > 1e-6:
+                raise ValueError("固定分值合计必须等于目标总分")
         return self
 
 
@@ -154,3 +165,40 @@ class ExamPaperProposal(BaseModel):
     chapter_breakdown: list[ExamPaperBreakdownItem]
     difficulty_breakdown: list[ExamPaperBreakdownItem]
     warnings: list[str] = Field(default_factory=list)
+    template_id: str | None = None
+    template_name: str | None = None
+
+
+class ExamPaperTemplateSection(BaseModel):
+    section_title: str
+    question_type: str
+    count: int
+    item_scores: list[float]
+
+
+class ExamPaperTemplate(BaseModel):
+    template_id: str
+    name: str
+    description: str
+    region_scope: str
+    duration_minutes: int
+    target_score: float
+    difficulty_profile: ExamPaperDifficultyProfile
+    sections: list[ExamPaperTemplateSection]
+    structure_status: Literal["recent_reference"]
+    reviewed_on: str
+    verification_note: str
+    evidence_urls: list[str]
+
+
+class ExamPaperTemplateList(BaseModel):
+    items: list[ExamPaperTemplate]
+    total: int
+
+
+class ExamPaperTemplateComposeCommand(BaseModel):
+    template_id: str = Field(min_length=1, max_length=120)
+    chapters: list[str] = Field(default_factory=list, max_length=12)
+    review_policy: ExamPaperReviewPolicy = "approved_only"
+    exclude_question_ids: list[str] = Field(default_factory=list, max_length=100)
+    seed: str = Field(default="default", max_length=120)

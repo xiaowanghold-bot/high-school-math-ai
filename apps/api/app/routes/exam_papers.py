@@ -18,6 +18,10 @@ from app.modules.exam_papers import (
     ExamPaperProposal,
     ExamPaperStudio,
     ExamPaperStudioError,
+    ExamPaperTemplateCatalog,
+    ExamPaperTemplateComposeCommand,
+    ExamPaperTemplateError,
+    ExamPaperTemplateList,
     ExamPaperUpdateCommand,
     ExamPaperView,
 )
@@ -39,7 +43,15 @@ def get_exam_paper_studio() -> ExamPaperStudio:
 
 @lru_cache
 def get_exam_paper_composer() -> ExamPaperComposer:
-    return ExamPaperComposer(question_bank=get_question_bank())
+    return ExamPaperComposer(
+        question_bank=get_question_bank(),
+        template_catalog=get_exam_paper_template_catalog(),
+    )
+
+
+@lru_cache
+def get_exam_paper_template_catalog() -> ExamPaperTemplateCatalog:
+    return ExamPaperTemplateCatalog()
 
 
 @lru_cache
@@ -71,6 +83,21 @@ def compose_exam_paper(command: ExamPaperComposeCommand) -> ExamPaperProposal:
     try:
         return get_exam_paper_composer().compose(command)
     except ExamPaperComposeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/templates", response_model=ExamPaperTemplateList)
+def list_exam_paper_templates() -> ExamPaperTemplateList:
+    return get_exam_paper_template_catalog().list()
+
+
+@router.post("/compose-template", response_model=ExamPaperProposal)
+def compose_exam_paper_template(
+    command: ExamPaperTemplateComposeCommand,
+) -> ExamPaperProposal:
+    try:
+        return get_exam_paper_composer().compose_template(command)
+    except (ExamPaperComposeError, ExamPaperTemplateError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
