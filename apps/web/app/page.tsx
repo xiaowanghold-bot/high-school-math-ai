@@ -23,7 +23,7 @@ export default function DashboardPage() {
       <section className="quick-grid" aria-label="快捷操作">
         <Link href="/lesson-plans/new" className="quick-card accent-blue"><span>备</span><div><h2>生成一份教案</h2><p>按章节、课型和学情生成可编辑初稿</p></div><b>→</b></Link>
         <Link href="/search" className="quick-card accent-teal"><span>题</span><div><h2>搜索与挑选题目</h2><p>自然语言、知识点和公式混合检索</p></div><b>→</b></Link>
-        <Link href="/papers/new" className="quick-card accent-amber"><span>卷</span><div><h2>创建一份试卷</h2><p>控制知识点、题型、难度和分值</p></div><b>→</b></Link>
+        <div className="quick-card accent-amber is-upcoming" aria-disabled="true"><span>卷</span><div><h2>智能组卷</h2><p>题库审核稳定后开放，当前阶段先完成备课与搜题</p></div><b>后续</b></div>
       </section>
 
       <section className="section-block">
@@ -40,7 +40,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="two-column">
-        <div className="panel"><div className="section-heading compact"><h2>最近工作</h2><button type="button">全部</button></div><div className="empty-state"><strong>还没有教案或试卷</strong><p>从上方快捷入口创建第一份内容。</p></div></div>
+        <div className="panel"><div className="section-heading compact"><h2>最近工作</h2><span className="panel-meta">暂无记录</span></div><div className="empty-state"><strong>还没有教案</strong><p>从上方入口生成第一份可编辑教案。</p><Link className="empty-action" href="/lesson-plans/new">新建教案</Link></div></div>
         <div className="panel"><div className="section-heading compact"><h2>题库质量</h2><span className="verified-dot">质量门禁运行中</span></div><dl className="metric-list"><div><dt>试点题目</dt><dd>35</dd></div><div><dt>独立验证通过</dt><dd>22</dd></div><div><dt>发现来源矛盾</dt><dd>4</dd></div></dl></div>
       </section>
     </div>

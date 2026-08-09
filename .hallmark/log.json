@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "date": "2026-08-09",
+      "scope": "app",
+      "project": "high-school-math-ai",
+      "genre": "modern-minimal",
+      "macrostructure": "Workbench with Catalogue content variant",
+      "theme": "custom",
+      "theme_axes": "light / geometric-sans / cool",
+      "vibe": "restrained, academic, precise, paper-like",
+      "navigation": "adapted N3 app rail; left; 20ch; filled current-state",
+      "footer": "none; authenticated app shell",
+      "enrichment": "none",
+      "brief": "Improve the teacher-facing UI without adding modules or changing business logic.",
+      "pages": ["/", "/curriculum", "/search", "/lesson-plans"],
+      "pre_emit_critique": {
+        "philosophy": 5,
+        "hierarchy": 5,
+        "execution": 4,
+        "specificity": 5,
+        "restraint": 5,
+        "variety": 5
+      },
+      "verification": {
+        "slop_test": "pass",
+        "contrast": "pass; minimum checked semantic pair 4.80:1 after neutral adjustment",
+        "responsive_widths": [320, 375, 414, 768, 1280],
+        "horizontal_overflow": false,
+        "production_build": "pass"
+      }
+    }
+  ]
+}
