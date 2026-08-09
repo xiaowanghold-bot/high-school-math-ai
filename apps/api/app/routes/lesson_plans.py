@@ -9,6 +9,10 @@ from fastapi.responses import FileResponse
 from app.core.config import get_settings
 from app.modules.lesson_exports import LessonPlanDocumentRenderer, LessonPlanExportError
 from app.modules.lesson_plans import (
+    LessonPlanBlock,
+    LessonPlanBlockLockCommand,
+    LessonPlanBlockRewriteCommand,
+    LessonPlanBlockRewriteResult,
     LessonPlanGenerationRequest,
     LessonPlanList,
     LessonPlanProviderError,
@@ -81,6 +85,39 @@ def get_lesson_plan(lesson_plan_id: str) -> LessonPlanView:
         return get_lesson_plan_studio().get(lesson_plan_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="教案不存在") from exc
+
+
+@router.put("/{lesson_plan_id}/blocks/{block}/lock", response_model=LessonPlanView)
+def set_lesson_plan_block_lock(
+    lesson_plan_id: str,
+    block: LessonPlanBlock,
+    command: LessonPlanBlockLockCommand,
+) -> LessonPlanView:
+    try:
+        return get_lesson_plan_studio().set_block_lock(
+            lesson_plan_id, block, locked=command.locked
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="教案不存在") from exc
+
+
+@router.post(
+    "/{lesson_plan_id}/blocks/{block}/rewrite",
+    response_model=LessonPlanBlockRewriteResult,
+)
+def rewrite_lesson_plan_block(
+    lesson_plan_id: str,
+    block: LessonPlanBlock,
+    command: LessonPlanBlockRewriteCommand,
+) -> LessonPlanBlockRewriteResult:
+    try:
+        return get_lesson_plan_studio().rewrite_block(lesson_plan_id, block, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="教案不存在") from exc
+    except LessonPlanStudioError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LessonPlanProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/{lesson_plan_id}/export")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.error import HTTPError, URLError
@@ -10,7 +11,10 @@ from urllib.request import Request, urlopen
 from app.modules.lesson_plans.schemas import (
     GeneratedLessonPlanContent,
     LessonCurriculumContext,
+    LessonPlanBlock,
+    LessonPlanContent,
     LessonPlanGenerationRequest,
+    LessonPlanView,
     TeachingPhase,
 )
 from app.modules.question_bank.schemas import QuestionSummary
@@ -27,11 +31,25 @@ class LessonPlanGenerationContext:
     questions: list[QuestionSummary]
 
 
-class LessonPlanDraftProvider(Protocol):
+@dataclass(frozen=True)
+class LessonPlanRewriteContext:
+    plan: LessonPlanView
+    content: LessonPlanContent
+    block: LessonPlanBlock
+    instruction: str
+    teacher_id: str
+
+
+LessonPlanRewriteValue = list[str] | list[TeachingPhase]
+
+
+class LessonPlanProvider(Protocol):
     name: str
     model: str
 
     def generate(self, context: LessonPlanGenerationContext) -> GeneratedLessonPlanContent: ...
+
+    def rewrite(self, context: LessonPlanRewriteContext) -> LessonPlanRewriteValue: ...
 
 
 class TemplateLessonPlanProvider:
@@ -117,6 +135,56 @@ class TemplateLessonPlanProvider:
             ],
         )
 
+    def rewrite(self, context: LessonPlanRewriteContext) -> LessonPlanRewriteValue:
+        focus = context.instruction.strip().rstrip("。")
+        if context.block == "teaching_flow":
+            return [
+                phase.model_copy(
+                    update={
+                        "teacher_activity": (
+                            f"{self._strip_local_rewrite(phase.teacher_activity)}；"
+                            f"围绕“{focus}”补充追问与示范。"
+                        ),
+                        "assessment": (
+                            f"{self._strip_local_rewrite(phase.assessment)}；"
+                            f"增加与“{focus}”对应的可观察证据。"
+                        ),
+                    }
+                )
+                for phase in context.content.teaching_flow
+            ]
+        current = list(getattr(context.content, context.block))
+        if context.block == "teacher_notes":
+            note = f"局部改写要求：{focus}。"
+            return [*current[:7], note] if note not in current else current
+        templates = {
+            "objectives": "{item}，并通过“{focus}”相关任务呈现可观察的学习证据。",
+            "key_points": "{item}；教学组织突出“{focus}”。",
+            "difficulties": "{item}；围绕“{focus}”设置认知冲突与纠错支架。",
+            "homework": "{item}；完成后围绕“{focus}”写出关键依据或反思。",
+            "board_plan": "{item}（突出：{focus}）",
+        }
+        template = templates[context.block]
+        return [
+            template.format(item=self._strip_local_rewrite(item).rstrip("。；"), focus=focus)
+            for item in current
+        ]
+
+    @staticmethod
+    def _strip_local_rewrite(text: str) -> str:
+        patterns = [
+            r"，并通过“.*?”相关任务呈现可观察的学习证据。?$",
+            r"；教学组织突出“.*?”。?$",
+            r"；围绕“.*?”设置认知冲突与纠错支架。?$",
+            r"；完成后围绕“.*?”写出关键依据或反思。?$",
+            r"；围绕“.*?”补充追问与示范。?$",
+            r"；增加与“.*?”对应的可观察证据。?$",
+            r"（突出：.*?）$",
+        ]
+        for pattern in patterns:
+            text = re.sub(pattern, "", text)
+        return text.rstrip()
+
     @staticmethod
     def _allocate_minutes(total: int, weights: list[int]) -> list[int]:
         minutes = [max(1, round(total * weight / sum(weights))) for weight in weights]
@@ -129,7 +197,7 @@ class TemplateLessonPlanProvider:
 
 
 class OpenAIResponsesLessonPlanProvider:
-    """Responses API adapter; the rest of the app only sees LessonPlanDraftProvider."""
+    """Responses API adapter; the rest of the app only sees LessonPlanProvider."""
 
     name = "openai"
 
@@ -177,6 +245,65 @@ class OpenAIResponsesLessonPlanProvider:
             "safety_identifier": safety_identifier,
             "store": False,
         }
+        raw = self._request_structured_output(payload, action="教案生成")
+        if raw.get("status") == "incomplete":
+            raise LessonPlanProviderError("OpenAI 返回未完成结果，请缩短输入后重试")
+        try:
+            content = json.loads(self._extract_output_text(raw))
+            result = GeneratedLessonPlanContent.model_validate(content)
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise LessonPlanProviderError(f"OpenAI 返回内容不符合教案结构：{exc}") from exc
+        if sum(item.minutes for item in result.teaching_flow) != context.request.duration_minutes:
+            raise LessonPlanProviderError("OpenAI 返回的教学流程分钟数与课时长度不一致")
+        return result
+
+    def rewrite(self, context: LessonPlanRewriteContext) -> LessonPlanRewriteValue:
+        current_value = getattr(context.content, context.block)
+        prompt_context = {
+            "curriculum": context.plan.curriculum.model_dump(),
+            "lesson_requirements": context.plan.request.model_dump(exclude={"teacher_id"}),
+            "current_lesson_plan": context.content.model_dump(),
+            "target_block": context.block,
+            "current_block": [
+                item.model_dump() if isinstance(item, TeachingPhase) else item
+                for item in current_value
+            ],
+            "teacher_instruction": context.instruction,
+        }
+        safety_identifier = hashlib.sha256(
+            f"math-ai:{context.teacher_id}".encode("utf-8")
+        ).hexdigest()[:32]
+        payload = {
+            "model": self.model,
+            "instructions": (
+                "你是中国高中数学教研员。只改写指定的教案内容块，不改动其他内容。"
+                "必须遵守人教A版课程上下文、教师指令和当前教案事实，不虚构题源或教材页码。"
+                "教学目标要可观察可评价；教学流程必须保持总分钟数不变。"
+            ),
+            "input": json.dumps(prompt_context, ensure_ascii=False),
+            "reasoning": {"effort": self.reasoning_effort},
+            "text": {
+                "format": self._rewrite_output_format(context.block),
+                "verbosity": "medium",
+            },
+            "safety_identifier": safety_identifier,
+            "store": False,
+        }
+        raw = self._request_structured_output(payload, action="教案局部改写")
+        if raw.get("status") == "incomplete":
+            raise LessonPlanProviderError("OpenAI 返回未完成结果，请缩短改写指令后重试")
+        try:
+            content = json.loads(self._extract_output_text(raw))
+            if context.block == "teaching_flow":
+                return [TeachingPhase.model_validate(item) for item in content["teaching_flow"]]
+            items = content["items"]
+            if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+                raise TypeError("items 必须是字符串数组")
+            return items
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise LessonPlanProviderError(f"OpenAI 返回的局部改写不符合结构：{exc}") from exc
+
+    def _request_structured_output(self, payload: dict, *, action: str) -> dict:
         request = Request(
             "https://api.openai.com/v1/responses",
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -188,22 +315,12 @@ class OpenAIResponsesLessonPlanProvider:
         )
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
+                return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             details = exc.read().decode("utf-8", errors="replace")[:500]
             raise LessonPlanProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
         except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise LessonPlanProviderError(f"OpenAI 教案生成失败：{exc}") from exc
-        if raw.get("status") == "incomplete":
-            raise LessonPlanProviderError("OpenAI 返回未完成结果，请缩短输入后重试")
-        try:
-            content = json.loads(self._extract_output_text(raw))
-            result = GeneratedLessonPlanContent.model_validate(content)
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise LessonPlanProviderError(f"OpenAI 返回内容不符合教案结构：{exc}") from exc
-        if sum(item.minutes for item in result.teaching_flow) != context.request.duration_minutes:
-            raise LessonPlanProviderError("OpenAI 返回的教学流程分钟数与课时长度不一致")
-        return result
+            raise LessonPlanProviderError(f"OpenAI {action}失败：{exc}") from exc
 
     @staticmethod
     def _extract_output_text(payload: dict) -> str:
@@ -249,5 +366,45 @@ class OpenAIResponsesLessonPlanProvider:
                 "additionalProperties": False,
                 "properties": properties,
                 "required": list(properties),
+            },
+        }
+
+    @staticmethod
+    def _rewrite_output_format(block: LessonPlanBlock) -> dict:
+        if block == "teaching_flow":
+            item_name = "teaching_flow"
+            item_schema = {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "phase": {"type": "string"},
+                        "minutes": {"type": "integer"},
+                        "teacher_activity": {"type": "string"},
+                        "student_activity": {"type": "string"},
+                        "assessment": {"type": "string"},
+                    },
+                    "required": [
+                        "phase",
+                        "minutes",
+                        "teacher_activity",
+                        "student_activity",
+                        "assessment",
+                    ],
+                },
+            }
+        else:
+            item_name = "items"
+            item_schema = {"type": "array", "items": {"type": "string"}}
+        return {
+            "type": "json_schema",
+            "name": f"lesson_plan_{block}_rewrite",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {item_name: item_schema},
+                "required": [item_name],
             },
         }

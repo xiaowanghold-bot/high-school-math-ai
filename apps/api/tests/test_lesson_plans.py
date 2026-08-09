@@ -9,13 +9,18 @@ from docx.shared import Inches
 from app.modules.curriculum import CurriculumNode, InMemoryCurriculumCatalog
 from app.modules.lesson_exports import LessonPlanDocumentRenderer
 from app.modules.lesson_plans import (
+    LessonPlanBlockRewriteCommand,
     LessonPlanGenerationRequest,
     LessonPlanStudio,
+    LessonPlanStudioError,
     LessonPlanUpdateCommand,
     OpenAIResponsesLessonPlanProvider,
     TemplateLessonPlanProvider,
 )
-from app.modules.lesson_plans.providers import LessonPlanGenerationContext
+from app.modules.lesson_plans.providers import (
+    LessonPlanGenerationContext,
+    LessonPlanRewriteContext,
+)
 from app.modules.lesson_plans.schemas import LessonCurriculumContext
 from app.modules.question_bank.schemas import QuestionSearchPage, QuestionSummary
 
@@ -148,6 +153,128 @@ def test_lesson_plan_renderer_creates_openable_docx_and_pdf(tmp_path: Path) -> N
     assert docx_result.path.read_bytes().startswith(b"PK")
     assert pdf_result.path.read_bytes().startswith(b"%PDF")
     assert pdf_result.path.read_bytes().rstrip().endswith(b"%%EOF")
+
+
+def test_studio_locks_blocks_and_returns_rewrite_as_unpersisted_draft(tmp_path: Path) -> None:
+    studio = LessonPlanStudio(
+        database_path=tmp_path / "lesson-plans.sqlite3",
+        curriculum_catalog=_catalog(),
+        question_bank=FakeQuestionBank(),  # type: ignore[arg-type]
+        provider=TemplateLessonPlanProvider(),
+    )
+    plan = studio.create(
+        LessonPlanGenerationRequest(curriculum_node_id="s32", duration_minutes=45)
+    )
+
+    locked = studio.set_block_lock(plan.lesson_plan_id, "objectives", locked=True)
+    locked_again = studio.set_block_lock(plan.lesson_plan_id, "objectives", locked=True)
+
+    assert locked.version == 2
+    assert locked_again.version == 2
+    assert locked.locked_blocks == ["objectives"]
+    with pytest.raises(LessonPlanStudioError, match="已锁定"):
+        studio.rewrite_block(
+            plan.lesson_plan_id,
+            "objectives",
+            LessonPlanBlockRewriteCommand(
+                instruction="增加可观察的课堂评价证据",
+                content=plan.content,
+            ),
+        )
+
+    unlocked = studio.set_block_lock(plan.lesson_plan_id, "objectives", locked=False)
+    rewritten = studio.rewrite_block(
+        plan.lesson_plan_id,
+        "objectives",
+        LessonPlanBlockRewriteCommand(
+            instruction="增加可观察的课堂评价证据",
+            content=plan.content,
+        ),
+    )
+
+    assert unlocked.version == 3
+    assert rewritten.block == "objectives"
+    assert rewritten.mode == "local_preview"
+    assert all("可观察" in item for item in rewritten.value)
+    assert studio.get(plan.lesson_plan_id).content.objectives == plan.content.objectives
+
+    rewritten_content = plan.content.model_copy(update={"objectives": rewritten.value})
+    rewritten_again = studio.rewrite_block(
+        plan.lesson_plan_id,
+        "objectives",
+        LessonPlanBlockRewriteCommand(
+            instruction="突出定义法表达和同伴互评",
+            content=rewritten_content,
+        ),
+    )
+    assert all("突出定义法表达和同伴互评" in item for item in rewritten_again.value)
+    assert all("增加可观察的课堂评价证据" not in item for item in rewritten_again.value)
+
+
+def test_openai_adapter_rewrites_only_requested_block(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    studio = LessonPlanStudio(
+        database_path=tmp_path / "lesson-plans.sqlite3",
+        curriculum_catalog=_catalog(),
+        question_bank=FakeQuestionBank(),  # type: ignore[arg-type]
+        provider=TemplateLessonPlanProvider(),
+    )
+    plan = studio.create(LessonPlanGenerationRequest(curriculum_node_id="s32"))
+    captured: dict = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "status": "completed",
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps(
+                                        {"items": ["能用定义判断函数单调性并说明依据"]},
+                                        ensure_ascii=False,
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout: int):
+        captured.update(json.loads(request.data.decode("utf-8")))
+        assert timeout == 30
+        return FakeResponse()
+
+    monkeypatch.setattr("app.modules.lesson_plans.providers.urlopen", fake_urlopen)
+    provider = OpenAIResponsesLessonPlanProvider(
+        api_key="test-key", model="gpt-5.6-terra", timeout_seconds=30
+    )
+    result = provider.rewrite(
+        LessonPlanRewriteContext(
+            plan=plan,
+            content=plan.content,
+            block="objectives",
+            instruction="突出定义法和表达依据",
+            teacher_id="teacher-1",
+        )
+    )
+
+    assert result == ["能用定义判断函数单调性并说明依据"]
+    assert captured["text"]["format"]["name"] == "lesson_plan_objectives_rewrite"
+    assert captured["text"]["format"]["strict"] is True
+    assert captured["store"] is False
 
 
 def test_openai_adapter_requests_strict_structured_output(monkeypatch: pytest.MonkeyPatch) -> None:

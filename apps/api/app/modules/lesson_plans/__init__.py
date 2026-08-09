@@ -4,6 +4,10 @@ from .providers import (
     TemplateLessonPlanProvider,
 )
 from .schemas import (
+    LessonPlanBlock,
+    LessonPlanBlockLockCommand,
+    LessonPlanBlockRewriteCommand,
+    LessonPlanBlockRewriteResult,
     LessonPlanGenerationRequest,
     LessonPlanList,
     LessonPlanUpdateCommand,
@@ -12,6 +16,10 @@ from .schemas import (
 from .studio import LessonPlanStudio, LessonPlanStudioError
 
 __all__ = [
+    "LessonPlanBlock",
+    "LessonPlanBlockLockCommand",
+    "LessonPlanBlockRewriteCommand",
+    "LessonPlanBlockRewriteResult",
     "LessonPlanGenerationRequest",
     "LessonPlanList",
     "LessonPlanProviderError",

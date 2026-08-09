@@ -6,6 +6,15 @@ from pydantic import BaseModel, Field
 
 
 LessonType = Literal["new_lesson", "review", "exercise"]
+LessonPlanBlock = Literal[
+    "objectives",
+    "key_points",
+    "difficulties",
+    "teaching_flow",
+    "homework",
+    "board_plan",
+    "teacher_notes",
+]
 
 
 class LessonPlanGenerationRequest(BaseModel):
@@ -83,6 +92,7 @@ class LessonPlanView(BaseModel):
     curriculum: LessonCurriculumContext
     content: LessonPlanContent
     generation: LessonPlanGenerationMeta
+    locked_blocks: list[LessonPlanBlock] = Field(default_factory=list, max_length=7)
 
 
 class LessonPlanSummary(BaseModel):
@@ -104,3 +114,23 @@ class LessonPlanList(BaseModel):
 class LessonPlanUpdateCommand(BaseModel):
     content: LessonPlanContent
     editor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class LessonPlanBlockLockCommand(BaseModel):
+    locked: bool
+    editor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class LessonPlanBlockRewriteCommand(BaseModel):
+    instruction: str = Field(min_length=2, max_length=500)
+    content: LessonPlanContent
+    teacher_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class LessonPlanBlockRewriteResult(BaseModel):
+    block: LessonPlanBlock
+    value: list[str] | list[TeachingPhase]
+    provider: str
+    model: str
+    mode: str
+    warnings: list[str] = Field(default_factory=list)

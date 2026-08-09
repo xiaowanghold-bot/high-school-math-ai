@@ -40,6 +40,18 @@ type LessonPlanContent = {
   recommended_questions: RecommendedQuestion[];
 };
 
+type EditableListField = "objectives" | "key_points" | "difficulties" | "homework" | "board_plan" | "teacher_notes";
+type LessonPlanBlock = EditableListField | "teaching_flow";
+
+type LessonPlanBlockRewriteResult = {
+  block: LessonPlanBlock;
+  value: string[] | TeachingPhase[];
+  provider: string;
+  model: string;
+  mode: string;
+  warnings: string[];
+};
+
 type LessonPlan = {
   lesson_plan_id: string;
   status: string;
@@ -68,6 +80,7 @@ type LessonPlan = {
     mode: string;
     warnings: string[];
   };
+  locked_blocks: LessonPlanBlock[];
 };
 
 type LessonPlanSummary = {
@@ -80,14 +93,32 @@ type LessonPlanSummary = {
   updated_at: string;
 };
 
-type EditableListField = "objectives" | "key_points" | "difficulties" | "homework" | "board_plan" | "teacher_notes";
-
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 const lessonTypeLabels: Record<string, string> = {
   new_lesson: "新授课",
   review: "复习课",
   exercise: "习题课",
+};
+
+const blockLabels: Record<LessonPlanBlock, string> = {
+  objectives: "教学目标",
+  key_points: "教学重点",
+  difficulties: "教学难点",
+  teaching_flow: "教学流程",
+  homework: "分层作业",
+  board_plan: "板书设计",
+  teacher_notes: "教师备注",
+};
+
+const rewriteDefaults: Record<LessonPlanBlock, string> = {
+  objectives: "让目标更具体、可观察、可评价",
+  key_points: "突出本课核心概念与关键条件",
+  difficulties: "补充认知冲突、易错点和纠错支架",
+  teaching_flow: "增强课堂追问、学生活动和评价证据之间的对应",
+  homework: "优化分层梯度并要求学生写出关键依据",
+  board_plan: "压缩文字并突出概念、方法和易错检查",
+  teacher_notes: "补充实施提醒和课后观察重点",
 };
 
 function curriculumOptions(root: CurriculumNode): CurriculumOption[] {
@@ -120,6 +151,10 @@ export default function LessonPlansPage() {
   const [draft, setDraft] = useState<LessonPlanContent | null>(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lockingBlock, setLockingBlock] = useState<LessonPlanBlock | null>(null);
+  const [rewritingBlock, setRewritingBlock] = useState<LessonPlanBlock | null>(null);
+  const [activeRewriteBlock, setActiveRewriteBlock] = useState<LessonPlanBlock | null>(null);
+  const [rewriteInstructions, setRewriteInstructions] = useState<Record<LessonPlanBlock, string>>(rewriteDefaults);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
     curriculum_node_id: "",
@@ -149,6 +184,7 @@ export default function LessonPlansPage() {
     const plan: LessonPlan = await response.json();
     setSelected(plan);
     setDraft(plan.content);
+    setActiveRewriteBlock(null);
   }
 
   useEffect(() => {
@@ -187,6 +223,7 @@ export default function LessonPlansPage() {
       const plan: LessonPlan = await response.json();
       setSelected(plan);
       setDraft(plan.content);
+      setActiveRewriteBlock(null);
       await loadPlans();
       setMessage(plan.generation.mode === "live_ai" ? "AI 教案初稿已生成，请逐项审核。" : "本地预览教案已生成；配置 API Key 后将自动切换真实 AI。 ");
     } catch (error) {
@@ -219,6 +256,92 @@ export default function LessonPlansPage() {
     }
   }
 
+  function isBlockLocked(block: LessonPlanBlock) {
+    return selected?.locked_blocks?.includes(block) ?? false;
+  }
+
+  async function toggleBlockLock(block: LessonPlanBlock) {
+    if (!selected) return;
+    const locked = isBlockLocked(block);
+    setLockingBlock(block);
+    setMessage(null);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/blocks/${block}/lock`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locked: !locked, editor_id: "owner_teacher" }),
+      });
+      if (!response.ok) throw new Error(await responseError(response));
+      const plan: LessonPlan = await response.json();
+      setSelected(plan);
+      await loadPlans();
+      if (!locked) setActiveRewriteBlock((current) => current === block ? null : current);
+      setMessage(!locked ? `${blockLabels[block]}已锁定，AI 不会改写这一部分。` : `${blockLabels[block]}已解锁，可以再次局部改写。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "锁定状态更新失败");
+    } finally {
+      setLockingBlock(null);
+    }
+  }
+
+  async function rewriteBlock(block: LessonPlanBlock) {
+    if (!selected || !draft || isBlockLocked(block)) return;
+    setRewritingBlock(block);
+    setMessage(null);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/blocks/${block}/rewrite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instruction: rewriteInstructions[block],
+          content: draft,
+          teacher_id: "owner_teacher",
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response));
+      const result: LessonPlanBlockRewriteResult = await response.json();
+      if (block === "teaching_flow") {
+        setDraft((current) => current ? { ...current, teaching_flow: result.value as TeachingPhase[] } : current);
+      } else {
+        setDraft((current) => current ? { ...current, [block]: result.value as string[] } : current);
+      }
+      setActiveRewriteBlock(null);
+      setMessage(`${blockLabels[block]}已生成${result.mode === "live_ai" ? " AI" : "本地预览"}改写草稿，请审核后点击“保存修订”。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "局部改写失败");
+    } finally {
+      setRewritingBlock(null);
+    }
+  }
+
+  function renderBlockTools(block: LessonPlanBlock, addItem?: () => void) {
+    const locked = isBlockLocked(block);
+    return (
+      <div className="block-tools">
+        {locked && <span className="block-lock-badge">AI 已锁定</span>}
+        <button type="button" disabled={lockingBlock !== null || rewritingBlock !== null} onClick={() => toggleBlockLock(block)}>
+          {lockingBlock === block ? "处理中…" : locked ? "解锁 AI" : "锁定 AI"}
+        </button>
+        <button type="button" disabled={locked || lockingBlock !== null || rewritingBlock !== null} onClick={() => setActiveRewriteBlock((current) => current === block ? null : block)}>
+          {activeRewriteBlock === block ? "收起改写" : "AI 改写"}
+        </button>
+        {addItem && <button type="button" onClick={addItem}>＋ 添加</button>}
+      </div>
+    );
+  }
+
+  function renderRewriteBar(block: LessonPlanBlock) {
+    if (activeRewriteBlock !== block || isBlockLocked(block)) return null;
+    return (
+      <div className="block-rewrite-bar">
+        <label><span>改写要求</span><input value={rewriteInstructions[block]} onChange={(event) => setRewriteInstructions({ ...rewriteInstructions, [block]: event.target.value })} /></label>
+        <button type="button" disabled={rewritingBlock !== null || rewriteInstructions[block].trim().length < 2} onClick={() => rewriteBlock(block)}>
+          {rewritingBlock === block ? "正在改写…" : "生成待审核草稿"}
+        </button>
+      </div>
+    );
+  }
+
   function updateList(field: EditableListField, index: number, value: string) {
     setDraft((current) => current ? { ...current, [field]: current[field].map((item, itemIndex) => itemIndex === index ? value : item) } : current);
   }
@@ -241,8 +364,9 @@ export default function LessonPlansPage() {
   function renderEditableList(title: string, field: EditableListField) {
     if (!draft) return null;
     return (
-      <section className="lesson-editor-card">
-        <header><h3>{title}</h3><button type="button" onClick={() => addListItem(field)}>＋ 添加</button></header>
+      <section className={`lesson-editor-card ${isBlockLocked(field) ? "ai-locked" : ""}`}>
+        <header><h3>{title}</h3>{renderBlockTools(field, () => addListItem(field))}</header>
+        {renderRewriteBar(field)}
         <div className="lesson-list-editor">
           {draft[field].map((item, index) => (
             <div key={`${field}-${index}`}>
@@ -334,8 +458,15 @@ export default function LessonPlansPage() {
                 </div>
               </div>
 
-              <section className="lesson-flow-card">
-                <header><div><h3>教学流程</h3><p>时间、教师活动、学生活动和评价证据</p></div><strong className={minuteTotal === selected.request.duration_minutes ? "valid" : "invalid"}>{minuteTotal} / {selected.request.duration_minutes} 分钟</strong></header>
+              <section className={`lesson-flow-card ${isBlockLocked("teaching_flow") ? "ai-locked" : ""}`}>
+                <header>
+                  <div><h3>教学流程</h3><p>时间、教师活动、学生活动和评价证据</p></div>
+                  <div className="flow-header-tools">
+                    <strong className={minuteTotal === selected.request.duration_minutes ? "valid" : "invalid"}>{minuteTotal} / {selected.request.duration_minutes} 分钟</strong>
+                    {renderBlockTools("teaching_flow")}
+                  </div>
+                </header>
+                {renderRewriteBar("teaching_flow")}
                 <div className="lesson-flow-list">
                   {draft.teaching_flow.map((phase, index) => (
                     <article key={index}>

@@ -7,9 +7,16 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.modules.curriculum import InMemoryCurriculumCatalog
-from app.modules.lesson_plans.providers import LessonPlanDraftProvider, LessonPlanGenerationContext
+from app.modules.lesson_plans.providers import (
+    LessonPlanGenerationContext,
+    LessonPlanProvider,
+    LessonPlanRewriteContext,
+)
 from app.modules.lesson_plans.schemas import (
     LessonCurriculumContext,
+    LessonPlanBlock,
+    LessonPlanBlockRewriteCommand,
+    LessonPlanBlockRewriteResult,
     LessonPlanContent,
     LessonPlanGenerationMeta,
     LessonPlanGenerationRequest,
@@ -36,7 +43,7 @@ class LessonPlanStudio:
         database_path: Path,
         curriculum_catalog: InMemoryCurriculumCatalog,
         question_bank: QuestionBank,
-        provider: LessonPlanDraftProvider,
+        provider: LessonPlanProvider,
     ) -> None:
         self.database_path = database_path
         self.curriculum_catalog = curriculum_catalog
@@ -166,20 +173,75 @@ class LessonPlanStudio:
                     "updated_at": now,
                 }
             )
-            connection.execute(
-                """
-                UPDATE lesson_plans SET title = ?, version = ?, raw_json = ?, updated_at = ?
-                WHERE lesson_plan_id = ?
-                """,
-                (
-                    updated.content.title,
-                    updated.version,
-                    updated.model_dump_json(),
-                    now,
-                    lesson_plan_id,
-                ),
-            )
+            self._persist(connection, updated)
         return updated
+
+    def set_block_lock(
+        self, lesson_plan_id: str, block: LessonPlanBlock, *, locked: bool
+    ) -> LessonPlanView:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT raw_json FROM lesson_plans WHERE lesson_plan_id = ?", (lesson_plan_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(lesson_plan_id)
+            current = LessonPlanView.model_validate_json(row["raw_json"])
+            blocks = set(current.locked_blocks)
+            if (block in blocks) == locked:
+                return current
+            if locked:
+                blocks.add(block)
+            else:
+                blocks.discard(block)
+            now = self._now()
+            updated = current.model_copy(
+                update={
+                    "locked_blocks": sorted(blocks),
+                    "version": current.version + 1,
+                    "updated_at": now,
+                }
+            )
+            self._persist(connection, updated)
+        return updated
+
+    def rewrite_block(
+        self,
+        lesson_plan_id: str,
+        block: LessonPlanBlock,
+        command: LessonPlanBlockRewriteCommand,
+    ) -> LessonPlanBlockRewriteResult:
+        current = self.get(lesson_plan_id)
+        if block in current.locked_blocks:
+            raise LessonPlanStudioError("该内容块已锁定，请先解锁后再进行 AI 改写")
+        if sum(item.minutes for item in command.content.teaching_flow) != current.request.duration_minutes:
+            raise LessonPlanStudioError("教学流程分钟数之和必须等于课时长度")
+        value = self.provider.rewrite(
+            LessonPlanRewriteContext(
+                plan=current,
+                content=command.content,
+                block=block,
+                instruction=command.instruction,
+                teacher_id=command.teacher_id,
+            )
+        )
+        try:
+            candidate_data = command.content.model_dump()
+            candidate_data[block] = [
+                item.model_dump() if hasattr(item, "model_dump") else item for item in value
+            ]
+            candidate = LessonPlanContent.model_validate(candidate_data)
+        except ValueError as exc:
+            raise LessonPlanStudioError(f"局部改写结果不符合教案结构：{exc}") from exc
+        if sum(item.minutes for item in candidate.teaching_flow) != current.request.duration_minutes:
+            raise LessonPlanStudioError("局部改写后的教学流程分钟数与课时长度不一致")
+        return LessonPlanBlockRewriteResult(
+            block=block,
+            value=getattr(candidate, block),
+            provider=self.provider.name,
+            model=self.provider.model,
+            mode="live_ai" if self.provider.name == "openai" else "local_preview",
+            warnings=["局部改写仅生成待审核草稿，点击“保存修订”后才会写入教案版本"],
+        )
 
     def _curriculum_context(self, node_id: str) -> LessonCurriculumContext:
         try:
@@ -253,6 +315,22 @@ class LessonPlanStudio:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         return connection
+
+    @staticmethod
+    def _persist(connection: sqlite3.Connection, plan: LessonPlanView) -> None:
+        connection.execute(
+            """
+            UPDATE lesson_plans SET title = ?, version = ?, raw_json = ?, updated_at = ?
+            WHERE lesson_plan_id = ?
+            """,
+            (
+                plan.content.title,
+                plan.version,
+                plan.model_dump_json(),
+                plan.updated_at,
+                plan.lesson_plan_id,
+            ),
+        )
 
     def _initialize(self) -> None:
         with self._connect() as connection:

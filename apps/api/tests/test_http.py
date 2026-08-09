@@ -92,3 +92,42 @@ def test_lesson_plan_generation_and_update_endpoints() -> None:
     assert pdf_response.status_code == 200
     assert pdf_response.headers["content-type"].startswith("application/pdf")
     assert pdf_response.content.startswith(b"%PDF")
+
+    lock_response = client.put(
+        f"/api/v1/lesson-plans/{plan['lesson_plan_id']}/blocks/key_points/lock",
+        json={"locked": True, "editor_id": "owner_teacher"},
+    )
+    assert lock_response.status_code == 200
+    assert lock_response.json()["version"] == 3
+    assert lock_response.json()["locked_blocks"] == ["key_points"]
+
+    blocked_rewrite = client.post(
+        f"/api/v1/lesson-plans/{plan['lesson_plan_id']}/blocks/key_points/rewrite",
+        json={
+            "instruction": "突出定义域和区间条件",
+            "content": plan["content"],
+            "teacher_id": "owner_teacher",
+        },
+    )
+    assert blocked_rewrite.status_code == 422
+    assert "已锁定" in blocked_rewrite.json()["detail"]
+
+    unlock_response = client.put(
+        f"/api/v1/lesson-plans/{plan['lesson_plan_id']}/blocks/key_points/lock",
+        json={"locked": False, "editor_id": "owner_teacher"},
+    )
+    rewrite_response = client.post(
+        f"/api/v1/lesson-plans/{plan['lesson_plan_id']}/blocks/key_points/rewrite",
+        json={
+            "instruction": "突出定义域和区间条件",
+            "content": plan["content"],
+            "teacher_id": "owner_teacher",
+        },
+    )
+
+    assert unlock_response.status_code == 200
+    assert unlock_response.json()["version"] == 4
+    assert rewrite_response.status_code == 200
+    assert rewrite_response.json()["block"] == "key_points"
+    assert rewrite_response.json()["mode"] == "local_preview"
+    assert "定义域和区间条件" in rewrite_response.json()["value"][0]
