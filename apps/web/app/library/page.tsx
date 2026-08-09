@@ -83,7 +83,15 @@ export default function LibraryPage() {
     if (nextId) await openItem(nextId);
   }
 
-  useEffect(() => { refresh().catch((error: Error) => setMessage(error.message)); }, []);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "upload") setUploadOpen(true);
+    refresh().catch((error: Error) => setMessage(error.message));
+    function receiveCreate(event: Event) {
+      if ((event as CustomEvent).detail === "library") setUploadOpen(true);
+    }
+    window.addEventListener("math-ai:create", receiveCreate);
+    return () => window.removeEventListener("math-ai:create", receiveCreate);
+  }, []);
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0] ?? null;

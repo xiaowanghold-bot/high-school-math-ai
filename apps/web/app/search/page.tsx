@@ -189,6 +189,21 @@ export default function SearchPage() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const initialQuery = params.get("q")?.trim() || "";
+    const initialVerification = params.get("verification") || "";
+    if (initialQuery) { setQueryInput(initialQuery); setQuery(initialQuery); }
+    if (initialVerification) setVerification(initialVerification);
+    function receiveGlobalSearch(event: Event) {
+      const keyword = String((event as CustomEvent).detail || "").trim();
+      setQueryInput(keyword);
+      setQuery(keyword);
+    }
+    window.addEventListener("math-ai:global-search", receiveGlobalSearch);
+    return () => window.removeEventListener("math-ai:global-search", receiveGlobalSearch);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     setLoading(true);
     fetch(searchUrl)

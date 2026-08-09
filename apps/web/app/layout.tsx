@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "katex/dist/katex.min.css";
+import { TopbarTools } from "./components/topbar-tools";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -37,11 +38,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </div>
           </aside>
           <main className="main-column">
-            <header className="topbar">
-              <div className="global-search">⌕ <span>搜索知识点、题型或直接描述你要找的题目</span></div>
-              <button className="ghost-button" type="button">任务中心</button>
-              <button className="primary-button" type="button">＋ 新建</button>
-            </header>
+            <TopbarTools />
             {children}
           </main>
         </div>

@@ -91,11 +91,18 @@ export default function PapersPage() {
   }
 
   useEffect(() => {
+    const createNew = new URLSearchParams(window.location.search).get("create") === "new";
     Promise.all([
       fetch(`${apiBase}/api/v1/questions?verification_status=passed&page_size=100`).then(async (response) => { if (!response.ok) throw new Error(await errorText(response)); const payload = await response.json(); setQuestions(payload.items); }),
       fetch(`${apiBase}/api/v1/exam-papers/templates`).then(async (response) => { if (!response.ok) throw new Error(await errorText(response)); const payload = await response.json(); setTemplates(payload.items); }),
-      loadPapers(true),
+      loadPapers(!createNew),
     ]).catch((error: Error) => setMessage(error.message));
+    if (createNew) newPaper();
+    function receiveCreate(event: Event) {
+      if ((event as CustomEvent).detail === "paper") newPaper();
+    }
+    window.addEventListener("math-ai:create", receiveCreate);
+    return () => window.removeEventListener("math-ai:create", receiveCreate);
   }, []);
 
   function newPaper() { setSelected(null); setTitle("高中数学阶段检测"); setDuration(90); setInstructions(defaultInstructions); setDraftItems([]); setDraftWarnings(["保存试卷后会固定题目和图片快照。"]); setActiveTemplateId(""); setAutoTarget(50); setAutoProfile("balanced"); setAutoTypeCounts({ single_choice: 4, open_response: 2 }); setQuery(""); setIsDirty(false); setMessage("已创建空白组卷草稿，请从左侧加入题目。"); }
