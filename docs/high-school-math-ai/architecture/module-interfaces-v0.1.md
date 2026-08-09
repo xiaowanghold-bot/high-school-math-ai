@@ -133,6 +133,24 @@ capabilities(question_type) -> VerificationCapability
 4. 概率有限状态枚举。
 5. 解析几何数值/符号交叉验证。
 
+## 6.1 SolutionAssistant 模块
+
+### Interface
+
+```text
+solve(request) -> SolutionResult
+```
+
+模块内部依次尝试匹配已独立验证的私有题库，再按配置调用大模型适配器；调用方不负责选择适配器或推断可信度。
+
+结果必须同时包含解题步骤、最终答案、知识点、易错点、教学提示和验证证据，并且只能标记为以下三档之一：
+
+- `program_verified`：与已独立验证题目可靠匹配。
+- `model_reviewed`：经过独立模型复核，首版暂不自动授予。
+- `teacher_review_required`：模型生成但尚未独立复核。
+
+题库匹配不成功且未配置模型时明确返回能力不足，不允许用模板答案冒充真实解答。第二种解法复用同一接口，通过 `solution_mode=alternative` 请求。
+
 ## 7. CurriculumCatalog 模块
 
 ### Interface

@@ -12,6 +12,7 @@ const navItems = [
   ["工作台", "/"],
   ["教材备课", "/curriculum"],
   ["智能搜题", "/search"],
+  ["解题助手", "/solve"],
   ["教案", "/lesson-plans"],
   ["组卷", "/papers"],
   ["我的资料", "/library"],
