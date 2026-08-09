@@ -21,7 +21,7 @@ class Settings(BaseSettings):
         / "docs"
         / "high-school-math-ai"
         / "curriculum"
-        / "pep-a-required-1-knowledge-tree-v1.csv"
+        / "pep-a-full-knowledge-tree-v1.csv"
     )
     question_bank_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "question-bank.sqlite3"

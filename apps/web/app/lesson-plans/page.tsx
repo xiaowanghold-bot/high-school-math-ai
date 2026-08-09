@@ -130,13 +130,14 @@ const rewriteDefaults: Record<LessonPlanBlock, string> = {
 
 function curriculumOptions(root: CurriculumNode): CurriculumOption[] {
   const items: CurriculumOption[] = [];
-  function visit(node: CurriculumNode, chapter = "") {
+  function visit(node: CurriculumNode, volume = "", chapter = "") {
+    const volumeName = node.node_type === "volume" ? node.name : volume;
     const chapterName = node.node_type === "chapter" ? node.name : chapter;
     if (node.node_type === "section" || node.node_type === "knowledge_point") {
       const prefix = node.node_type === "knowledge_point" ? "　└ " : "";
-      items.push({ id: node.node_id, label: `${chapterName} / ${prefix}${node.code} ${node.name}`, type: node.node_type });
+      items.push({ id: node.node_id, label: `${volumeName} · ${chapterName} / ${prefix}${node.code} ${node.name}`, type: node.node_type });
     }
-    node.children?.forEach((child) => visit(child, chapterName));
+    node.children?.forEach((child) => visit(child, volumeName, chapterName));
   }
   visit(root);
   return items;
