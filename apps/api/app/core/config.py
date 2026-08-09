@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     question_media_dir: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "question-media"
     )
+    private_library_db: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "private-library.sqlite3"
+    )
+    private_library_dir: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "private-library-files"
+    )
     lesson_plan_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "lesson-plans.sqlite3"
     )

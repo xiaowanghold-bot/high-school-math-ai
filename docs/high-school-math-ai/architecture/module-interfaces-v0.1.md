@@ -54,6 +54,27 @@ revoke(grant_id, reason) -> AffectedContent
 - 题目内容可用不等于 PDF 整体可用。
 - 撤销权利后必须返回所有受影响内容，交由下架流程处理。
 
+## 3.1 PrivateLibrary 模块
+
+### Interface
+
+```text
+ingest(file, metadata) -> LibraryItem
+list(owner, filters?) -> LibraryItemList
+get(item_id, owner) -> LibraryItemView
+review(item_id, corrected_text, decision, actor) -> LibraryItemRevision
+original(item_id, owner) -> PrivateFile
+```
+
+### 不变量
+
+- 上传资料默认且始终保持 `private`，不会因完成文本校对而进入公共检索或模型训练。
+- 上传前必须记录权利依据和用户确认；文件整体权利与其中单道题目的使用权分开判断。
+- 原文件、自动提取文本和教师校对文本分别保存，人工修订只能新增版本。
+- PDF、DOCX 和图片必须按真实内容识别格式，并执行大小、解压膨胀、像素和路径安全检查。
+- 未提取出文字的扫描件和图片只能进入 `needs_ocr`，不能伪装为识别成功。
+- 从私人资料拆出的题目默认仍为私人草稿，并重新经过数学与权利门禁。
+
 ## 4. Search 模块
 
 ### Interface
