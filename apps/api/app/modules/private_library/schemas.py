@@ -9,6 +9,8 @@ RightsBasis = Literal["original", "licensed", "private_teaching_only"]
 LibraryFileKind = Literal["pdf", "docx", "image"]
 ExtractionStatus = Literal["extracted", "needs_ocr", "failed"]
 TextReviewStatus = Literal["pending", "confirmed"]
+CandidateStatus = Literal["draft", "discarded", "imported"]
+QuestionType = Literal["single_choice", "multiple_choice", "fill_blank", "open_response"]
 
 
 class LibraryIngestCommand(BaseModel):
@@ -24,6 +26,67 @@ class LibraryTextReviewCommand(BaseModel):
     note: str = Field(default="", max_length=2000)
     confirm: bool = False
     reviewer_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class LibraryOCRCommand(BaseModel):
+    external_processing_consent: bool
+    teacher_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class LibraryOCRResult(BaseModel):
+    item: "LibraryItemView"
+    provider: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuestionCandidateOption(BaseModel):
+    key: str = Field(min_length=1, max_length=12)
+    text: str = Field(default="", max_length=4000)
+
+
+class QuestionCandidateUpdate(BaseModel):
+    question_type: QuestionType
+    stem_plain: str = Field(min_length=1, max_length=20000)
+    stem_latex: str | None = Field(default=None, max_length=20000)
+    options: list[QuestionCandidateOption] = Field(default_factory=list, max_length=20)
+    answer_value: str | None = Field(default=None, max_length=4000)
+    solution_method: str = Field(default="教师整理", max_length=500)
+    solution_steps: list[str] = Field(default_factory=list, max_length=100)
+    final_answer: str | None = Field(default=None, max_length=4000)
+    difficulty: int = Field(default=3, ge=1, le=5)
+    editor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class QuestionCandidateView(BaseModel):
+    candidate_id: str
+    library_item_id: str
+    source_version: int
+    position: int
+    question_type: QuestionType
+    stem_plain: str
+    stem_latex: str | None
+    options: list[QuestionCandidateOption]
+    answer_value: str | None
+    solution_method: str
+    solution_steps: list[str]
+    final_answer: str | None
+    difficulty: int
+    status: CandidateStatus
+    warnings: list[str]
+    imported_question_id: str | None
+    updated_at: str
+
+
+class QuestionCandidateList(BaseModel):
+    library_item_id: str
+    source_version: int
+    items: list[QuestionCandidateView]
+
+
+class CandidateImportResult(BaseModel):
+    candidate: QuestionCandidateView
+    question_id: str
+    already_imported: bool = False
 
 
 class LibraryItemSummary(BaseModel):

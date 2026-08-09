@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from zipfile import BadZipFile, ZipFile
 from datetime import datetime, timezone
@@ -15,6 +16,10 @@ from pypdf import PdfReader
 
 from app.modules.private_library.schemas import (
     LibraryIngestCommand,
+    QuestionCandidateList,
+    QuestionCandidateOption,
+    QuestionCandidateUpdate,
+    QuestionCandidateView,
     LibraryItemList,
     LibraryItemSummary,
     LibraryItemView,
@@ -35,6 +40,7 @@ class PrivateLibrary:
     MAX_PDF_PAGES = 1000
     MAX_DOCX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
     MAX_IMAGE_PIXELS = 25_000_000
+    MAX_CANDIDATES = 100
 
     def __init__(self, database_path: Path, file_root: Path) -> None:
         self.database_path = database_path.resolve()
@@ -171,6 +177,178 @@ class PrivateLibrary:
                 (corrected, status, command.note.strip(), new_version, now, item_id),
             )
         return self.get(item_id)
+
+    def apply_ocr(self, item_id: str, *, provider, consent: bool, teacher_id: str) -> tuple[LibraryItemView, str, list[str]]:
+        """Run an explicitly authorized OCR provider and return a reviewable draft."""
+        if not consent:
+            raise PrivateLibraryError("必须明确同意本次将私人文件发送给已配置的 OCR 服务")
+        path, item = self.file_for_download(item_id)
+        result = provider.extract(
+            path=path,
+            mime_type=item.mime_type,
+            filename=item.original_filename,
+            teacher_id=teacher_id,
+        )
+        text = result.text.strip()[: self.MAX_TEXT_CHARS]
+        if not text:
+            raise PrivateLibraryError("OCR 未返回可用文字，请改用人工转录")
+        now = self._now()
+        warning = "OCR 文字尚未经过教师核对，不会自动进入题库。"
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM library_items WHERE library_item_id = ?", (item_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(item_id)
+            warnings = list(dict.fromkeys([*json.loads(row["warnings_json"]), *result.warnings, warning]))
+            next_version = row["version"] + 1
+            connection.execute(
+                """
+                INSERT INTO library_text_revisions (
+                    library_item_id, version, previous_text, revised_text,
+                    review_status, reviewer_id, note, created_at
+                ) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+                """,
+                (
+                    item_id,
+                    next_version,
+                    row["corrected_text"],
+                    text,
+                    teacher_id,
+                    f"通过 {provider.name} 生成 OCR 待校对文本",
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE library_items SET extraction_status = 'extracted', extracted_text = ?,
+                    corrected_text = ?, text_review_status = 'pending', warnings_json = ?,
+                    review_note = ?, version = ?, updated_at = ? WHERE library_item_id = ?
+                """,
+                (text, text, json.dumps(warnings, ensure_ascii=False), warning, next_version, now, item_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO library_ocr_runs
+                (library_item_id, provider, teacher_id, external_consent, warning_json, created_at)
+                VALUES (?, ?, ?, 1, ?, ?)
+                """,
+                (item_id, provider.name, teacher_id, json.dumps(result.warnings, ensure_ascii=False), now),
+            )
+        return self.get(item_id), provider.name, result.warnings
+
+    def propose_questions(self, item_id: str) -> QuestionCandidateList:
+        """Create deterministic, editable candidates from teacher-confirmed text."""
+        with self._connect() as connection:
+            item = connection.execute(
+                "SELECT * FROM library_items WHERE library_item_id = ?", (item_id,)
+            ).fetchone()
+            if item is None:
+                raise KeyError(item_id)
+            if item["text_review_status"] != "confirmed":
+                raise PrivateLibraryError("只有教师已确认的文本才能生成拆题候选")
+            existing = connection.execute(
+                """
+                SELECT * FROM library_question_candidates
+                WHERE library_item_id = ? AND source_version = ? ORDER BY position
+                """,
+                (item_id, item["version"]),
+            ).fetchall()
+            if existing:
+                return self._candidate_list(item_id, item["version"], existing)
+            parts = self._split_questions(item["corrected_text"])
+            if len(parts) > self.MAX_CANDIDATES:
+                parts = parts[: self.MAX_CANDIDATES]
+            now = self._now()
+            for position, part in enumerate(parts, start=1):
+                parsed = self._parse_candidate(part)
+                connection.execute(
+                    """
+                    INSERT INTO library_question_candidates (
+                        candidate_id, library_item_id, source_version, position, question_type,
+                        stem_plain, stem_latex, options_json, answer_value, solution_method,
+                        solution_steps_json, final_answer, difficulty, status, warnings_json,
+                        imported_question_id, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 3, 'draft', ?, NULL, ?)
+                    """,
+                    (
+                        f"cand_{uuid4().hex[:16]}", item_id, item["version"], position,
+                        parsed["question_type"], parsed["stem"],
+                        json.dumps(parsed["options"], ensure_ascii=False), parsed["answer"],
+                        "资料解析待教师核对", json.dumps(parsed["solution_steps"], ensure_ascii=False),
+                        parsed["answer"], json.dumps(parsed["warnings"], ensure_ascii=False), now,
+                    ),
+                )
+            rows = connection.execute(
+                "SELECT * FROM library_question_candidates WHERE library_item_id = ? AND source_version = ? ORDER BY position",
+                (item_id, item["version"]),
+            ).fetchall()
+        return self._candidate_list(item_id, item["version"], rows)
+
+    def list_question_candidates(self, item_id: str) -> QuestionCandidateList:
+        item = self.get(item_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM library_question_candidates WHERE library_item_id = ? AND source_version = ? ORDER BY position",
+                (item_id, item.version),
+            ).fetchall()
+        return self._candidate_list(item_id, item.version, rows)
+
+    def update_question_candidate(
+        self, item_id: str, candidate_id: str, command: QuestionCandidateUpdate
+    ) -> QuestionCandidateView:
+        now = self._now()
+        with self._connect() as connection:
+            row = self._candidate_row(connection, item_id, candidate_id)
+            if row["status"] == "imported":
+                raise PrivateLibraryError("已导入题库的候选不可覆盖，请在题库审核台继续修改")
+            connection.execute(
+                """
+                UPDATE library_question_candidates SET question_type = ?, stem_plain = ?,
+                    stem_latex = ?, options_json = ?, answer_value = ?, solution_method = ?,
+                    solution_steps_json = ?, final_answer = ?, difficulty = ?, status = 'draft',
+                    updated_at = ? WHERE candidate_id = ?
+                """,
+                (
+                    command.question_type, command.stem_plain.strip(), command.stem_latex,
+                    json.dumps([item.model_dump() for item in command.options], ensure_ascii=False),
+                    command.answer_value, command.solution_method,
+                    json.dumps(command.solution_steps, ensure_ascii=False), command.final_answer,
+                    command.difficulty, now, candidate_id,
+                ),
+            )
+            updated = self._candidate_row(connection, item_id, candidate_id)
+        return self._candidate_view(updated)
+
+    def discard_question_candidate(self, item_id: str, candidate_id: str) -> QuestionCandidateView:
+        with self._connect() as connection:
+            row = self._candidate_row(connection, item_id, candidate_id)
+            if row["status"] == "imported":
+                raise PrivateLibraryError("已导入题库的候选不能丢弃")
+            connection.execute(
+                "UPDATE library_question_candidates SET status = 'discarded', updated_at = ? WHERE candidate_id = ?",
+                (self._now(), candidate_id),
+            )
+            updated = self._candidate_row(connection, item_id, candidate_id)
+        return self._candidate_view(updated)
+
+    def get_question_candidate(self, item_id: str, candidate_id: str) -> tuple[QuestionCandidateView, LibraryItemView]:
+        item = self.get(item_id)
+        with self._connect() as connection:
+            row = self._candidate_row(connection, item_id, candidate_id)
+        return self._candidate_view(row), item
+
+    def mark_candidate_imported(self, item_id: str, candidate_id: str, question_id: str) -> QuestionCandidateView:
+        with self._connect() as connection:
+            row = self._candidate_row(connection, item_id, candidate_id)
+            if row["imported_question_id"] and row["imported_question_id"] != question_id:
+                raise PrivateLibraryError("该候选已关联其他题库题目")
+            connection.execute(
+                "UPDATE library_question_candidates SET status = 'imported', imported_question_id = ?, updated_at = ? WHERE candidate_id = ?",
+                (question_id, self._now(), candidate_id),
+            )
+            updated = self._candidate_row(connection, item_id, candidate_id)
+        return self._candidate_view(updated)
 
     def stats(self) -> LibraryStats:
         with self._connect() as connection:
@@ -361,6 +539,39 @@ class PrivateLibrary:
                     FOREIGN KEY(library_item_id) REFERENCES library_items(library_item_id),
                     UNIQUE(library_item_id, version)
                 );
+                CREATE TABLE IF NOT EXISTS library_ocr_runs (
+                    run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    library_item_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    teacher_id TEXT NOT NULL,
+                    external_consent INTEGER NOT NULL,
+                    warning_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(library_item_id) REFERENCES library_items(library_item_id)
+                );
+                CREATE TABLE IF NOT EXISTS library_question_candidates (
+                    candidate_id TEXT PRIMARY KEY,
+                    library_item_id TEXT NOT NULL,
+                    source_version INTEGER NOT NULL,
+                    position INTEGER NOT NULL,
+                    question_type TEXT NOT NULL,
+                    stem_plain TEXT NOT NULL,
+                    stem_latex TEXT,
+                    options_json TEXT NOT NULL,
+                    answer_value TEXT,
+                    solution_method TEXT NOT NULL,
+                    solution_steps_json TEXT NOT NULL,
+                    final_answer TEXT,
+                    difficulty INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    imported_question_id TEXT,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(library_item_id) REFERENCES library_items(library_item_id),
+                    UNIQUE(library_item_id, source_version, position)
+                );
+                CREATE INDEX IF NOT EXISTS idx_library_candidates_item
+                    ON library_question_candidates(library_item_id, source_version, position);
                 """
             )
 
@@ -406,3 +617,100 @@ class PrivateLibrary:
             warnings=json.loads(row["warnings_json"]),
             review_note=row["review_note"],
         )
+
+    @staticmethod
+    def _candidate_row(
+        connection: sqlite3.Connection, item_id: str, candidate_id: str
+    ) -> sqlite3.Row:
+        row = connection.execute(
+            "SELECT * FROM library_question_candidates WHERE library_item_id = ? AND candidate_id = ?",
+            (item_id, candidate_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(candidate_id)
+        return row
+
+    @classmethod
+    def _candidate_list(
+        cls, item_id: str, source_version: int, rows: list[sqlite3.Row]
+    ) -> QuestionCandidateList:
+        return QuestionCandidateList(
+            library_item_id=item_id,
+            source_version=source_version,
+            items=[cls._candidate_view(row) for row in rows],
+        )
+
+    @staticmethod
+    def _candidate_view(row: sqlite3.Row) -> QuestionCandidateView:
+        return QuestionCandidateView(
+            candidate_id=row["candidate_id"],
+            library_item_id=row["library_item_id"],
+            source_version=row["source_version"],
+            position=row["position"],
+            question_type=row["question_type"],
+            stem_plain=row["stem_plain"],
+            stem_latex=row["stem_latex"],
+            options=[QuestionCandidateOption(**item) for item in json.loads(row["options_json"])],
+            answer_value=row["answer_value"],
+            solution_method=row["solution_method"],
+            solution_steps=json.loads(row["solution_steps_json"]),
+            final_answer=row["final_answer"],
+            difficulty=row["difficulty"],
+            status=row["status"],
+            warnings=json.loads(row["warnings_json"]),
+            imported_question_id=row["imported_question_id"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _split_questions(text: str) -> list[str]:
+        cleaned = re.sub(r"^【第\s*\d+\s*页】\s*$", "", text, flags=re.MULTILINE).strip()
+        marker = re.compile(r"(?m)^\s*(?:第\s*)?\d{1,3}\s*[.、．]\s+")
+        starts = [match.start() for match in marker.finditer(cleaned)]
+        if len(starts) < 2:
+            return [cleaned] if cleaned else []
+        prefix = cleaned[: starts[0]].strip()
+        parts: list[str] = []
+        for index, start in enumerate(starts):
+            end = starts[index + 1] if index + 1 < len(starts) else len(cleaned)
+            part = cleaned[start:end].strip()
+            if index == 0 and prefix and len(prefix) < 300:
+                part = f"{prefix}\n{part}"
+            if part:
+                parts.append(part)
+        return parts
+
+    @staticmethod
+    def _parse_candidate(text: str) -> dict:
+        answer_match = re.search(r"(?ims)(?:参考)?答案\s*[：:]\s*(.+?)(?=\n\s*(?:解析|解答|解)\s*[：:]|\Z)", text)
+        solution_match = re.search(r"(?ims)(?:解析|解答|解)\s*[：:]\s*(.+)\Z", text)
+        answer = answer_match.group(1).strip() if answer_match else None
+        solution = solution_match.group(1).strip() if solution_match else ""
+        stem_end = min(
+            [match.start() for match in (answer_match, solution_match) if match] or [len(text)]
+        )
+        stem_and_options = text[:stem_end].strip()
+        option_pattern = re.compile(r"(?ms)(?:^|\s)([A-H])[.、．]\s*(.+?)(?=(?:\s+[A-H][.、．]\s)|\Z)")
+        option_matches = list(option_pattern.finditer(stem_and_options))
+        options = [
+            {"key": match.group(1), "text": re.sub(r"\s+", " ", match.group(2)).strip()}
+            for match in option_matches
+        ]
+        if option_matches:
+            stem = stem_and_options[: option_matches[0].start()].strip()
+        else:
+            stem = stem_and_options
+        stem = re.sub(r"(?m)^\s*(?:第\s*)?\d{1,3}\s*[.、．]\s*", "", stem, count=1).strip()
+        warnings = ["自动拆题结果必须逐题核对题干、答案和解析。"]
+        if not answer:
+            warnings.append("未自动识别到答案，请教师补充。")
+        if not solution:
+            warnings.append("未自动识别到解析，请教师补充。")
+        return {
+            "question_type": "single_choice" if options else "open_response",
+            "stem": stem or text.strip(),
+            "options": options,
+            "answer": answer,
+            "solution_steps": [solution] if solution else [],
+            "warnings": warnings,
+        }

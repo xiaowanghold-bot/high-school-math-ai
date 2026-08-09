@@ -14,10 +14,19 @@ type LibraryItem = LibrarySummary & {
   adaptation_allowed: boolean; warnings: string[]; review_note: string;
 };
 type LibraryStats = { total: number; pending_review: number; confirmed: number; needs_ocr: number; by_file_kind: Record<string, number> };
+type CandidateOption = { key: string; text: string };
+type QuestionCandidate = {
+  candidate_id: string; library_item_id: string; source_version: number; position: number;
+  question_type: "single_choice" | "multiple_choice" | "fill_blank" | "open_response";
+  stem_plain: string; stem_latex: string | null; options: CandidateOption[]; answer_value: string | null;
+  solution_method: string; solution_steps: string[]; final_answer: string | null; difficulty: number;
+  status: "draft" | "discarded" | "imported"; warnings: string[]; imported_question_id: string | null;
+};
 
 const extractionLabels = { extracted: "已提取文字", needs_ocr: "待 OCR / 转录", failed: "提取失败" };
 const rightsLabels = { original: "本人原创", licensed: "已获授权", private_teaching_only: "仅限私人教学" };
 const fileKindLabels = { pdf: "PDF", docx: "Word", image: "图片" };
+const questionTypeLabels = { single_choice: "单选题", multiple_choice: "多选题", fill_blank: "填空题", open_response: "解答题" };
 
 async function errorText(response: Response) {
   try { const payload = await response.json(); return payload.detail || `请求失败（HTTP ${response.status}）`; }
@@ -39,6 +48,9 @@ export default function LibraryPage() {
   const [rightsStatement, setRightsStatement] = useState("本人确认该资料仅上传至私人空间，用于本人日常教学与备课。");
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [candidateBusy, setCandidateBusy] = useState(false);
+  const [candidates, setCandidates] = useState<QuestionCandidate[]>([]);
+  const [ocrConsent, setOcrConsent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -47,12 +59,17 @@ export default function LibraryPage() {
   }, [items, query]);
 
   async function openItem(itemId: string) {
-    const response = await fetch(`/api/v1/library/${itemId}`);
+    const [response, candidateResponse] = await Promise.all([
+      fetch(`/api/v1/library/${itemId}`),
+      fetch(`/api/v1/library/${itemId}/question-candidates`),
+    ]);
     if (!response.ok) throw new Error(await errorText(response));
     const item: LibraryItem = await response.json();
     setSelected(item);
     setDraftText(item.corrected_text || item.extracted_text);
     setReviewNote(item.review_note);
+    setOcrConsent(false);
+    setCandidates(candidateResponse.ok ? (await candidateResponse.json()).items : []);
   }
 
   async function refresh(preferredId?: string) {
@@ -110,6 +127,79 @@ export default function LibraryPage() {
     finally { setBusy(false); }
   }
 
+  async function runOcr() {
+    if (!selected || !ocrConsent) { setMessage("请先勾选本次外部 OCR 授权。"); return; }
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/ocr`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ external_processing_consent: true }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      await refresh(result.item.library_item_id);
+      setMessage("OCR 已生成待校对文本；请逐行核对公式、题号和选项后再确认。");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "OCR 识别失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function proposeCandidates() {
+    if (!selected) return;
+    setCandidateBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/question-candidates`, { method: "POST" });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json(); setCandidates(result.items);
+      setMessage(`已生成 ${result.items.length} 道拆题候选，请逐题编辑后再导入。`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "拆题失败"); }
+    finally { setCandidateBusy(false); }
+  }
+
+  function editCandidate(candidateId: string, patch: Partial<QuestionCandidate>) {
+    setCandidates((current) => current.map((item) => item.candidate_id === candidateId ? { ...item, ...patch } : item));
+  }
+
+  async function saveCandidate(candidate: QuestionCandidate) {
+    if (!selected) return;
+    setCandidateBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/question-candidates/${candidate.candidate_id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(candidate),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const saved = await response.json(); editCandidate(candidate.candidate_id, saved);
+      setMessage(`候选 ${candidate.position} 已保存。`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "候选保存失败"); }
+    finally { setCandidateBusy(false); }
+  }
+
+  async function discardCandidate(candidate: QuestionCandidate) {
+    if (!selected) return;
+    setCandidateBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/question-candidates/${candidate.candidate_id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await errorText(response));
+      editCandidate(candidate.candidate_id, await response.json()); setMessage(`候选 ${candidate.position} 已移出本次导入。`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "候选处理失败"); }
+    finally { setCandidateBusy(false); }
+  }
+
+  async function importCandidate(candidate: QuestionCandidate) {
+    if (!selected) return;
+    setCandidateBusy(true); setMessage(null);
+    try {
+      const saveResponse = await fetch(`/api/v1/library/${selected.library_item_id}/question-candidates/${candidate.candidate_id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(candidate),
+      });
+      if (!saveResponse.ok) throw new Error(await errorText(saveResponse));
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/question-candidates/${candidate.candidate_id}/import`, { method: "POST" });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json(); editCandidate(candidate.candidate_id, result.candidate);
+      setMessage(`已导入私人题库：${result.question_id}。仍需在题库审核台完成数学核验。`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "导入题库失败"); }
+    finally { setCandidateBusy(false); }
+  }
+
   return <div className="page-content library-workspace">
     <section className="page-title library-title"><div><p className="eyebrow">个人资料库 · 默认私人</p><h1>先安全收进来，再逐份校对。</h1><p className="subtle">原文件、提取文本与教师修订分开保存；未经明确授权不会进入公共题库或模型训练。</p></div><button className="primary-button" type="button" onClick={() => setUploadOpen((current) => !current)}>{uploadOpen ? "收起上传" : "＋ 上传资料"}</button></section>
     {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
@@ -137,6 +227,7 @@ export default function LibraryPage() {
           <header className="library-document-heading"><div><p>{fileKindLabels[selected.file_kind]} · {formatBytes(selected.size_bytes)}{selected.page_count ? ` · ${selected.page_count} 页` : ""}</p><h2>{selected.title}</h2><small>{selected.original_filename}</small></div><div><span className={`library-review-status ${selected.text_review_status}`}>{selected.text_review_status === "confirmed" ? "教师已确认" : "待人工校对"}</span><a href={`/api/v1/library/${selected.library_item_id}/file`}>下载原文件</a></div></header>
           <section className="library-privacy-strip"><div><span>可见范围</span><strong>仅本人</strong></div><div><span>模型训练</span><strong>禁止</strong></div><div><span>改编权限</span><strong>{selected.adaptation_allowed ? "已声明允许" : "未授权"}</strong></div><div><span>权利依据</span><strong>{rightsLabels[selected.rights_basis]}</strong></div></section>
           {selected.warnings.map((warning) => <p className="library-warning" key={warning}>{warning}</p>)}
+          {selected.extraction_status === "needs_ocr" && <section className="library-ocr-panel"><div><strong>扫描件或图片需要 OCR</strong><p>仅在本次勾选后，原文件才会发送给当前配置的大模型服务。识别结果仍是私人待校对文本。</p></div><label><input type="checkbox" checked={ocrConsent} onChange={(event) => setOcrConsent(event.target.checked)} /><span>我同意本次发送该文件用于 OCR</span></label><button type="button" disabled={busy || !ocrConsent} onClick={runOcr}>{busy ? "识别中…" : "开始 OCR"}</button></section>}
           {selected.file_kind === "image" && <div className="library-image-preview"><img src={`/api/v1/library/${selected.library_item_id}/file`} alt={selected.title} /></div>}
           <div className="library-text-compare">
             <section><header><div><strong>自动提取原文</strong><small>{selected.extracted_char_count} 字符 · 不可覆盖</small></div><span>{extractionLabels[selected.extraction_status]}</span></header><pre>{selected.extracted_text || "尚无自动提取文字。请在右侧根据原文件进行人工转录。"}</pre></section>
@@ -144,6 +235,21 @@ export default function LibraryPage() {
           </div>
           <label className="library-review-note"><span>本次校对说明</span><input value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="例如：核对第 1—5 页，修正函数公式与上下标" /></label>
           <footer className="library-review-actions"><div><span>确认后仍只进入私人资料库</span><small>后续拆题和进入题库需要再次审核</small></div><button type="button" disabled={busy} onClick={() => saveReview(false)}>保存校对草稿</button><button className="confirm" type="button" disabled={busy || !draftText.trim()} onClick={() => saveReview(true)}>{busy ? "保存中…" : "确认文本可用"}</button></footer>
+          <section className="library-candidate-workspace">
+            <header><div><p>下一步 · 结构化题目</p><h3>拆题候选</h3><small>先本地按题号拆分，再由教师逐题修订；导入后仍是私人待审核草稿。</small></div><button type="button" disabled={candidateBusy || selected.text_review_status !== "confirmed"} onClick={proposeCandidates}>{candidateBusy ? "处理中…" : candidates.length ? "重新读取候选" : "生成拆题候选"}</button></header>
+            {selected.text_review_status !== "confirmed" ? <div className="library-candidate-empty"><strong>请先确认校对文本</strong><span>未确认的 OCR 或提取结果不会进入拆题流程。</span></div> : !candidates.length ? <div className="library-candidate-empty"><strong>尚未生成候选</strong><span>点击右上方按钮，系统只处理当前已确认的文本版本。</span></div> : <div className="library-candidate-list">{candidates.map((candidate) => <details key={candidate.candidate_id} open={candidate.position === 1 && candidate.status === "draft"} className={`library-candidate ${candidate.status}`}>
+              <summary><span>{String(candidate.position).padStart(2, "0")}</span><div><strong>{candidate.stem_plain.slice(0, 58) || "未填写题干"}</strong><small>{questionTypeLabels[candidate.question_type]} · 难度 {candidate.difficulty} · {candidate.status === "imported" ? "已进入私人题库" : candidate.status === "discarded" ? "已丢弃" : "待审核"}</small></div><b>{candidate.status === "imported" ? "已导入" : candidate.status === "discarded" ? "已丢弃" : "编辑"}</b></summary>
+              <div className="library-candidate-editor">
+                {candidate.warnings.map((warning) => <p className="library-candidate-warning" key={warning}>{warning}</p>)}
+                <div className="library-candidate-meta"><label><span>题型</span><select disabled={candidate.status !== "draft"} value={candidate.question_type} onChange={(event) => editCandidate(candidate.candidate_id, { question_type: event.target.value as QuestionCandidate["question_type"] })}>{Object.entries(questionTypeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>难度</span><select disabled={candidate.status !== "draft"} value={candidate.difficulty} onChange={(event) => editCandidate(candidate.candidate_id, { difficulty: Number(event.target.value) })}>{[1,2,3,4,5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
+                <label><span>题干</span><textarea disabled={candidate.status !== "draft"} value={candidate.stem_plain} onChange={(event) => editCandidate(candidate.candidate_id, { stem_plain: event.target.value })} /></label>
+                <label><span>选项（每行“字母. 内容”）</span><textarea className="compact" disabled={candidate.status !== "draft"} value={candidate.options.map((option) => `${option.key}. ${option.text}`).join("\n")} onChange={(event) => editCandidate(candidate.candidate_id, { options: event.target.value.split("\n").map((line) => line.match(/^\s*([A-Za-z0-9]+)[.、．]\s*(.*)$/)).filter((match): match is RegExpMatchArray => Boolean(match)).map((match) => ({ key: match[1].toUpperCase(), text: match[2] })) })} placeholder="A. 选项一" /></label>
+                <div className="library-candidate-answer"><label><span>答案</span><input disabled={candidate.status !== "draft"} value={candidate.answer_value ?? ""} onChange={(event) => editCandidate(candidate.candidate_id, { answer_value: event.target.value })} /></label><label><span>最终答案</span><input disabled={candidate.status !== "draft"} value={candidate.final_answer ?? ""} onChange={(event) => editCandidate(candidate.candidate_id, { final_answer: event.target.value })} /></label></div>
+                <label><span>解析步骤（每行一步）</span><textarea disabled={candidate.status !== "draft"} value={candidate.solution_steps.join("\n")} onChange={(event) => editCandidate(candidate.candidate_id, { solution_steps: event.target.value.split("\n").filter(Boolean) })} /></label>
+                <footer>{candidate.status === "imported" ? <><span>题号：{candidate.imported_question_id}</span><a href="/search">前往题库审核台</a></> : candidate.status === "discarded" ? <span>此候选不会进入题库。</span> : <><button type="button" disabled={candidateBusy || !candidate.stem_plain.trim()} onClick={() => saveCandidate(candidate)}>保存修改</button><button className="discard" type="button" disabled={candidateBusy} onClick={() => discardCandidate(candidate)}>丢弃</button><button className="import" type="button" disabled={candidateBusy || !candidate.stem_plain.trim()} onClick={() => importCandidate(candidate)}>导入私人题库</button></>}</footer>
+              </div>
+            </details>)}</div>}
+          </section>
         </>}
       </main>
     </div>

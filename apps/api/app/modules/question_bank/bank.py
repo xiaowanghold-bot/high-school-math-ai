@@ -785,6 +785,135 @@ class QuestionBank:
             raise
         return self.get_question(question_id)
 
+    def create_private_resource_question(
+        self, candidate: dict[str, Any], *, resource: dict[str, Any]
+    ) -> QuestionDetail:
+        """Import one reviewed resource candidate without bypassing question gates."""
+        candidate_id = str(candidate.get("candidate_id", ""))
+        stem = str(candidate.get("stem_plain", "")).strip()
+        if not candidate_id or not stem:
+            raise QuestionBankError("拆题候选缺少编号或题干")
+        if candidate.get("status") == "discarded":
+            raise QuestionBankError("已丢弃的拆题候选不能导入题库")
+        question_id = f"q_resource_{candidate_id.removeprefix('cand_')}"
+        try:
+            return self.get_question(question_id)
+        except KeyError:
+            pass
+        now = self._now()
+        batch_id = "private-resource-drafts-v1"
+        rights_basis = str(resource.get("rights_basis", "private_teaching_only"))
+        license_status = (
+            "question_content_user_declared_usable"
+            if rights_basis in {"original", "licensed"}
+            else "private_use_only"
+        )
+        options = [
+            {"key": item["key"], "plain_text": item.get("text", ""), "latex": None}
+            for item in candidate.get("options", [])
+        ]
+        solution_steps = [str(step) for step in candidate.get("solution_steps", []) if str(step).strip()]
+        answer = candidate.get("answer_value")
+        raw = {
+            "id": question_id,
+            "status": "imported",
+            "visibility": "private",
+            "language": "zh-CN",
+            "stem": {
+                "plain_text": stem,
+                "latex": candidate.get("stem_latex"),
+                "assets": [],
+            },
+            "question_type": candidate.get("question_type", "open_response"),
+            "options": options,
+            "answer": {
+                "type": "option" if options else "text",
+                "value": answer,
+                "status": "teacher_review_draft",
+                "alternatives": [],
+            },
+            "solutions": [
+                {
+                    "method": candidate.get("solution_method") or "教师整理",
+                    "steps_latex": solution_steps,
+                    "final_answer": candidate.get("final_answer"),
+                    "author_type": "resource_extraction",
+                    "review_status": "ready_for_teacher_review",
+                }
+            ],
+            "curriculum": {
+                "standard_version": "普通高中数学课程标准（2017年版2020年修订）",
+                "textbook_version": "人教A版",
+                "volume": None,
+                "chapter": None,
+                "section": None,
+                "knowledge_point_ids": [],
+            },
+            "exam": {"paper_family": None, "region": None, "year": None, "original_score": None, "competency_tags": []},
+            "pedagogy": {
+                "difficulty": int(candidate.get("difficulty", 3)),
+                "difficulty_confidence": 0.2,
+                "usage_scenarios": ["私人资料拆题草稿"],
+            },
+            "verification": {
+                "status": "needs_math_review",
+                "methods": ["teacher_confirmed_source_text_only"],
+                "details": ["教师确认了资料文本，但题目答案与解析仍需独立数学核验。"],
+            },
+            "source": {
+                "document_name": resource.get("title") or resource.get("original_filename") or "私人资料",
+                "source_question_number": str(candidate.get("position", "")),
+                "source_reference": f"私人资料 {resource.get('library_item_id')} · 文本版本 {candidate.get('source_version')}",
+                "license_status": license_status,
+                "attribution_required": "confirmed" if rights_basis in {"original", "licensed"} else "not_confirmed",
+                "rights_basis": rights_basis,
+                "rights_statement": resource.get("rights_statement", ""),
+                "allowed_uses": ["private_teaching"] + (["adapt_question"] if resource.get("adaptation_allowed") else []),
+            },
+            "provenance": {
+                "created_by": "private_resource_question_pipeline",
+                "library_item_id": resource.get("library_item_id"),
+                "library_source_version": candidate.get("source_version"),
+                "resource_candidate_id": candidate_id,
+            },
+            "reviews": [],
+            "created_at": now,
+            "updated_at": now,
+        }
+        difficulty = int(candidate.get("difficulty", 3))
+        if difficulty not in range(1, 6):
+            raise QuestionBankError("题目难度必须是 1 到 5 的整数")
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO import_batches
+                (batch_id, schema_version, source_file, publication_status,
+                 declared_count, rights_basis, imported_at)
+                VALUES (?, '1.0', 'private-library://confirmed-candidates',
+                        'private_not_publishable', 0, '逐份继承教师权利声明', ?)
+                """,
+                (batch_id, now),
+            )
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO questions (
+                    question_id, batch_id, status, review_status, visibility, question_type,
+                    stem_plain, stem_latex, answer_value, volume, chapter, section,
+                    knowledge_point_ids, difficulty, verification_status,
+                    source_document, source_page_start, source_page_end,
+                    license_status, attribution_required, solution_approved,
+                    raw_json, created_at, updated_at
+                ) VALUES (?, ?, 'imported', 'pending', 'private', ?, ?, ?, ?, NULL, NULL, NULL,
+                          '[]', ?, 'needs_math_review', ?, NULL, NULL, ?, ?, 0, ?, ?, ?)
+                """,
+                (
+                    question_id, batch_id, raw["question_type"], stem, raw["stem"]["latex"],
+                    answer, difficulty, raw["source"]["document_name"], license_status,
+                    raw["source"]["attribution_required"], json.dumps(raw, ensure_ascii=False), now, now,
+                ),
+            )
+        return self.get_question(question_id)
+
     def add_image(
         self,
         question_id: str,
