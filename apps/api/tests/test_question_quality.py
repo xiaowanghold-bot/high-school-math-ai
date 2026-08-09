@@ -96,6 +96,7 @@ def test_quality_workflow_recommends_and_applies_curriculum(tmp_path: Path) -> N
 
     assert workspace.curriculum_suggestions[0].node_id == "kp_monotonic"
     assert workspace.curriculum_suggestions[0].confidence >= 0.6
+    assert workspace.current_curriculum.knowledge_point_names == []
     result = workflow.apply_curriculum(
         question_id,
         CurriculumMappingCommand(node_id="kp_monotonic", teacher_id="teacher_1"),
@@ -108,6 +109,7 @@ def test_quality_workflow_recommends_and_applies_curriculum(tmp_path: Path) -> N
     assert question.knowledge_point_ids == ["kp_monotonic"]
     assert question.visibility == "private"
     assert question.verification_status == "needs_math_review"
+    assert result.workspace.current_curriculum.knowledge_point_names == ["函数的单调性"]
 
 
 def test_manual_verification_requires_declaration_and_evidence(tmp_path: Path) -> None:

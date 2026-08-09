@@ -20,6 +20,7 @@ class CurrentCurriculumMapping(BaseModel):
     chapter: str | None = None
     section: str | None = None
     knowledge_point_ids: list[str] = Field(default_factory=list)
+    knowledge_point_names: list[str] = Field(default_factory=list)
 
 
 class VerificationWorkspace(BaseModel):
@@ -56,4 +57,3 @@ class QualityActionResult(BaseModel):
     workspace: QuestionQualityWorkspace
     status: str
     message: str
-

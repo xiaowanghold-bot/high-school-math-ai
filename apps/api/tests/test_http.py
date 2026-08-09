@@ -28,6 +28,18 @@ def test_unknown_curriculum_node_is_404() -> None:
     assert response.status_code == 404
 
 
+def test_curriculum_search_endpoint() -> None:
+    response = client.get(
+        "/api/v1/curriculum/search", params={"query": "单调性", "limit": 5}
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] >= 1
+    assert payload["items"][0]["node_id"] == "kp_r1_3_2_01"
+    assert payload["items"][0]["section"] == "函数的基本性质"
+
+
 def test_question_bank_stats_and_search_endpoints() -> None:
     stats_response = client.get("/api/v1/question-bank/stats")
     batches_response = client.get("/api/v1/question-bank/import-batches")

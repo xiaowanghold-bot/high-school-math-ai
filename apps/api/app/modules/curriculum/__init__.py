@@ -1,4 +1,16 @@
 from .catalog import CsvCurriculumCatalog, InMemoryCurriculumCatalog
-from .schemas import CurriculumNode, CurriculumTreeNode
+from .schemas import (
+    CurriculumNode,
+    CurriculumSearchItem,
+    CurriculumSearchResponse,
+    CurriculumTreeNode,
+)
 
-__all__ = ["CsvCurriculumCatalog", "InMemoryCurriculumCatalog", "CurriculumNode", "CurriculumTreeNode"]
+__all__ = [
+    "CsvCurriculumCatalog",
+    "InMemoryCurriculumCatalog",
+    "CurriculumNode",
+    "CurriculumSearchItem",
+    "CurriculumSearchResponse",
+    "CurriculumTreeNode",
+]

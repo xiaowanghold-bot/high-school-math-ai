@@ -101,6 +101,7 @@ type QuestionQuality = {
     chapter: string | null;
     section: string | null;
     knowledge_point_ids: string[];
+    knowledge_point_names: string[];
   };
   curriculum_suggestions: CurriculumSuggestion[];
   verification: {
@@ -111,6 +112,20 @@ type QuestionQuality = {
     method: string | null;
     details: string[];
   };
+};
+
+type CurriculumSearchItem = {
+  node_id: string;
+  code: string;
+  name: string;
+  node_type: string;
+  volume: string;
+  chapter: string | null;
+  section: string | null;
+  description: string;
+  primary_competencies: string[];
+  gaokao_priority: string;
+  match_score: number;
 };
 
 const apiBase = "";
@@ -198,6 +213,11 @@ export default function SearchPage() {
   const [computedAnswer, setComputedAnswer] = useState("");
   const [verificationSteps, setVerificationSteps] = useState("");
   const [independentlyChecked, setIndependentlyChecked] = useState(false);
+  const [manualCatalogOpen, setManualCatalogOpen] = useState(false);
+  const [curriculumQuery, setCurriculumQuery] = useState("");
+  const [curriculumResults, setCurriculumResults] = useState<CurriculumSearchItem[]>([]);
+  const [curriculumTotal, setCurriculumTotal] = useState(0);
+  const [catalogSearching, setCatalogSearching] = useState(false);
 
   const searchUrl = useMemo(() => {
     const params = new URLSearchParams({ page_size: "50" });
@@ -284,6 +304,10 @@ export default function SearchPage() {
     setDetail(null);
     setEditDraft(null);
     setQuality(null);
+    setManualCatalogOpen(false);
+    setCurriculumQuery("");
+    setCurriculumResults([]);
+    setCurriculumTotal(0);
     Promise.all([refreshDetail(selectedId), refreshQuality(selectedId)]).catch(() => setMessage("无法读取题目详情或质量工作区。"));
   }, [selectedId]);
 
@@ -355,6 +379,7 @@ export default function SearchPage() {
       if (!response.ok) throw new Error(await errorText(response));
       const result = await response.json();
       setQuality(result.workspace);
+      setManualCatalogOpen(false);
       await Promise.all([refreshDetail(selectedId), loadStats()]);
       setMessage(result.message);
     } catch (error) {
@@ -362,6 +387,32 @@ export default function SearchPage() {
     } finally {
       setWorking(false);
     }
+  }
+
+  async function searchCurriculum(searchValue = curriculumQuery) {
+    setCatalogSearching(true);
+    try {
+      const params = new URLSearchParams({
+        query: searchValue.trim(),
+        node_type: "knowledge_point",
+        limit: "30",
+      });
+      const response = await fetch(`${apiBase}/api/v1/curriculum/search?${params.toString()}`);
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      setCurriculumResults(result.items);
+      setCurriculumTotal(result.total);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "教材目录搜索失败");
+    } finally {
+      setCatalogSearching(false);
+    }
+  }
+
+  function toggleManualCatalog() {
+    const nextOpen = !manualCatalogOpen;
+    setManualCatalogOpen(nextOpen);
+    if (nextOpen && !curriculumResults.length) searchCurriculum("");
   }
 
   async function recordVerification() {
@@ -621,7 +672,7 @@ export default function SearchPage() {
                 {quality && <div className="quality-workspace-grid">
                   <section className="curriculum-quality-panel">
                     <header><div><strong>教材知识点</strong><span>人教 A 版</span></div><small>当前：{quality.current_curriculum.section || quality.current_curriculum.chapter || "尚未映射"}</small></header>
-                    {!!quality.current_curriculum.knowledge_point_ids.length && <p className="mapping-current">已关联 {quality.current_curriculum.knowledge_point_ids.length} 个知识点：{quality.current_curriculum.knowledge_point_ids.join("、")}</p>}
+                    {!!quality.current_curriculum.knowledge_point_ids.length && <p className="mapping-current">已关联：{quality.current_curriculum.knowledge_point_names.join("、")}</p>}
                     <div className="curriculum-suggestions">
                       {quality.curriculum_suggestions.map((suggestion) => <article className="curriculum-suggestion" key={suggestion.node_id}>
                         <div><strong>{suggestion.name}</strong><span>{Math.round(suggestion.confidence * 100)}% 匹配</span></div>
@@ -629,8 +680,25 @@ export default function SearchPage() {
                         <small>{suggestion.reasons.join("；")}</small>
                         <button type="button" disabled={working || quality.current_curriculum.knowledge_point_ids.includes(suggestion.node_id)} onClick={() => applyCurriculum(suggestion.node_id)}>{quality.current_curriculum.knowledge_point_ids.includes(suggestion.node_id) ? "当前知识点" : "应用此知识点"}</button>
                       </article>)}
-                      {!quality.curriculum_suggestions.length && <div className="quality-empty"><strong>暂未找到可靠建议</strong><span>可先修订题干与解析；教材目录中的人工选择入口会在后续补充。</span></div>}
+                      {!quality.curriculum_suggestions.length && <div className="quality-empty"><strong>暂未找到可靠建议</strong><span>可以使用下面的完整目录搜索进行人工映射。</span></div>}
                     </div>
+                    <button className="manual-catalog-toggle" type="button" onClick={toggleManualCatalog}>{manualCatalogOpen ? "收起目录搜索" : "从教材目录选择"}</button>
+                    {manualCatalogOpen && <div className="manual-catalog-panel">
+                      <form onSubmit={(event) => { event.preventDefault(); searchCurriculum(); }}>
+                        <input aria-label="搜索教材知识点" value={curriculumQuery} onChange={(event) => setCurriculumQuery(event.target.value)} placeholder="输入知识点、章节、题型或编号" />
+                        <button type="submit" disabled={catalogSearching}>{catalogSearching ? "搜索中…" : "搜索"}</button>
+                      </form>
+                      <p>找到 {curriculumTotal} 个知识点{curriculumTotal > curriculumResults.length ? `，显示前 ${curriculumResults.length} 个` : ""}</p>
+                      <div className="manual-catalog-results">
+                        {curriculumResults.map((item) => <article key={item.node_id}>
+                          <div><strong>{item.name}</strong><span>{item.code}</span></div>
+                          <p>{item.volume} · {item.chapter} · {item.section}</p>
+                          <small>{item.description || item.primary_competencies.join("、")}</small>
+                          <button type="button" disabled={working || quality.current_curriculum.knowledge_point_ids.includes(item.node_id)} onClick={() => applyCurriculum(item.node_id)}>{quality.current_curriculum.knowledge_point_ids.includes(item.node_id) ? "当前知识点" : "选择"}</button>
+                        </article>)}
+                        {!catalogSearching && !curriculumResults.length && <div className="quality-empty"><strong>没有匹配知识点</strong><span>尝试缩短关键词，例如将“函数的单调递增”改为“单调性”。</span></div>}
+                      </div>
+                    </div>}
                   </section>
 
                   <section className="verification-quality-panel">

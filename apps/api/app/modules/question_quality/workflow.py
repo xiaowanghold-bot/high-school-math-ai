@@ -52,6 +52,12 @@ class QuestionQualityWorkflow:
         question = self.question_bank.get_question(question_id)
         raw_curriculum = question.raw.get("curriculum") or {}
         verification = question.raw.get("verification") or {}
+        knowledge_point_names = []
+        for node_id in question.knowledge_point_ids:
+            try:
+                knowledge_point_names.append(self.curriculum_catalog.get_node(node_id).name)
+            except KeyError:
+                knowledge_point_names.append(node_id)
         capability = (
             "already_verified"
             if question.verification_status == "passed"
@@ -66,6 +72,7 @@ class QuestionQualityWorkflow:
                 chapter=question.chapter or raw_curriculum.get("chapter"),
                 section=question.section or raw_curriculum.get("section"),
                 knowledge_point_ids=question.knowledge_point_ids,
+                knowledge_point_names=knowledge_point_names,
             ),
             curriculum_suggestions=self._recommend(question.stem_plain, question.raw),
             verification=VerificationWorkspace(
@@ -221,4 +228,3 @@ class QuestionQualityWorkflow:
             for index in range(max(0, len(value) - length + 1))
             if len(value[index : index + length]) == length
         }
-

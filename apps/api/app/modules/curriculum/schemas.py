@@ -22,3 +22,23 @@ class CurriculumNode(BaseModel):
 
 class CurriculumTreeNode(CurriculumNode):
     children: list["CurriculumTreeNode"] = Field(default_factory=list)
+
+
+class CurriculumSearchItem(BaseModel):
+    node_id: str
+    code: str
+    name: str
+    node_type: str
+    volume: str
+    chapter: str | None = None
+    section: str | None = None
+    description: str = ""
+    primary_competencies: list[str] = Field(default_factory=list)
+    gaokao_priority: str
+    match_score: float = Field(ge=0, le=1)
+
+
+class CurriculumSearchResponse(BaseModel):
+    query: str
+    total: int
+    items: list[CurriculumSearchItem]
