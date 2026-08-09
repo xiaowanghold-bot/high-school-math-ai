@@ -52,6 +52,13 @@ type LessonPlanBlockRewriteResult = {
   warnings: string[];
 };
 
+type PendingRewrite = {
+  block: LessonPlanBlock;
+  before: string[] | TeachingPhase[];
+  after: string[] | TeachingPhase[];
+  mode: string;
+};
+
 type LessonPlan = {
   lesson_plan_id: string;
   status: string;
@@ -154,6 +161,8 @@ export default function LessonPlansPage() {
   const [lockingBlock, setLockingBlock] = useState<LessonPlanBlock | null>(null);
   const [rewritingBlock, setRewritingBlock] = useState<LessonPlanBlock | null>(null);
   const [activeRewriteBlock, setActiveRewriteBlock] = useState<LessonPlanBlock | null>(null);
+  const [pendingRewrite, setPendingRewrite] = useState<PendingRewrite | null>(null);
+  const [lastAcceptedRewrite, setLastAcceptedRewrite] = useState<Pick<PendingRewrite, "block" | "before"> | null>(null);
   const [rewriteInstructions, setRewriteInstructions] = useState<Record<LessonPlanBlock, string>>(rewriteDefaults);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -185,6 +194,8 @@ export default function LessonPlansPage() {
     setSelected(plan);
     setDraft(plan.content);
     setActiveRewriteBlock(null);
+    setPendingRewrite(null);
+    setLastAcceptedRewrite(null);
   }
 
   useEffect(() => {
@@ -224,6 +235,8 @@ export default function LessonPlansPage() {
       setSelected(plan);
       setDraft(plan.content);
       setActiveRewriteBlock(null);
+      setPendingRewrite(null);
+      setLastAcceptedRewrite(null);
       await loadPlans();
       setMessage(plan.generation.mode === "live_ai" ? "AI 教案初稿已生成，请逐项审核。" : "本地预览教案已生成；配置 API Key 后将自动切换真实 AI。 ");
     } catch (error) {
@@ -247,6 +260,7 @@ export default function LessonPlansPage() {
       const plan: LessonPlan = await response.json();
       setSelected(plan);
       setDraft(plan.content);
+      setLastAcceptedRewrite(null);
       await loadPlans();
       setMessage(`已保存为第 ${plan.version} 版。`);
     } catch (error) {
@@ -275,7 +289,10 @@ export default function LessonPlansPage() {
       const plan: LessonPlan = await response.json();
       setSelected(plan);
       await loadPlans();
-      if (!locked) setActiveRewriteBlock((current) => current === block ? null : current);
+      if (!locked) {
+        setActiveRewriteBlock((current) => current === block ? null : current);
+        setPendingRewrite((current) => current?.block === block ? null : current);
+      }
       setMessage(!locked ? `${blockLabels[block]}已锁定，AI 不会改写这一部分。` : `${blockLabels[block]}已解锁，可以再次局部改写。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "锁定状态更新失败");
@@ -300,18 +317,57 @@ export default function LessonPlansPage() {
       });
       if (!response.ok) throw new Error(await responseError(response));
       const result: LessonPlanBlockRewriteResult = await response.json();
-      if (block === "teaching_flow") {
-        setDraft((current) => current ? { ...current, teaching_flow: result.value as TeachingPhase[] } : current);
-      } else {
-        setDraft((current) => current ? { ...current, [block]: result.value as string[] } : current);
-      }
+      const before = block === "teaching_flow" ? draft.teaching_flow : draft[block];
+      setPendingRewrite({ block, before, after: result.value, mode: result.mode });
       setActiveRewriteBlock(null);
-      setMessage(`${blockLabels[block]}已生成${result.mode === "live_ai" ? " AI" : "本地预览"}改写草稿，请审核后点击“保存修订”。`);
+      setMessage(`${blockLabels[block]}已生成${result.mode === "live_ai" ? " AI" : "本地预览"}改写草稿，请先对比再决定是否接受。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "局部改写失败");
     } finally {
       setRewritingBlock(null);
     }
+  }
+
+  function applyBlockValue(block: LessonPlanBlock, value: string[] | TeachingPhase[]) {
+    if (block === "teaching_flow") {
+      setDraft((current) => current ? { ...current, teaching_flow: value as TeachingPhase[] } : current);
+    } else {
+      setDraft((current) => current ? { ...current, [block]: value as string[] } : current);
+    }
+  }
+
+  function acceptPendingRewrite() {
+    if (!pendingRewrite) return;
+    applyBlockValue(pendingRewrite.block, pendingRewrite.after);
+    setLastAcceptedRewrite({ block: pendingRewrite.block, before: pendingRewrite.before });
+    setMessage(`${blockLabels[pendingRewrite.block]}改写已接受但尚未保存，可继续手工调整或撤销。`);
+    setPendingRewrite(null);
+  }
+
+  function undoAcceptedRewrite() {
+    if (!lastAcceptedRewrite) return;
+    applyBlockValue(lastAcceptedRewrite.block, lastAcceptedRewrite.before);
+    setMessage(`已撤销上次对${blockLabels[lastAcceptedRewrite.block]}的 AI 改写。`);
+    setLastAcceptedRewrite(null);
+  }
+
+  function rewriteLines(value: string[] | TeachingPhase[], block: LessonPlanBlock) {
+    if (block !== "teaching_flow") return (value as string[]).map((item, index) => `${index + 1}. ${item}`);
+    return (value as TeachingPhase[]).map((item, index) => `${index + 1}. ${item.phase} · ${item.minutes} 分钟\n教师：${item.teacher_activity}\n学生：${item.student_activity}\n评价：${item.assessment}`);
+  }
+
+  function renderRewritePreview(block: LessonPlanBlock) {
+    if (!pendingRewrite || pendingRewrite.block !== block) return null;
+    return (
+      <section className="rewrite-review-panel" aria-label={`${blockLabels[block]}改写对比`}>
+        <header><div><strong>改写待审核</strong><span>{pendingRewrite.mode === "live_ai" ? "AI 生成" : "本地预览"}</span></div><small>接受后仍需“保存修订”才会写入版本历史</small></header>
+        <div className="rewrite-compare-grid">
+          <div><h4>修改前</h4>{rewriteLines(pendingRewrite.before, block).map((line, index) => <p key={index}>{line}</p>)}</div>
+          <div className="rewrite-after"><h4>修改后</h4>{rewriteLines(pendingRewrite.after, block).map((line, index) => <p key={index}>{line}</p>)}</div>
+        </div>
+        <footer><button type="button" onClick={() => setPendingRewrite(null)}>放弃改写</button><button type="button" className="accept" onClick={acceptPendingRewrite}>接受这次改写</button></footer>
+      </section>
+    );
   }
 
   function renderBlockTools(block: LessonPlanBlock, addItem?: () => void) {
@@ -367,6 +423,7 @@ export default function LessonPlansPage() {
       <section className={`lesson-editor-card ${isBlockLocked(field) ? "ai-locked" : ""}`}>
         <header><h3>{title}</h3>{renderBlockTools(field, () => addListItem(field))}</header>
         {renderRewriteBar(field)}
+        {renderRewritePreview(field)}
         <div className="lesson-list-editor">
           {draft[field].map((item, index) => (
             <div key={`${field}-${index}`}>
@@ -438,6 +495,7 @@ export default function LessonPlansPage() {
                   <a href={`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/export?format=docx`} title="导出当前已保存版本">导出 Word</a>
                   <a href={`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/export?format=pdf`} title="导出当前已保存版本">导出 PDF</a>
                   <button type="button" disabled={saving || minuteTotal !== selected.request.duration_minutes} onClick={save}>{saving ? "保存中…" : "保存修订"}</button>
+                  {lastAcceptedRewrite && <button className="undo-rewrite" type="button" onClick={undoAcceptedRewrite}>撤销 AI 改写</button>}
                 </div>
               </header>
 
@@ -467,6 +525,7 @@ export default function LessonPlansPage() {
                   </div>
                 </header>
                 {renderRewriteBar("teaching_flow")}
+                {renderRewritePreview("teaching_flow")}
                 <div className="lesson-flow-list">
                   {draft.teaching_flow.map((phase, index) => (
                     <article key={index}>

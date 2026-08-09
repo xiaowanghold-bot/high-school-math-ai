@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     question_bank_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "question-bank.sqlite3"
     )
+    question_media_dir: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "question-media"
+    )
     lesson_plan_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "lesson-plans.sqlite3"
     )

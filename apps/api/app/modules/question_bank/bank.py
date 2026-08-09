@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from io import BytesIO
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+from PIL import Image, UnidentifiedImageError
 
 from app.modules.math_verifier import MathVerifier
 from app.modules.question_bank.schemas import (
@@ -14,6 +18,10 @@ from app.modules.question_bank.schemas import (
     PublishDecision,
     QuestionBankStats,
     QuestionDetail,
+    QuestionImage,
+    QuestionImageMetadataCommand,
+    QuestionRevisionCommand,
+    QuestionRevisionResult,
     QuestionSearchPage,
     QuestionSummary,
     ReviewCommand,
@@ -32,9 +40,20 @@ class QuestionBank:
     write tables or derive publication rights themselves.
     """
 
-    def __init__(self, database_path: Path) -> None:
+    MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    MAX_IMAGES_PER_QUESTION = 8
+    MAX_IMAGE_PIXELS = 25_000_000
+    IMAGE_FORMATS = {
+        "PNG": ("image/png", ".png"),
+        "JPEG": ("image/jpeg", ".jpg"),
+        "WEBP": ("image/webp", ".webp"),
+    }
+
+    def __init__(self, database_path: Path, media_root: Path | None = None) -> None:
         self.database_path = database_path
+        self.media_root = (media_root or database_path.parent / "question-media").resolve()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.media_root.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -113,9 +132,36 @@ class QuestionBank:
                     UNIQUE(package_id, question_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS question_images (
+                    image_id TEXT PRIMARY KEY,
+                    question_id TEXT NOT NULL REFERENCES questions(question_id),
+                    placement TEXT NOT NULL CHECK (placement IN ('stem', 'solution')),
+                    original_filename TEXT NOT NULL,
+                    stored_filename TEXT NOT NULL UNIQUE,
+                    mime_type TEXT NOT NULL,
+                    width INTEGER NOT NULL,
+                    height INTEGER NOT NULL,
+                    alt_text TEXT NOT NULL,
+                    caption TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS question_image_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    image_id TEXT NOT NULL,
+                    question_id TEXT NOT NULL REFERENCES questions(question_id),
+                    action TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    event_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_questions_chapter ON questions(chapter);
                 CREATE INDEX IF NOT EXISTS idx_questions_review ON questions(review_status);
                 CREATE INDEX IF NOT EXISTS idx_questions_verification ON questions(verification_status);
+                CREATE INDEX IF NOT EXISTS idx_question_images_question ON question_images(question_id, placement, sort_order);
                 """
             )
             # Older prototypes allowed an approval before verification. Preserve
@@ -359,11 +405,308 @@ class QuestionBank:
                     (question_id,),
                 ).fetchall()
             ]
+            images = self._list_images(connection, question_id)
+            revision_count = connection.execute(
+                "SELECT COUNT(*) FROM question_revisions WHERE question_id = ?",
+                (question_id,),
+            ).fetchone()[0]
         return QuestionDetail(
             **self._summary(row).model_dump(),
             raw=json.loads(row["raw_json"]),
             reviews=reviews,
+            images=images,
+            revision_count=revision_count,
         )
+
+    def revise(self, question_id: str, command: QuestionRevisionCommand) -> QuestionRevisionResult:
+        now = self._now()
+        package_id = f"teacher-{uuid4().hex}"
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(question_id)
+            self._ensure_editable(row)
+            raw = json.loads(row["raw_json"])
+            previous_raw = row["raw_json"]
+            previous_options = raw.get("options") or []
+            next_options = [
+                {"key": item.key, "plain_text": item.text, "latex": None}
+                for item in command.options
+            ]
+            previous_option_values = [
+                (str(item.get("key", "")), str(item.get("latex") or item.get("plain_text") or "").strip())
+                for item in previous_options
+            ]
+            next_option_values = [(item.key, item.text.strip()) for item in command.options]
+            verification_reset = any(
+                (
+                    command.stem_plain.strip() != str(row["stem_plain"]).strip(),
+                    (command.stem_latex or "").strip() != (row["stem_latex"] or "").strip(),
+                    next_option_values != previous_option_values,
+                    (command.answer_value or "").strip() != (row["answer_value"] or "").strip(),
+                )
+            )
+            raw["stem"] = {
+                **(raw.get("stem") or {}),
+                "plain_text": command.stem_plain.strip(),
+                "latex": command.stem_latex.strip() if command.stem_latex else None,
+            }
+            raw["options"] = next_options
+            raw["answer"] = {**(raw.get("answer") or {}), "value": command.answer_value}
+            raw["solutions"] = [{
+                "method": command.solution_method.strip(),
+                "steps_latex": [step.strip() for step in command.solution_steps if step.strip()],
+                "final_answer": command.final_answer,
+                "author_type": "teacher_authored",
+                "review_status": "ready_for_teacher_review",
+            }]
+            raw["last_manual_revision"] = {
+                "editor_id": command.editor_id,
+                "note": command.note,
+                "created_at": now,
+            }
+            verification_status = row["verification_status"]
+            status = "verified" if verification_status == "passed" else "imported"
+            if verification_reset:
+                verification_status = "needs_math_review"
+                status = "imported"
+                raw["verification"] = {
+                    "status": "needs_math_review",
+                    "methods": ["teacher_revision_requires_reverification"],
+                    "details": ["教师修改了题干、选项或答案，旧验证结论已失效。"],
+                }
+            revised_raw = json.dumps(raw, ensure_ascii=False)
+            cursor = connection.execute(
+                """
+                INSERT INTO question_revisions
+                (package_id, question_id, previous_raw_json, revised_raw_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (package_id, question_id, previous_raw, revised_raw, now),
+            )
+            connection.execute(
+                """
+                UPDATE questions SET status = ?, review_status = 'pending', stem_plain = ?,
+                    stem_latex = ?, answer_value = ?, verification_status = ?,
+                    solution_approved = 0, raw_json = ?, updated_at = ?
+                WHERE question_id = ?
+                """,
+                (
+                    status,
+                    command.stem_plain.strip(),
+                    command.stem_latex.strip() if command.stem_latex else None,
+                    command.answer_value,
+                    verification_status,
+                    revised_raw,
+                    now,
+                    question_id,
+                ),
+            )
+            revision_id = int(cursor.lastrowid)
+        return QuestionRevisionResult(
+            question=self.get_question(question_id),
+            revision_id=revision_id,
+            verification_reset=verification_reset,
+        )
+
+    def add_image(
+        self,
+        question_id: str,
+        content: bytes,
+        original_filename: str,
+        placement: str,
+        alt_text: str,
+        caption: str,
+        actor_id: str = "owner_teacher",
+    ) -> QuestionImage:
+        if placement not in {"stem", "solution"}:
+            raise QuestionBankError("图片位置只能是题干或解析")
+        mime_type, extension, width, height = self._inspect_image(content)
+        image_id = f"img_{uuid4().hex}"
+        stored_filename = f"{image_id}{extension}"
+        now = self._now()
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(question_id)
+            self._ensure_editable(row)
+            count = connection.execute(
+                "SELECT COUNT(*) FROM question_images WHERE question_id = ?", (question_id,)
+            ).fetchone()[0]
+            if count >= self.MAX_IMAGES_PER_QUESTION:
+                raise QuestionBankError(f"每道题最多上传 {self.MAX_IMAGES_PER_QUESTION} 张图片")
+            sort_order = connection.execute(
+                "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM question_images WHERE question_id = ? AND placement = ?",
+                (question_id, placement),
+            ).fetchone()[0]
+            (self.media_root / stored_filename).write_bytes(content)
+            connection.execute(
+                """
+                INSERT INTO question_images
+                (image_id, question_id, placement, original_filename, stored_filename,
+                 mime_type, width, height, alt_text, caption, sort_order, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    image_id, question_id, placement, Path(original_filename).name,
+                    stored_filename, mime_type, width, height, alt_text.strip(),
+                    caption.strip(), sort_order, now, now,
+                ),
+            )
+            self._record_image_event(
+                connection, image_id, question_id, "added", actor_id,
+                {"placement": placement, "filename": Path(original_filename).name}, now,
+            )
+            if placement == "stem":
+                self._invalidate_verification(connection, question_id, "题干配图已新增，需重新验证。", now)
+            image = connection.execute(
+                "SELECT * FROM question_images WHERE image_id = ?", (image_id,)
+            ).fetchone()
+        return self._image_view(image)
+
+    def update_image(
+        self,
+        question_id: str,
+        image_id: str,
+        command: QuestionImageMetadataCommand,
+        actor_id: str = "owner_teacher",
+    ) -> QuestionImage:
+        now = self._now()
+        with self._connect() as connection:
+            question = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if question is None:
+                raise KeyError(question_id)
+            self._ensure_editable(question)
+            image = self._get_image_row(connection, question_id, image_id)
+            placement = command.placement or image["placement"]
+            alt_text = image["alt_text"] if command.alt_text is None else command.alt_text.strip()
+            caption = image["caption"] if command.caption is None else command.caption.strip()
+            placement_changed = placement != image["placement"]
+            connection.execute(
+                """
+                UPDATE question_images SET placement = ?, alt_text = ?, caption = ?, updated_at = ?
+                WHERE image_id = ? AND question_id = ?
+                """,
+                (placement, alt_text, caption, now, image_id, question_id),
+            )
+            self._record_image_event(
+                connection, image_id, question_id, "metadata_updated", actor_id,
+                {"placement": placement, "alt_text": alt_text, "caption": caption}, now,
+            )
+            if placement_changed and "stem" in {placement, image["placement"]}:
+                self._invalidate_verification(connection, question_id, "题干配图位置已变更，需重新验证。", now)
+            updated = self._get_image_row(connection, question_id, image_id)
+        return self._image_view(updated)
+
+    def replace_image(
+        self,
+        question_id: str,
+        image_id: str,
+        content: bytes,
+        original_filename: str,
+        actor_id: str = "owner_teacher",
+    ) -> QuestionImage:
+        mime_type, extension, width, height = self._inspect_image(content)
+        now = self._now()
+        with self._connect() as connection:
+            question = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if question is None:
+                raise KeyError(question_id)
+            self._ensure_editable(question)
+            image = self._get_image_row(connection, question_id, image_id)
+            old_path = self.media_root / image["stored_filename"]
+            stored_filename = f"{image_id}-{uuid4().hex[:8]}{extension}"
+            new_path = self.media_root / stored_filename
+            new_path.write_bytes(content)
+            connection.execute(
+                """
+                UPDATE question_images SET original_filename = ?, stored_filename = ?, mime_type = ?,
+                    width = ?, height = ?, updated_at = ? WHERE image_id = ? AND question_id = ?
+                """,
+                (Path(original_filename).name, stored_filename, mime_type, width, height, now, image_id, question_id),
+            )
+            self._record_image_event(
+                connection, image_id, question_id, "file_replaced", actor_id,
+                {"filename": Path(original_filename).name}, now,
+            )
+            if image["placement"] == "stem":
+                self._invalidate_verification(connection, question_id, "题干配图已替换，需重新验证。", now)
+            updated = self._get_image_row(connection, question_id, image_id)
+        if old_path.exists():
+            old_path.unlink()
+        return self._image_view(updated)
+
+    def delete_image(
+        self, question_id: str, image_id: str, actor_id: str = "owner_teacher"
+    ) -> None:
+        now = self._now()
+        with self._connect() as connection:
+            question = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if question is None:
+                raise KeyError(question_id)
+            self._ensure_editable(question)
+            image = self._get_image_row(connection, question_id, image_id)
+            path = self.media_root / image["stored_filename"]
+            self._record_image_event(
+                connection, image_id, question_id, "deleted", actor_id,
+                {"filename": image["original_filename"], "placement": image["placement"]}, now,
+            )
+            connection.execute(
+                "DELETE FROM question_images WHERE image_id = ? AND question_id = ?",
+                (image_id, question_id),
+            )
+            if image["placement"] == "stem":
+                self._invalidate_verification(connection, question_id, "题干配图已删除，需重新验证。", now)
+        if path.exists():
+            path.unlink()
+
+    def reorder_images(
+        self, question_id: str, image_ids: list[str], actor_id: str = "owner_teacher"
+    ) -> list[QuestionImage]:
+        now = self._now()
+        with self._connect() as connection:
+            question = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if question is None:
+                raise KeyError(question_id)
+            self._ensure_editable(question)
+            rows = connection.execute(
+                "SELECT image_id FROM question_images WHERE question_id = ? ORDER BY placement, sort_order",
+                (question_id,),
+            ).fetchall()
+            existing = {row["image_id"] for row in rows}
+            if len(image_ids) != len(set(image_ids)) or set(image_ids) != existing:
+                raise QuestionBankError("排序必须包含该题当前的全部图片，且不能重复")
+            for index, current_id in enumerate(image_ids):
+                connection.execute(
+                    "UPDATE question_images SET sort_order = ?, updated_at = ? WHERE image_id = ?",
+                    (index, now, current_id),
+                )
+            self._record_image_event(
+                connection, "collection", question_id, "reordered", actor_id,
+                {"image_ids": image_ids}, now,
+            )
+            images = self._list_images(connection, question_id)
+        return images
+
+    def image_path(self, question_id: str, image_id: str) -> tuple[Path, str]:
+        with self._connect() as connection:
+            image = self._get_image_row(connection, question_id, image_id)
+        path = (self.media_root / image["stored_filename"]).resolve()
+        if self.media_root not in path.parents or not path.is_file():
+            raise KeyError(image_id)
+        return path, str(image["mime_type"])
 
     def review(self, question_id: str, command: ReviewCommand) -> ReviewResult:
         reviewed_at = self._now()
@@ -523,6 +866,118 @@ class QuestionBank:
             source_document=row["source_document"], source_page_start=row["source_page_start"],
             source_page_end=row["source_page_end"], license_status=row["license_status"],
             publication_blockers=self._publication_blockers(row),
+        )
+
+    @staticmethod
+    def _ensure_editable(row: sqlite3.Row) -> None:
+        if row["status"] == "published":
+            raise QuestionBankError("已发布题目不可直接覆盖，请先创建新的私有版本")
+
+    def _inspect_image(self, content: bytes) -> tuple[str, str, int, int]:
+        if not content:
+            raise QuestionBankError("图片文件为空")
+        if len(content) > self.MAX_IMAGE_BYTES:
+            raise QuestionBankError("图片不能超过 8 MB")
+        try:
+            with Image.open(BytesIO(content)) as image:
+                image_format = image.format
+                width, height = image.size
+                if image_format not in self.IMAGE_FORMATS:
+                    raise QuestionBankError("仅支持 PNG、JPEG 和 WebP 图片")
+                if width < 1 or height < 1 or width * height > self.MAX_IMAGE_PIXELS:
+                    raise QuestionBankError("图片尺寸无效或像素总量超过 2500 万")
+                image.verify()
+        except QuestionBankError:
+            raise
+        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            raise QuestionBankError("文件不是有效的 PNG、JPEG 或 WebP 图片") from exc
+        mime_type, extension = self.IMAGE_FORMATS[image_format]
+        return mime_type, extension, width, height
+
+    def _get_image_row(
+        self, connection: sqlite3.Connection, question_id: str, image_id: str
+    ) -> sqlite3.Row:
+        row = connection.execute(
+            "SELECT * FROM question_images WHERE question_id = ? AND image_id = ?",
+            (question_id, image_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(image_id)
+        return row
+
+    def _list_images(
+        self, connection: sqlite3.Connection, question_id: str
+    ) -> list[QuestionImage]:
+        rows = connection.execute(
+            """
+            SELECT * FROM question_images WHERE question_id = ?
+            ORDER BY CASE placement WHEN 'stem' THEN 0 ELSE 1 END, sort_order, created_at
+            """,
+            (question_id,),
+        ).fetchall()
+        return [self._image_view(row) for row in rows]
+
+    @staticmethod
+    def _image_view(row: sqlite3.Row) -> QuestionImage:
+        question_id = str(row["question_id"])
+        image_id = str(row["image_id"])
+        return QuestionImage(
+            image_id=image_id,
+            question_id=question_id,
+            placement=row["placement"],
+            original_filename=row["original_filename"],
+            mime_type=row["mime_type"],
+            width=row["width"],
+            height=row["height"],
+            alt_text=row["alt_text"],
+            caption=row["caption"],
+            sort_order=row["sort_order"],
+            content_url=f"/api/v1/questions/{question_id}/images/{image_id}/content",
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _record_image_event(
+        connection: sqlite3.Connection,
+        image_id: str,
+        question_id: str,
+        action: str,
+        actor_id: str,
+        payload: dict[str, Any],
+        created_at: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO question_image_events
+            (image_id, question_id, action, actor_id, event_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (image_id, question_id, action, actor_id, json.dumps(payload, ensure_ascii=False), created_at),
+        )
+
+    @staticmethod
+    def _invalidate_verification(
+        connection: sqlite3.Connection, question_id: str, reason: str, updated_at: str
+    ) -> None:
+        row = connection.execute(
+            "SELECT raw_json FROM questions WHERE question_id = ?", (question_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(question_id)
+        raw = json.loads(row["raw_json"])
+        raw["verification"] = {
+            "status": "needs_math_review",
+            "methods": ["question_media_changed"],
+            "details": [reason],
+        }
+        connection.execute(
+            """
+            UPDATE questions SET status = 'imported', review_status = 'pending',
+                verification_status = 'needs_math_review', solution_approved = 0,
+                raw_json = ?, updated_at = ? WHERE question_id = ?
+            """,
+            (json.dumps(raw, ensure_ascii=False), updated_at, question_id),
         )
 
     @staticmethod

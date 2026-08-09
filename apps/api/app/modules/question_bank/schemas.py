@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 
 ReviewDecision = Literal["approved", "changes_requested", "rejected"]
+QuestionImagePlacement = Literal["stem", "solution"]
 
 
 class ImportResult(BaseModel):
@@ -57,6 +58,57 @@ class QuestionSummary(BaseModel):
 class QuestionDetail(QuestionSummary):
     raw: dict[str, Any]
     reviews: list[dict[str, Any]]
+    images: list["QuestionImage"] = Field(default_factory=list)
+    revision_count: int = 0
+
+
+class QuestionOptionDraft(BaseModel):
+    key: str = Field(min_length=1, max_length=12)
+    text: str = Field(default="", max_length=4000)
+
+
+class QuestionRevisionCommand(BaseModel):
+    stem_plain: str = Field(min_length=1, max_length=20000)
+    stem_latex: str | None = Field(default=None, max_length=20000)
+    options: list[QuestionOptionDraft] = Field(default_factory=list, max_length=20)
+    answer_value: str | None = Field(default=None, max_length=4000)
+    solution_method: str = Field(default="教师修订", max_length=500)
+    solution_steps: list[str] = Field(default_factory=list, max_length=100)
+    final_answer: str | None = Field(default=None, max_length=4000)
+    editor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+    note: str = Field(default="教师在审核台手工修订", max_length=2000)
+
+
+class QuestionRevisionResult(BaseModel):
+    question: QuestionDetail
+    revision_id: int
+    verification_reset: bool
+
+
+class QuestionImage(BaseModel):
+    image_id: str
+    question_id: str
+    placement: QuestionImagePlacement
+    original_filename: str
+    mime_type: str
+    width: int
+    height: int
+    alt_text: str
+    caption: str
+    sort_order: int
+    content_url: str
+    created_at: str
+    updated_at: str
+
+
+class QuestionImageMetadataCommand(BaseModel):
+    placement: QuestionImagePlacement | None = None
+    alt_text: str | None = Field(default=None, max_length=500)
+    caption: str | None = Field(default=None, max_length=1000)
+
+
+class QuestionImageOrderCommand(BaseModel):
+    image_ids: list[str] = Field(min_length=1, max_length=8)
 
 
 class QuestionSearchPage(BaseModel):

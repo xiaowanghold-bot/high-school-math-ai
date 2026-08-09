@@ -2,11 +2,21 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.modules.math_verifier import MathVerifier
-from app.modules.question_bank import QuestionBank, QuestionBankError, ReviewCommand
+from app.modules.question_bank import (
+    QuestionBank,
+    QuestionBankError,
+    QuestionImage,
+    QuestionImageMetadataCommand,
+    QuestionImageOrderCommand,
+    QuestionRevisionCommand,
+    QuestionRevisionResult,
+    ReviewCommand,
+)
 from app.modules.question_bank.schemas import (
     CurationResult,
     ImportBatchView,
@@ -25,7 +35,7 @@ router = APIRouter(tags=["question-bank"])
 @lru_cache
 def get_question_bank() -> QuestionBank:
     settings = get_settings()
-    bank = QuestionBank(settings.question_bank_db)
+    bank = QuestionBank(settings.question_bank_db, settings.question_media_dir)
     if settings.pilot_batch_json.exists():
         bank.import_batch(settings.pilot_batch_json)
     if settings.set_curation_json.exists():
@@ -138,6 +148,114 @@ def get_question(question_id: str) -> QuestionDetail:
         return get_question_bank().get_question(question_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="题目不存在") from exc
+
+
+@router.patch("/questions/{question_id}", response_model=QuestionRevisionResult)
+def revise_question(
+    question_id: str, command: QuestionRevisionCommand
+) -> QuestionRevisionResult:
+    try:
+        return get_question_bank().revise(question_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/questions/{question_id}/images", response_model=QuestionImage, status_code=201)
+async def upload_question_image(
+    question_id: str,
+    file: UploadFile = File(...),
+    placement: str = Form("stem"),
+    alt_text: str = Form(""),
+    caption: str = Form(""),
+    actor_id: str = Form("owner_teacher"),
+) -> QuestionImage:
+    try:
+        return get_question_bank().add_image(
+            question_id,
+            await file.read(),
+            file.filename or "image",
+            placement,
+            alt_text,
+            caption,
+            actor_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/questions/{question_id}/images/{image_id}", response_model=QuestionImage
+)
+def update_question_image(
+    question_id: str, image_id: str, command: QuestionImageMetadataCommand
+) -> QuestionImage:
+    try:
+        return get_question_bank().update_image(question_id, image_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="图片不存在") from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.put(
+    "/questions/{question_id}/images/{image_id}/file", response_model=QuestionImage
+)
+async def replace_question_image(
+    question_id: str,
+    image_id: str,
+    file: UploadFile = File(...),
+    actor_id: str = Form("owner_teacher"),
+) -> QuestionImage:
+    try:
+        return get_question_bank().replace_image(
+            question_id,
+            image_id,
+            await file.read(),
+            file.filename or "image",
+            actor_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="图片不存在") from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/questions/{question_id}/images/{image_id}", status_code=204,
+)
+def delete_question_image(question_id: str, image_id: str) -> Response:
+    try:
+        get_question_bank().delete_image(question_id, image_id)
+        return Response(status_code=204)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="图片不存在") from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.put("/questions/{question_id}/images/order", response_model=list[QuestionImage])
+def reorder_question_images(
+    question_id: str, command: QuestionImageOrderCommand
+) -> list[QuestionImage]:
+    try:
+        return get_question_bank().reorder_images(question_id, command.image_ids)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/questions/{question_id}/images/{image_id}/content")
+def question_image_content(question_id: str, image_id: str) -> FileResponse:
+    try:
+        path, mime_type = get_question_bank().image_path(question_id, image_id)
+        return FileResponse(path, media_type=mime_type)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="图片不存在") from exc
 
 
 @router.post("/questions/{question_id}/review", response_model=ReviewResult)

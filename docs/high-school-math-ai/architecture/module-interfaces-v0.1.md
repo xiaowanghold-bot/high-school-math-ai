@@ -12,12 +12,20 @@
 import_batch(source_document_id, policy) -> ImportBatch
 get_question(question_id, revision?) -> QuestionView
 save_revision(question_id, draft, actor) -> QuestionRevision
+add_image(question_id, file, metadata, actor) -> QuestionImage
+replace_image(question_id, image_id, file, actor) -> QuestionImage
+update_image(question_id, image_id, metadata, actor) -> QuestionImage
+reorder_images(question_id, image_ids, actor) -> list[QuestionImage]
+delete_image(question_id, image_id, actor) -> None
 transition(question_id, action, evidence, actor) -> QuestionState
 ```
 
 ### 不变量
 
 - 发布过的版本不可修改。
+- 人工修订不得覆盖来源版本，必须写入修订历史。
+- 题干、选项、答案或题干配图发生变化时，旧数学验证自动失效；只修改解析或解析配图时可保留验证状态。
+- 图片二进制和 SQLite/文件系统细节封装在 `QuestionBank` 内，页面只接收稳定的图片对象和内容地址。
 - `publish` 必须同时通过权利门禁、验证门禁和教师确认。
 - 私人题不能因修改标签而变为公共题。
 

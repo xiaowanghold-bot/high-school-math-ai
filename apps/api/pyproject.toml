@@ -9,7 +9,9 @@ description = "FastAPI backend for the high-school math teacher workspace"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi==0.141.1",
+  "pillow>=11.3,<12",
   "pydantic-settings>=2.10,<3",
+  "python-multipart>=0.0.20,<1",
   "python-docx>=1.2,<2",
   "reportlab>=4.4,<5",
   "uvicorn[standard]>=0.35,<1",
