@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type CurriculumNode = {
@@ -33,9 +32,9 @@ export default function CurriculumPage() {
   const chapters = root?.children ?? [];
   return (
     <div className="page-content">
-      <section className="page-title"><div><p className="eyebrow">教材备课</p><h1>人教 A 版 · 必修第一册</h1><p className="subtle">按章节、节和知识点定位教学内容，再进入教案工作区。</p></div><Link className="primary-button" href="/lesson-plans">进入教案工作区</Link></section>
+      <section className="page-title"><div><p className="eyebrow">教材备课</p><h1>人教 A 版 · 必修第一册</h1><p className="subtle">按章节、节和知识点进入备课工作区。</p></div><button className="primary-button" type="button">从当前进度备课</button></section>
       {error && <div className="notice warning">{error}</div>}
-      {!root && !error && <div className="notice" role="status">正在读取知识点树…</div>}
+      {!root && !error && <div className="notice">正在读取知识点树…</div>}
       <div className="curriculum-grid">
         {chapters.map((chapter) => (
           <article className="curriculum-card" key={chapter.node_id}>

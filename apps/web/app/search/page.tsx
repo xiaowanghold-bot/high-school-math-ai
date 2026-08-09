@@ -406,7 +406,7 @@ export default function SearchPage() {
         <button className="primary-button" type="button" onClick={showImportStatus}>导入记录</button>
       </section>
 
-      {message && <div className="notice info-notice" role="status" aria-live="polite"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
+      {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
       <section className="quality-strip" aria-label="题库质量概览">
         <div><span>试点题目</span><strong>{stats?.total ?? "—"}</strong><small>本地私有题库</small></div>
@@ -418,9 +418,9 @@ export default function SearchPage() {
       </section>
 
       <form className="question-filters" onSubmit={submitSearch}>
-        <label className="filter-field search-filter"><span className="filter-label">关键词</span><span className="search-field"><span aria-hidden="true">⌕</span><input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="例如：集合、椭圆、概率" /></span></label>
-        <label className="filter-field"><span className="filter-label">教材章节</span><select value={chapter} onChange={(event) => setChapter(event.target.value)}><option value="">全部章节</option>{Object.keys(stats?.by_chapter ?? {}).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label className="filter-field"><span className="filter-label">质量状态</span><select value={verification} onChange={(event) => setVerification(event.target.value)}><option value="">全部质量状态</option><option value="passed">验证通过</option><option value="needs_formula_review">待公式校正</option><option value="needs_math_review">待数学验算</option><option value="source_inconsistency_detected">来源存在矛盾</option></select></label>
+        <label className="search-field"><span>⌕</span><input aria-label="搜索题目" value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="搜索题干、章节或来源，例如：集合、椭圆、概率" /></label>
+        <select value={chapter} onChange={(event) => setChapter(event.target.value)} aria-label="按章节筛选"><option value="">全部章节</option>{Object.keys(stats?.by_chapter ?? {}).map((item) => <option key={item} value={item}>{item}</option>)}</select>
+        <select value={verification} onChange={(event) => setVerification(event.target.value)} aria-label="按验证状态筛选"><option value="">全部质量状态</option><option value="passed">验证通过</option><option value="needs_formula_review">待公式校正</option><option value="needs_math_review">待数学验算</option><option value="source_inconsistency_detected">来源存在矛盾</option></select>
         <button className="primary-button" type="submit">检索</button>
       </form>
 
@@ -428,7 +428,7 @@ export default function SearchPage() {
 
       <div className="question-layout">
         <section className="question-results" aria-label="题目列表">
-          <div className="results-heading" aria-live="polite"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong><span>图片固定在详情区</span></div>
+          <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong><span>图片不进入列表，保持浏览稳定</span></div>
           <div className="result-list">
             {items.map((item, index) => <button className={selectedId === item.question_id ? "question-row selected" : "question-row"} type="button" key={item.question_id} onClick={() => setSelectedId(item.question_id)}><span className="question-index">{String(index + 1).padStart(2, "0")}</span><span className="question-main"><span className="question-tags"><em>{item.question_type === "single_choice" ? "单选题" : "解答题"}</em><i className={`quality-tag ${item.verification_status}`}>{verificationLabels[item.verification_status] ?? item.verification_status}</i></span><b>{item.stem_plain}</b><small>{item.chapter} · 难度 {item.difficulty}/5</small></span><span className="review-mark">{reviewLabels[item.review_status] ?? item.review_status}</span></button>)}
             {!loading && items.length === 0 && <div className="empty-state"><strong>没有匹配题目</strong><p>换一个关键词或清空筛选条件。</p></div>}

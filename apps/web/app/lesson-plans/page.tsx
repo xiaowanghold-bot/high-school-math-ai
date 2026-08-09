@@ -448,7 +448,7 @@ export default function LessonPlansPage() {
         <div className="lesson-safety-badge"><strong>教师审核优先</strong><span>生成内容默认仅自己可见</span></div>
       </section>
 
-      {message && <div className="notice info-notice" role="status" aria-live="polite"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
+      {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
       <div className="lesson-builder-layout">
         <aside className="lesson-control-panel">
