@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     lesson_plan_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "lesson-plans.sqlite3"
     )
+    exam_paper_db: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "exam-papers.sqlite3"
+    )
+    exam_paper_asset_dir: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "exam-paper-assets"
+    )
     lesson_export_dir: Path = Field(default=PROJECT_ROOT / "output")
     cjk_font_regular: Path | None = None
     cjk_font_bold: Path | None = None
