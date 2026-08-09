@@ -27,6 +27,15 @@ from app.modules.question_bank.schemas import (
     QuestionSearchPage,
     ReviewResult,
 )
+from app.modules.question_variants import (
+    LocalDiagnosticVariantProvider,
+    OpenAIQuestionVariantProvider,
+    QuestionVariantGenerationRequest,
+    QuestionVariantGenerationResult,
+    QuestionVariantProviderError,
+    QuestionVariantService,
+    QuestionVariantServiceError,
+)
 
 
 router = APIRouter(tags=["question-bank"])
@@ -49,6 +58,25 @@ def get_question_bank() -> QuestionBank:
     if settings.function_curation_json.exists():
         bank.apply_curation_package(settings.function_curation_json, MathVerifier())
     return bank
+
+
+@lru_cache
+def get_question_variant_service() -> QuestionVariantService:
+    settings = get_settings()
+    use_openai = settings.question_variant_provider == "openai" or (
+        settings.question_variant_provider == "auto" and bool(settings.openai_api_key)
+    )
+    provider = (
+        OpenAIQuestionVariantProvider(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            reasoning_effort=settings.openai_reasoning_effort,
+            timeout_seconds=settings.openai_timeout_seconds,
+        )
+        if use_openai
+        else LocalDiagnosticVariantProvider()
+    )
+    return QuestionVariantService(question_bank=get_question_bank(), provider=provider)
 
 
 @router.post("/question-bank/import-pilot", response_model=ImportResult)
@@ -148,6 +176,24 @@ def get_question(question_id: str) -> QuestionDetail:
         return get_question_bank().get_question(question_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="题目不存在") from exc
+
+
+@router.post(
+    "/questions/{question_id}/variants",
+    response_model=QuestionVariantGenerationResult,
+    status_code=201,
+)
+def generate_question_variant(
+    question_id: str, command: QuestionVariantGenerationRequest
+) -> QuestionVariantGenerationResult:
+    try:
+        return get_question_variant_service().generate(question_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+    except (QuestionVariantServiceError, QuestionBankError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except QuestionVariantProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.patch("/questions/{question_id}", response_model=QuestionRevisionResult)

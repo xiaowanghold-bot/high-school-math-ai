@@ -73,6 +73,17 @@ type Stats = {
   publishable: number;
 };
 
+type VariantKind = "diagnostic" | "numeric" | "difficulty" | "context";
+
+type QuestionVariantResult = {
+  question: QuestionDetail;
+  source_question_id: string;
+  provider: string;
+  model: string;
+  mode: "local_rule" | "live_ai";
+  warnings: string[];
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const imageAccept = "image/png,image/jpeg,image/webp";
 
@@ -149,6 +160,9 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [variantKind, setVariantKind] = useState<VariantKind>("diagnostic");
+  const [variantDifficulty, setVariantDifficulty] = useState("");
+  const [variantInstruction, setVariantInstruction] = useState("");
 
   const searchUrl = useMemo(() => {
     const params = new URLSearchParams({ page_size: "50" });
@@ -264,6 +278,38 @@ export default function SearchPage() {
     const response = await fetch(`${apiBase}/api/v1/questions/${selectedId}/publish`, { method: "POST" });
     const decision = await response.json();
     setMessage(decision.allowed ? "全部门禁通过，题目已发布。" : `暂不可发布：${decision.blockers.map((item: string) => blockerLabels[item] ?? item).join("、")}`);
+  }
+
+  async function generateVariant() {
+    if (!selectedId || !detail) return;
+    setWorking(true);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/questions/${selectedId}/variants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variant_kind: variantKind,
+          target_difficulty: variantDifficulty ? Number(variantDifficulty) : null,
+          instruction: variantInstruction.trim(),
+          teacher_id: "owner_teacher",
+        }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result: QuestionVariantResult = await response.json();
+      setItems((current) => [result.question, ...current.filter((item) => item.question_id !== result.question.question_id)]);
+      setTotal((current) => current + 1);
+      setSelectedId(result.question.question_id);
+      setDetail(result.question);
+      setEditDraft(draftFromDetail(result.question));
+      setVariantInstruction("");
+      await loadStats();
+      const modeLabel = result.mode === "local_rule" ? "本地规则" : `大模型 ${result.model}`;
+      setMessage(`已由${modeLabel}生成私有变式草稿，并进入当前审核流程。${result.warnings.join(" ")}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "题目变式生成失败");
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function showImportStatus() {
@@ -449,6 +495,15 @@ export default function SearchPage() {
               <div className="answer-line"><span>{detail.verification_status === "passed" ? "独立验证答案" : "当前答案"}</span><strong>{detail.raw.verification?.computed_answer || detail.answer_value || "待独立求解"}</strong></div>
               {!!detail.raw.solutions?.[0]?.steps_latex?.length && <div className="solution-card"><header><span>自有解析草稿</span><strong>{detail.raw.solutions[0].method}</strong></header><ol>{detail.raw.solutions[0].steps_latex?.map((step, index) => <li key={index}><MathText text={step} /></li>)}</ol><small>需由教师确认后才可作为正式解析</small></div>}
               {renderImages("solution")}
+              <div className="question-editor-form">
+                <div className="editor-safety-note"><strong>生成私有变式</strong><span>只允许从独立验证通过的原题生成；新题保留母题和生成记录，并重新进入教师审核门禁。</span></div>
+                <div className="question-editor-two">
+                  <label><span>变式方式</span><select value={variantKind} onChange={(event) => setVariantKind(event.target.value as VariantKind)}><option value="diagnostic">错因诊断</option><option value="numeric">数值变式</option><option value="difficulty">难度变式</option><option value="context">情境变式</option></select></label>
+                  <label><span>目标难度</span><select value={variantDifficulty} onChange={(event) => setVariantDifficulty(event.target.value)}><option value="">自动</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level} / 5</option>)}</select></label>
+                </div>
+                <label><span>补充要求（可选）</span><input value={variantInstruction} onChange={(event) => setVariantInstruction(event.target.value)} placeholder="例如：突出补集范围，适合作为课堂纠错题" /></label>
+                <div className="question-editor-actions"><span>{detail.verification_status === "passed" ? "生成后自动打开新题，可继续修改题干、答案、解析和图片。" : "该题尚未验证，暂不能作为变式母题。"}</span><button className="primary" type="button" disabled={working || detail.verification_status !== "passed"} onClick={generateVariant}>{working ? "生成中…" : "生成变式草稿"}</button></div>
+              </div>
             </> : <div className="question-editor-form">
               <div className="editor-safety-note"><strong>修改即生成新版本</strong><span>题干、选项、答案或题干图变化会自动退回数学验算；来源原文不会被覆盖。</span></div>
               <label><span>题干正文</span><textarea className="large" value={editDraft.stem_plain} onChange={(event) => setEditDraft({ ...editDraft, stem_plain: event.target.value })} /></label>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 from io import BytesIO
 from datetime import datetime, timezone
@@ -158,10 +159,23 @@ class QuestionBank:
                     created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS question_generation_runs (
+                    run_id TEXT PRIMARY KEY,
+                    source_question_id TEXT NOT NULL REFERENCES questions(question_id),
+                    output_question_id TEXT NOT NULL REFERENCES questions(question_id),
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    request_json TEXT NOT NULL,
+                    output_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_questions_chapter ON questions(chapter);
                 CREATE INDEX IF NOT EXISTS idx_questions_review ON questions(review_status);
                 CREATE INDEX IF NOT EXISTS idx_questions_verification ON questions(verification_status);
                 CREATE INDEX IF NOT EXISTS idx_question_images_question ON question_images(question_id, placement, sort_order);
+                CREATE INDEX IF NOT EXISTS idx_question_generation_source ON question_generation_runs(source_question_id, created_at DESC);
                 """
             )
             # Older prototypes allowed an approval before verification. Preserve
@@ -510,6 +524,266 @@ class QuestionBank:
             revision_id=revision_id,
             verification_reset=verification_reset,
         )
+
+    def create_derived_question(
+        self,
+        source_question_id: str,
+        candidate: dict[str, Any],
+        *,
+        generation: dict[str, Any],
+    ) -> QuestionDetail:
+        """Persist a generated variant as a private, auditable question draft."""
+        now = self._now()
+        question_id = f"q_variant_{uuid4().hex[:12]}"
+        run_id = f"qrun_{uuid4().hex}"
+        batch_id = "generated-question-variants-v1"
+        created_files: list[Path] = []
+        required = (
+            "question_type",
+            "stem_plain",
+            "options",
+            "answer_value",
+            "solution_method",
+            "solution_steps",
+            "final_answer",
+            "difficulty",
+            "verification_status",
+            "verification_details",
+        )
+        missing = [key for key in required if key not in candidate]
+        if missing:
+            raise QuestionBankError(f"变式草稿缺少字段：{', '.join(missing)}")
+        try:
+            difficulty = int(candidate["difficulty"])
+        except (TypeError, ValueError) as exc:
+            raise QuestionBankError("变式难度必须是 1 到 5 的整数") from exc
+        if difficulty not in range(1, 6):
+            raise QuestionBankError("变式难度必须是 1 到 5 的整数")
+        if candidate["verification_status"] not in {"passed", "needs_math_review"}:
+            raise QuestionBankError("变式验证状态无效")
+
+        try:
+            with self._connect() as connection:
+                source_row = connection.execute(
+                    "SELECT * FROM questions WHERE question_id = ?", (source_question_id,)
+                ).fetchone()
+                if source_row is None:
+                    raise KeyError(source_question_id)
+                if source_row["verification_status"] != "passed":
+                    raise QuestionBankError("原题尚未通过独立数学验证，不能创建自动变式")
+                source_raw = json.loads(source_row["raw_json"])
+                source_rights = source_raw.get("source") or {}
+                allowed_uses = set(source_rights.get("allowed_uses") or [])
+                if (
+                    "adapt_question" not in allowed_uses
+                    and source_row["license_status"] not in {"commercial_granted", "public_permissive"}
+                ):
+                    raise QuestionBankError("原题权利记录未允许改编，不能生成变式")
+
+                options = [
+                    {"key": item["key"], "plain_text": item["text"], "latex": None}
+                    for item in candidate["options"]
+                ]
+                verification = {
+                    "status": candidate["verification_status"],
+                    "methods": [
+                        "verified_source_diagnostic_derivation"
+                        if candidate["verification_status"] == "passed"
+                        else "ai_generated_requires_independent_verification"
+                    ],
+                    "details": candidate["verification_details"],
+                }
+                source = {
+                    **source_rights,
+                    "document_name": f"{source_row['source_document']}（派生变式）",
+                    "source_question_number": question_id,
+                    "source_reference": f"基于题目 {source_question_id} 的私有变式",
+                    "derived_from_question_id": source_question_id,
+                }
+                raw = {
+                    "id": question_id,
+                    "status": "verified" if candidate["verification_status"] == "passed" else "imported",
+                    "visibility": "private",
+                    "language": "zh-CN",
+                    "stem": {
+                        "plain_text": str(candidate["stem_plain"]).strip(),
+                        "latex": candidate.get("stem_latex") or None,
+                        "assets": [],
+                    },
+                    "question_type": candidate["question_type"],
+                    "options": options,
+                    "answer": {
+                        "type": "option" if options else "text",
+                        "value": candidate["answer_value"],
+                        "status": "generated_draft",
+                        "alternatives": [],
+                    },
+                    "solutions": [
+                        {
+                            "method": candidate["solution_method"],
+                            "steps_latex": candidate["solution_steps"],
+                            "final_answer": candidate["final_answer"],
+                            "author_type": "rule_generated"
+                            if generation.get("mode") == "local_rule"
+                            else "ai_generated",
+                            "review_status": "ready_for_teacher_review",
+                        }
+                    ],
+                    "curriculum": source_raw.get("curriculum") or {},
+                    "exam": {
+                        "paper_family": "AI 变式草稿",
+                        "region": None,
+                        "year": None,
+                        "original_score": None,
+                        "competency_tags": (source_raw.get("exam") or {}).get("competency_tags", []),
+                    },
+                    "pedagogy": {
+                        **(source_raw.get("pedagogy") or {}),
+                        "difficulty": difficulty,
+                        "difficulty_confidence": 0.5,
+                        "usage_scenarios": ["教师私有变式", generation.get("request", {}).get("variant_kind", "")],
+                    },
+                    "verification": verification,
+                    "source": source,
+                    "provenance": {
+                        "created_by": "question_variant_service",
+                        "derived_from_question_ids": [source_question_id],
+                        "model_run_id": run_id,
+                        "provider": generation.get("provider"),
+                        "model": generation.get("model"),
+                    },
+                    "generation_request": generation.get("request") or {},
+                    "reviews": [],
+                    "created_at": now,
+                    "updated_at": now,
+                }
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO import_batches
+                    (batch_id, schema_version, source_file, publication_status,
+                     declared_count, rights_basis, imported_at)
+                    VALUES (?, '1.0', 'generated://question-variants', 'private_not_publishable',
+                            0, '派生题继承母题权利边界并保持私有待审核', ?)
+                    """,
+                    (batch_id, now),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO questions (
+                        question_id, batch_id, status, review_status, visibility, question_type,
+                        stem_plain, stem_latex, answer_value, volume, chapter, section,
+                        knowledge_point_ids, difficulty, verification_status,
+                        source_document, source_page_start, source_page_end,
+                        license_status, attribution_required, solution_approved,
+                        raw_json, created_at, updated_at
+                    ) VALUES (?, ?, ?, 'pending', 'private', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                    """,
+                    (
+                        question_id,
+                        batch_id,
+                        raw["status"],
+                        candidate["question_type"],
+                        raw["stem"]["plain_text"],
+                        raw["stem"]["latex"],
+                        candidate["answer_value"],
+                        source_row["volume"],
+                        source_row["chapter"],
+                        source_row["section"],
+                        source_row["knowledge_point_ids"],
+                        difficulty,
+                        candidate["verification_status"],
+                        source["document_name"],
+                        source_row["source_page_start"],
+                        source_row["source_page_end"],
+                        source_row["license_status"],
+                        source_row["attribution_required"],
+                        json.dumps(raw, ensure_ascii=False),
+                        now,
+                        now,
+                    ),
+                )
+                source_images = connection.execute(
+                    """
+                    SELECT * FROM question_images
+                    WHERE question_id = ? AND placement = 'stem'
+                    ORDER BY sort_order, created_at
+                    """,
+                    (source_question_id,),
+                ).fetchall()
+                for image in source_images:
+                    source_path = self.media_root / image["stored_filename"]
+                    if not source_path.is_file():
+                        raise QuestionBankError(f"原题图片文件缺失：{image['original_filename']}")
+                    image_id = f"img_{uuid4().hex}"
+                    extension = Path(image["stored_filename"]).suffix
+                    stored_filename = f"{image_id}{extension}"
+                    target_path = self.media_root / stored_filename
+                    shutil.copyfile(source_path, target_path)
+                    created_files.append(target_path)
+                    connection.execute(
+                        """
+                        INSERT INTO question_images
+                        (image_id, question_id, placement, original_filename, stored_filename,
+                         mime_type, width, height, alt_text, caption, sort_order, created_at, updated_at)
+                        VALUES (?, ?, 'stem', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            image_id,
+                            question_id,
+                            image["original_filename"],
+                            stored_filename,
+                            image["mime_type"],
+                            image["width"],
+                            image["height"],
+                            image["alt_text"],
+                            image["caption"],
+                            image["sort_order"],
+                            now,
+                            now,
+                        ),
+                    )
+                    self._record_image_event(
+                        connection,
+                        image_id,
+                        question_id,
+                        "cloned_from_source_question",
+                        str(generation.get("request", {}).get("teacher_id", "owner_teacher")),
+                        {"source_question_id": source_question_id, "source_image_id": image["image_id"]},
+                        now,
+                    )
+                connection.execute(
+                    """
+                    INSERT INTO question_generation_runs
+                    (run_id, source_question_id, output_question_id, provider, model, mode,
+                     request_json, output_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        source_question_id,
+                        question_id,
+                        str(generation.get("provider", "unknown")),
+                        str(generation.get("model", "unknown")),
+                        str(generation.get("mode", "unknown")),
+                        json.dumps(generation.get("request") or {}, ensure_ascii=False),
+                        json.dumps(candidate, ensure_ascii=False),
+                        now,
+                    ),
+                )
+                connection.execute(
+                    """
+                    UPDATE import_batches
+                    SET declared_count = (
+                        SELECT COUNT(*) FROM questions WHERE batch_id = ?
+                    ) WHERE batch_id = ?
+                    """,
+                    (batch_id, batch_id),
+                )
+        except Exception:
+            for path in created_files:
+                path.unlink(missing_ok=True)
+            raise
+        return self.get_question(question_id)
 
     def add_image(
         self,

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     cjk_font_regular: Path | None = None
     cjk_font_bold: Path | None = None
     lesson_plan_provider: str = "auto"
+    question_variant_provider: str = "auto"
     openai_api_key: str = ""
     openai_model: str = "gpt-5.6-terra"
     openai_reasoning_effort: str = "low"
