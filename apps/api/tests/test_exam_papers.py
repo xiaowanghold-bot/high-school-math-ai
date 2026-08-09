@@ -238,7 +238,25 @@ def test_paper_copies_stem_image_and_export_survives_source_deletion(tmp_path: P
         assert any(name.startswith("word/media/") for name in archive.namelist())
 
 
-def test_exam_paper_http_create_and_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("export_format", "edition", "content_prefix", "content_type"),
+    [
+        ("docx", "student", b"PK", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ("docx", "answer", b"PK", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ("docx", "blueprint", b"PK", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ("pdf", "student", b"%PDF", "application/pdf"),
+        ("pdf", "answer", b"%PDF", "application/pdf"),
+        ("pdf", "blueprint", b"%PDF", "application/pdf"),
+    ],
+)
+def test_exam_paper_http_create_and_export(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    export_format: str,
+    edition: str,
+    content_prefix: bytes,
+    content_type: str,
+) -> None:
     studio, _ = make_studio(tmp_path)
     renderer = ExamPaperDocumentRenderer(
         output_root=tmp_path / "output", asset_root=tmp_path / "paper-assets"
@@ -260,7 +278,9 @@ def test_exam_paper_http_create_and_export(tmp_path: Path, monkeypatch: pytest.M
     paper = response.json()
     download = client.get(
         f"/api/v1/exam-papers/{paper['exam_paper_id']}/export",
-        params={"format": "docx", "edition": "student"},
+        params={"format": export_format, "edition": edition},
     )
     assert download.status_code == 200
-    assert download.content.startswith(b"PK")
+    assert download.content.startswith(content_prefix)
+    assert download.headers["content-type"] == content_type
+    assert f"-{edition}.{export_format}" in download.headers["content-disposition"]
