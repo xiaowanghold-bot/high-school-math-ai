@@ -36,6 +36,10 @@ pnpm dev:web
 
 打开 `http://localhost:3000`。
 
+Web 默认通过同源 `/api/v1` 访问后端，再由 Next.js 转发到
+`http://127.0.0.1:8000`。若 API 位于其他主机或容器，可配置
+`MATH_AI_API_INTERNAL_URL`；浏览器不需要直接访问 API 端口。
+
 ### API
 
 ```powershell
@@ -62,6 +66,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest .\apps\api\tests
 pnpm typecheck:web
 pnpm build:web
+cd apps/web; npm run smoke:api
 ```
 
 ## 项目结构

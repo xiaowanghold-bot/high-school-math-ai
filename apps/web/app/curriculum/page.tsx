@@ -13,7 +13,7 @@ type CurriculumNode = {
   children: CurriculumNode[];
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const apiBase = "";
 
 export default function CurriculumPage() {
   const [root, setRoot] = useState<CurriculumNode | null>(null);

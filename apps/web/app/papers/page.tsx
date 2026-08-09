@@ -15,7 +15,7 @@ type PaperTemplateSection = { section_title: string; question_type: string; coun
 type PaperTemplate = { template_id: string; name: string; description: string; region_scope: string; duration_minutes: number; target_score: number; difficulty_profile: string; sections: PaperTemplateSection[]; structure_status: string; reviewed_on: string; verification_note: string; evidence_urls: string[] };
 type ExportEdition = { id: "student" | "answer" | "blueprint"; name: string; description: string };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const apiBase = "";
 const questionTypeLabels: Record<string, string> = { single_choice: "单选题", multiple_choice: "多选题", fill_blank: "填空题", open_response: "解答题", composite: "综合题" };
 const defaultInstructions = "答题前请填写姓名和班级；所有解答须写出必要过程。";
 const questionTypeOrder = ["single_choice", "multiple_choice", "fill_blank", "open_response"];
