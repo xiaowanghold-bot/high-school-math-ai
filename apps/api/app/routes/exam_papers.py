@@ -8,10 +8,14 @@ from fastapi.responses import FileResponse
 from app.core.config import get_settings
 from app.modules.exam_exports import ExamPaperDocumentRenderer, ExamPaperExportError
 from app.modules.exam_papers import (
+    ExamPaperComposer,
+    ExamPaperComposeCommand,
+    ExamPaperComposeError,
     ExamPaperCreateCommand,
     ExamPaperEdition,
     ExamPaperExportFormat,
     ExamPaperList,
+    ExamPaperProposal,
     ExamPaperStudio,
     ExamPaperStudioError,
     ExamPaperUpdateCommand,
@@ -31,6 +35,11 @@ def get_exam_paper_studio() -> ExamPaperStudio:
         asset_root=settings.exam_paper_asset_dir,
         question_bank=get_question_bank(),
     )
+
+
+@lru_cache
+def get_exam_paper_composer() -> ExamPaperComposer:
+    return ExamPaperComposer(question_bank=get_question_bank())
 
 
 @lru_cache
@@ -54,6 +63,14 @@ def create_exam_paper(command: ExamPaperCreateCommand) -> ExamPaperView:
     try:
         return get_exam_paper_studio().create(command)
     except ExamPaperStudioError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/compose", response_model=ExamPaperProposal)
+def compose_exam_paper(command: ExamPaperComposeCommand) -> ExamPaperProposal:
+    try:
+        return get_exam_paper_composer().compose(command)
+    except ExamPaperComposeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.modules.question_bank.schemas import QuestionSummary
 
 
 ExamPaperEdition = Literal["student", "answer", "blueprint"]
 ExamPaperExportFormat = Literal["docx", "pdf"]
+ExamPaperDifficultyProfile = Literal["foundation", "balanced", "challenge"]
+ExamPaperReviewPolicy = Literal["approved_only", "verified"]
 
 
 class ExamPaperItemInput(BaseModel):
@@ -108,3 +112,45 @@ class ExamPaperSummary(BaseModel):
 class ExamPaperList(BaseModel):
     items: list[ExamPaperSummary]
     total: int
+
+
+class ExamPaperTypeQuota(BaseModel):
+    question_type: str = Field(min_length=1, max_length=80)
+    count: int = Field(ge=1, le=30)
+
+
+class ExamPaperComposeCommand(BaseModel):
+    target_score: float = Field(ge=5, le=300)
+    difficulty_profile: ExamPaperDifficultyProfile = "balanced"
+    type_quotas: list[ExamPaperTypeQuota] = Field(min_length=1, max_length=8)
+    chapters: list[str] = Field(default_factory=list, max_length=12)
+    review_policy: ExamPaperReviewPolicy = "approved_only"
+    exclude_question_ids: list[str] = Field(default_factory=list, max_length=100)
+    seed: str = Field(default="default", max_length=120)
+
+    @model_validator(mode="after")
+    def validate_blueprint(self) -> "ExamPaperComposeCommand":
+        question_types = [item.question_type for item in self.type_quotas]
+        if len(question_types) != len(set(question_types)):
+            raise ValueError("同一题型只能设置一次数量")
+        if sum(item.count for item in self.type_quotas) > 50:
+            raise ValueError("自动组卷最多选择 50 道题")
+        if self.target_score * 2 != round(self.target_score * 2):
+            raise ValueError("目标总分必须以 0.5 分为最小单位")
+        return self
+
+
+class ExamPaperProposalItem(BaseModel):
+    question: QuestionSummary
+    score: float
+    selection_reason: str
+
+
+class ExamPaperProposal(BaseModel):
+    target_score: float
+    actual_score: float
+    average_difficulty: float
+    items: list[ExamPaperProposalItem]
+    chapter_breakdown: list[ExamPaperBreakdownItem]
+    difficulty_breakdown: list[ExamPaperBreakdownItem]
+    warnings: list[str] = Field(default_factory=list)
