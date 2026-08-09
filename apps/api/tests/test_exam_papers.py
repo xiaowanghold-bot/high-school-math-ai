@@ -1,12 +1,16 @@
+import re
+from copy import deepcopy
 from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
+from docx import Document
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
 from app.modules.exam_exports import ExamPaperDocumentRenderer
+from app.modules.exam_exports.math_text import teacher_readable_math
 from app.modules.exam_papers import (
     ExamPaperCreateCommand,
     ExamPaperItemInput,
@@ -236,6 +240,78 @@ def test_paper_copies_stem_image_and_export_survives_source_deletion(tmp_path: P
     assert len(paper.items[0].question.images) == 1
     with ZipFile(exported.path) as archive:
         assert any(name.startswith("word/media/") for name in archive.namelist())
+
+
+def test_export_converts_latex_to_teacher_readable_math(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    studio, bank = make_studio(tmp_path)
+    question = bank.questions["q1"]
+    raw = deepcopy(question.raw)
+    raw["options"][0]["plain_text"] = ""
+    raw["options"][0]["latex"] = r"$-\frac{19}{4}$"
+    raw["solutions"][0]["steps_latex"] = [
+        r"设 $(x_0,y_0)$ 在图象上，且 $x_0\in[-1,0]$、$y_0=x_0^2$。"
+    ]
+    bank.questions["q1"] = question.model_copy(update={"raw": raw})
+    paper = studio.create(
+        ExamPaperCreateCommand(
+            title="数学排版验收卷",
+            items=[ExamPaperItemInput(question_id="q1", score=5)],
+        )
+    )
+    renderer = ExamPaperDocumentRenderer(
+        output_root=tmp_path / "output", asset_root=tmp_path / "paper-assets"
+    )
+
+    exported = renderer.render(paper, "docx", "answer")
+    document = Document(exported.path)
+    docx_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    assert "-19/4" in docx_text
+    assert "x₀∈[-1,0]" in docx_text
+    assert "y₀=x₀²" in docx_text
+    assert "$" not in docx_text
+    assert r"\frac" not in docx_text
+    source_heading = next(
+        paragraph
+        for paragraph in document.paragraphs
+        if paragraph.text == "内容来源与审核说明"
+    )
+    assert source_heading.paragraph_format.page_break_before
+    with ZipFile(exported.path) as archive:
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+    assert "Cambria Math" in document_xml
+
+    monkeypatch.setattr(
+        "app.modules.exam_exports.renderer.Paragraph",
+        lambda content, _style: content,
+    )
+    pdf_blocks = renderer._pdf_question(paper, paper.items[0], "answer", {  # noqa: SLF001
+        name: object()
+        for name in ["Question", "Option", "Answer", "Small", "Solution"]
+    })
+    pdf_text = "\n".join(block for block in pdf_blocks if isinstance(block, str))
+    pdf_visible_text = re.sub(r"<[^>]+>", "", pdf_text)
+    assert "-19/4" in pdf_visible_text
+    assert "x₀∈[-1,0]" in pdf_visible_text
+    assert "y₀=x₀²" in pdf_visible_text
+    assert "$" not in pdf_visible_text
+    assert r"\frac" not in pdf_visible_text
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (r"$-\frac92$", "-9/2"),
+        (r"$x_0\in[-1,0],\ y_0=x_0^2$", "x₀∈[-1,0], y₀=x₀²"),
+        (r"$A\cap(\complement_U B)$", "A∩(∁ᵤ B)"),
+        (r"$P(\text{丙最终获胜})=\frac7{16}$", "P(丙最终获胜)=7/16"),
+        (r"$\sum_{n=1}^{2024}f(n)$", "∑ₙ₌₁²⁰²⁴f(n)"),
+        ("设集合 A={1,2}。", "设集合 A={1,2}。"),
+    ],
+)
+def test_teacher_readable_math(source: str, expected: str) -> None:
+    assert teacher_readable_math(source) == expected
 
 
 @pytest.mark.parametrize(

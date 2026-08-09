@@ -33,6 +33,7 @@ from app.modules.exam_papers.schemas import (
     ExamPaperItemView,
     ExamPaperView,
 )
+from app.modules.exam_exports.math_text import teacher_readable_math
 
 
 class ExamPaperExportError(RuntimeError):
@@ -55,6 +56,10 @@ class ExamPaperDocumentRenderer:
     LINE = "DDE3EC"
     PALE_BLUE = "EEF2FF"
     PALE_GREEN = "EEF8F4"
+    PDF_MATH_FONT = "MathPaperMath"
+    PDF_MATH_CHARS = frozenset(
+        "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿ₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑᵢₒᵤₕₖₗₘₙₚᵣₛₜᵥₓℝℕℤℚℂ∁"
+    )
 
     def __init__(
         self,
@@ -162,7 +167,7 @@ class ExamPaperDocumentRenderer:
         paragraph.paragraph_format.keep_with_next = bool(item.question.images)
         paragraph.paragraph_format.space_after = Pt(5)
         self._set_run(paragraph.add_run(f"{item.position}. "), 11, self.TEXT, bold=True)
-        self._set_run(paragraph.add_run(item.question.stem_plain), 11, self.TEXT)
+        self._add_docx_math_text(paragraph, item.question.stem_plain, 11, self.TEXT)
         self._set_run(paragraph.add_run(f"　（{self._score(item.score)} 分）"), 9, self.MUTED)
         for image in item.question.images:
             image_path = self._asset_path(paper.exam_paper_id, image.asset_id)
@@ -180,24 +185,28 @@ class ExamPaperDocumentRenderer:
             option_p = document.add_paragraph()
             option_p.paragraph_format.left_indent = Inches(0.28)
             option_p.paragraph_format.space_after = Pt(2)
-            self._set_run(option_p.add_run(f"{option.key}. {option.text}"), 10.5, self.TEXT)
+            self._set_run(option_p.add_run(f"{option.key}. "), 10.5, self.TEXT)
+            self._add_docx_math_text(option_p, option.text, 10.5, self.TEXT)
         if edition == "answer":
             answer = document.add_paragraph()
             answer.paragraph_format.left_indent = Inches(0.18)
             self._set_run(answer.add_run("参考答案："), 10, self.BLUE, bold=True)
-            self._set_run(
-                answer.add_run(item.question.final_answer or item.question.answer_value or "待教师补充"),
+            self._add_docx_math_text(
+                answer,
+                item.question.final_answer or item.question.answer_value or "待教师补充",
                 10,
                 self.TEXT,
             )
             if item.question.solution_method:
                 method = document.add_paragraph()
                 method.paragraph_format.left_indent = Inches(0.18)
-                self._set_run(method.add_run(f"解析方法：{item.question.solution_method}"), 9, self.MUTED)
+                self._set_run(method.add_run("解析方法："), 9, self.MUTED)
+                self._add_docx_math_text(method, item.question.solution_method, 9, self.MUTED)
             for index, step in enumerate(item.question.solution_steps, start=1):
                 step_p = document.add_paragraph()
                 step_p.paragraph_format.left_indent = Inches(0.32)
-                self._set_run(step_p.add_run(f"{index}. {step}"), 9.5, self.TEXT)
+                self._set_run(step_p.add_run(f"{index}. "), 9.5, self.TEXT)
+                self._add_docx_math_text(step_p, step, 9.5, self.TEXT)
         elif item.question.question_type not in {"single_choice", "multiple_choice", "fill_blank"}:
             for _ in range(4):
                 blank = document.add_paragraph("\n")
@@ -244,8 +253,8 @@ class ExamPaperDocumentRenderer:
             )
 
     def _docx_sources(self, document: Document, paper: ExamPaperView) -> None:
-        document.add_page_break()
         heading = document.add_paragraph()
+        heading.paragraph_format.page_break_before = True
         self._set_run(heading.add_run("内容来源与审核说明"), 14, self.BLUE, bold=True)
         intro = document.add_paragraph()
         self._set_run(
@@ -270,11 +279,14 @@ class ExamPaperDocumentRenderer:
         self, paper: ExamPaperView, edition: ExamPaperEdition, path: Path
     ) -> None:
         regular_path, bold_path = self._resolve_pdf_fonts()
+        math_path = self._resolve_pdf_math_font()
         regular_name, bold_name = "MathPaperCJK", "MathPaperCJKBold"
         if regular_name not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(TTFont(regular_name, str(regular_path)))
         if bold_name not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(TTFont(bold_name, str(bold_path)))
+        if self.PDF_MATH_FONT not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(self.PDF_MATH_FONT, str(math_path)))
         styles = self._pdf_styles(regular_name, bold_name)
         story = [
             Paragraph(self._escape(paper.title), styles["Title"]),
@@ -334,7 +346,7 @@ class ExamPaperDocumentRenderer:
     def _pdf_question(self, paper, item, edition, styles) -> list:
         blocks = [
             Paragraph(
-                f"<b>{item.position}.</b> {self._escape(item.question.stem_plain)}　"
+                f"<b>{item.position}.</b> {self._pdf_math_text(item.question.stem_plain)}　"
                 f"<font color='#{self.MUTED}'>（{self._score(item.score)} 分）</font>",
                 styles["Question"],
             )
@@ -351,17 +363,17 @@ class ExamPaperDocumentRenderer:
                 blocks.append(Paragraph(self._escape(image.caption), styles["Caption"]))
         for option in item.question.options:
             blocks.append(
-                Paragraph(f"{self._escape(option.key)}. {self._escape(option.text)}", styles["Option"])
+                Paragraph(f"{self._escape(option.key)}. {self._pdf_math_text(option.text)}", styles["Option"])
             )
         if edition == "answer":
-            answer = self._escape(item.question.final_answer or item.question.answer_value or "待教师补充")
+            answer = self._pdf_math_text(item.question.final_answer or item.question.answer_value or "待教师补充")
             blocks.append(Paragraph(f"<b>参考答案：</b>{answer}", styles["Answer"]))
             if item.question.solution_method:
                 blocks.append(
-                    Paragraph(f"解析方法：{self._escape(item.question.solution_method)}", styles["Small"])
+                    Paragraph(f"解析方法：{self._pdf_math_text(item.question.solution_method)}", styles["Small"])
                 )
             for index, step in enumerate(item.question.solution_steps, start=1):
-                blocks.append(Paragraph(f"{index}. {self._escape(step)}", styles["Solution"]))
+                blocks.append(Paragraph(f"{index}. {self._pdf_math_text(step)}", styles["Solution"]))
         elif item.question.question_type not in {"single_choice", "multiple_choice", "fill_blank"}:
             blocks.append(Spacer(1, 1.25 * inch))
         blocks.append(Spacer(1, 7))
@@ -475,6 +487,40 @@ class ExamPaperDocumentRenderer:
         run.font.bold = bold
         run.font.color.rgb = RGBColor.from_string(color)
 
+    def _add_docx_math_text(
+        self,
+        paragraph,
+        value: str | None,
+        size: float,
+        color: str,
+        *,
+        bold: bool = False,
+    ) -> None:
+        converted = teacher_readable_math(value)
+        buffer: list[str] = []
+        uses_math_font = False
+
+        def flush() -> None:
+            if not buffer:
+                return
+            run = paragraph.add_run("".join(buffer))
+            self._set_run(run, size, color, bold=bold)
+            if uses_math_font:
+                run.font.name = "Cambria Math"
+                fonts = run._element.rPr.rFonts
+                fonts.set(qn("w:ascii"), "Cambria Math")
+                fonts.set(qn("w:hAnsi"), "Cambria Math")
+                fonts.set(qn("w:eastAsia"), "Cambria Math")
+            buffer.clear()
+
+        for character in converted:
+            character_uses_math_font = character in self.PDF_MATH_CHARS
+            if buffer and character_uses_math_font != uses_math_font:
+                flush()
+            uses_math_font = character_uses_math_font
+            buffer.append(character)
+        flush()
+
     def _resolve_pdf_fonts(self) -> tuple[Path, Path]:
         regular_candidates = [
             self.cjk_font_regular,
@@ -493,6 +539,18 @@ class ExamPaperDocumentRenderer:
         if not regular:
             raise ExamPaperExportError("未找到可用中文字体，请配置 MATH_AI_CJK_FONT_REGULAR")
         return regular, bold or regular
+
+    @staticmethod
+    def _resolve_pdf_math_font() -> Path:
+        candidates = [
+            Path("C:/Windows/Fonts/cambria.ttc"),
+            Path("C:/Windows/Fonts/seguisym.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        ]
+        font = next((path for path in candidates if path.is_file()), None)
+        if not font:
+            raise ExamPaperExportError("未找到可用数学字体，请安装 Cambria Math 或 DejaVu Sans")
+        return font
 
     def _pdf_styles(self, regular: str, bold: str) -> dict[str, ParagraphStyle]:
         base = getSampleStyleSheet()
@@ -516,6 +574,28 @@ class ExamPaperDocumentRenderer:
     @staticmethod
     def _escape(value: str) -> str:
         return html.escape(str(value)).replace("\n", "<br/>")
+
+    def _pdf_math_text(self, value: str | None) -> str:
+        converted = teacher_readable_math(value)
+        output: list[str] = []
+        math_buffer: list[str] = []
+
+        def flush_math() -> None:
+            if not math_buffer:
+                return
+            output.append(
+                f'<font name="{self.PDF_MATH_FONT}">{html.escape("".join(math_buffer))}</font>'
+            )
+            math_buffer.clear()
+
+        for character in converted:
+            if character in self.PDF_MATH_CHARS:
+                math_buffer.append(character)
+                continue
+            flush_math()
+            output.append("<br/>" if character == "\n" else html.escape(character))
+        flush_math()
+        return "".join(output)
 
     @staticmethod
     def _score(value: float) -> str:
