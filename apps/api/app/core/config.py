@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     lesson_plan_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "lesson-plans.sqlite3"
     )
+    lesson_export_dir: Path = Field(default=PROJECT_ROOT / "output")
+    cjk_font_regular: Path | None = None
+    cjk_font_bold: Path | None = None
     lesson_plan_provider: str = "auto"
     openai_api_key: str = ""
     openai_model: str = "gpt-5.6-terra"

@@ -23,6 +23,7 @@ coverage/
 # Runtime data
 *.log
 data/runtime/
+output/
 .DS_Store
 Thumbs.db
 

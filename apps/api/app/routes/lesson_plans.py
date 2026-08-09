@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
+from app.modules.lesson_exports import LessonPlanDocumentRenderer, LessonPlanExportError
 from app.modules.lesson_plans import (
     LessonPlanGenerationRequest,
     LessonPlanList,
@@ -47,6 +50,16 @@ def get_lesson_plan_studio() -> LessonPlanStudio:
     )
 
 
+@lru_cache
+def get_lesson_plan_renderer() -> LessonPlanDocumentRenderer:
+    settings = get_settings()
+    return LessonPlanDocumentRenderer(
+        output_root=settings.lesson_export_dir,
+        cjk_font_regular=settings.cjk_font_regular,
+        cjk_font_bold=settings.cjk_font_bold,
+    )
+
+
 @router.get("", response_model=LessonPlanList)
 def list_lesson_plans(limit: int = Query(default=30, ge=1, le=100)) -> LessonPlanList:
     return get_lesson_plan_studio().list(limit=limit)
@@ -68,6 +81,25 @@ def get_lesson_plan(lesson_plan_id: str) -> LessonPlanView:
         return get_lesson_plan_studio().get(lesson_plan_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="教案不存在") from exc
+
+
+@router.get("/{lesson_plan_id}/export")
+def export_lesson_plan(
+    lesson_plan_id: str,
+    format: Literal["docx", "pdf"] = Query(default="docx"),
+) -> FileResponse:
+    try:
+        plan = get_lesson_plan_studio().get(lesson_plan_id)
+        rendered = get_lesson_plan_renderer().render(plan, format)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="教案不存在") from exc
+    except LessonPlanExportError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return FileResponse(
+        path=rendered.path,
+        media_type=rendered.media_type,
+        filename=rendered.download_name,
+    )
 
 
 @router.patch("/{lesson_plan_id}", response_model=LessonPlanView)

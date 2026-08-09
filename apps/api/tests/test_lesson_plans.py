@@ -1,9 +1,13 @@
 import json
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
+from docx import Document
+from docx.shared import Inches
 
 from app.modules.curriculum import CurriculumNode, InMemoryCurriculumCatalog
+from app.modules.lesson_exports import LessonPlanDocumentRenderer
 from app.modules.lesson_plans import (
     LessonPlanGenerationRequest,
     LessonPlanStudio,
@@ -113,6 +117,37 @@ def test_studio_creates_retrieval_grounded_editable_plan(tmp_path: Path) -> None
 
     assert revised.version == 2
     assert studio.get(plan.lesson_plan_id).content.title == "教师修订后的函数单调性教案"
+
+
+def test_lesson_plan_renderer_creates_openable_docx_and_pdf(tmp_path: Path) -> None:
+    studio = LessonPlanStudio(
+        database_path=tmp_path / "lesson-plans.sqlite3",
+        curriculum_catalog=_catalog(),
+        question_bank=FakeQuestionBank(),  # type: ignore[arg-type]
+        provider=TemplateLessonPlanProvider(),
+    )
+    plan = studio.create(
+        LessonPlanGenerationRequest(curriculum_node_id="s32", duration_minutes=45)
+    )
+    renderer = LessonPlanDocumentRenderer(output_root=tmp_path / "output")
+
+    docx_result = renderer.render(plan, "docx")
+    pdf_result = renderer.render(plan, "pdf")
+
+    with ZipFile(docx_result.path) as archive:
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+        numbering_xml = archive.read("word/numbering.xml").decode("utf-8")
+    reopened = Document(docx_result.path)
+    assert plan.content.title in document_xml
+    assert "w:tblHeader" in document_xml
+    assert "w:tblBorders" in document_xml
+    assert "w:numFmt" in numbering_xml
+    assert reopened.sections[0].page_width == Inches(8.5)
+    assert reopened.sections[0].left_margin == Inches(1)
+    assert len(reopened.tables) >= 4
+    assert docx_result.path.read_bytes().startswith(b"PK")
+    assert pdf_result.path.read_bytes().startswith(b"%PDF")
+    assert pdf_result.path.read_bytes().rstrip().endswith(b"%%EOF")
 
 
 def test_openai_adapter_requests_strict_structured_output(monkeypatch: pytest.MonkeyPatch) -> None:

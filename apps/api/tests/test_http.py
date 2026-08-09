@@ -74,3 +74,21 @@ def test_lesson_plan_generation_and_update_endpoints() -> None:
     assert update_response.status_code == 200
     assert update_response.json()["version"] == 2
     assert update_response.json()["content"]["title"].endswith("教师修订）")
+
+    docx_response = client.get(
+        f"/api/v1/lesson-plans/{plan['lesson_plan_id']}/export",
+        params={"format": "docx"},
+    )
+    pdf_response = client.get(
+        f"/api/v1/lesson-plans/{plan['lesson_plan_id']}/export",
+        params={"format": "pdf"},
+    )
+
+    assert docx_response.status_code == 200
+    assert docx_response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument"
+    )
+    assert docx_response.content.startswith(b"PK")
+    assert pdf_response.status_code == 200
+    assert pdf_response.headers["content-type"].startswith("application/pdf")
+    assert pdf_response.content.startswith(b"%PDF")

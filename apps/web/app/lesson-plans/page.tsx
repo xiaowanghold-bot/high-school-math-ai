@@ -309,7 +309,12 @@ export default function LessonPlansPage() {
             <>
               <header className="lesson-document-heading">
                 <div><p>{selected.curriculum.volume} · {selected.curriculum.chapter} · {selected.curriculum.section}</p><input aria-label="教案标题" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></div>
-                <div className="document-actions"><span>{selected.generation.mode === "live_ai" ? "AI 生成" : "本地预览"} · v{selected.version}</span><button type="button" disabled={saving || minuteTotal !== selected.request.duration_minutes} onClick={save}>{saving ? "保存中…" : "保存修订"}</button></div>
+                <div className="document-actions">
+                  <span>{selected.generation.mode === "live_ai" ? "AI 生成" : "本地预览"} · v{selected.version}</span>
+                  <a href={`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/export?format=docx`} title="导出当前已保存版本">导出 Word</a>
+                  <a href={`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/export?format=pdf`} title="导出当前已保存版本">导出 PDF</a>
+                  <button type="button" disabled={saving || minuteTotal !== selected.request.duration_minutes} onClick={save}>{saving ? "保存中…" : "保存修订"}</button>
+                </div>
               </header>
 
               <div className="lesson-context-strip">
