@@ -914,6 +914,140 @@ class QuestionBank:
             )
         return self.get_question(question_id)
 
+    def apply_curriculum_mapping(
+        self,
+        question_id: str,
+        *,
+        node_id: str,
+        volume: str,
+        chapter: str,
+        section: str,
+        topic: str,
+        actor_id: str,
+    ) -> QuestionDetail:
+        """Apply one teacher-confirmed primary knowledge point with revision history."""
+        now = self._now()
+        package_id = f"curriculum-{uuid4().hex}"
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(question_id)
+            self._ensure_editable(row)
+            previous_raw = row["raw_json"]
+            raw = json.loads(previous_raw)
+            raw["curriculum"] = {
+                **(raw.get("curriculum") or {}),
+                "textbook_version": "人教A版",
+                "volume": volume,
+                "chapter": chapter,
+                "section": section,
+                "topic": topic,
+                "knowledge_point_ids": [node_id],
+                "mapping_status": "teacher_confirmed",
+                "mapped_by": actor_id,
+                "mapped_at": now,
+            }
+            revised_raw = json.dumps(raw, ensure_ascii=False)
+            connection.execute(
+                """
+                INSERT INTO question_revisions
+                (package_id, question_id, previous_raw_json, revised_raw_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (package_id, question_id, previous_raw, revised_raw, now),
+            )
+            connection.execute(
+                """
+                UPDATE questions SET volume = ?, chapter = ?, section = ?,
+                    knowledge_point_ids = ?, review_status = 'pending', raw_json = ?, updated_at = ?
+                WHERE question_id = ?
+                """,
+                (volume, chapter, section, json.dumps([node_id], ensure_ascii=False), revised_raw, now, question_id),
+            )
+        return self.get_question(question_id)
+
+    def record_manual_verification(
+        self,
+        question_id: str,
+        *,
+        conclusion: str,
+        computed_answer: str,
+        evidence_steps: list[str],
+        note: str,
+        verifier_id: str,
+    ) -> str:
+        """Record independent teacher evidence; answer mismatches can never pass."""
+        if conclusion not in {"passed", "inconsistent", "inconclusive"}:
+            raise QuestionBankError("独立核验结论无效")
+        now = self._now()
+        package_id = f"manual-verification-{uuid4().hex}"
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(question_id)
+            self._ensure_editable(row)
+            source_answer = str(row["answer_value"] or "").strip()
+            independent_answer = computed_answer.strip()
+            if conclusion == "passed" and (not source_answer or not independent_answer):
+                raise QuestionBankError("核验通过前，当前答案和独立计算答案都不能为空")
+            answers_match = bool(
+                source_answer
+                and independent_answer
+                and self._normalize_answer(source_answer) == self._normalize_answer(independent_answer)
+            )
+            if conclusion == "passed" and not answers_match:
+                status = "source_inconsistency_detected"
+            elif conclusion == "passed":
+                status = "passed"
+            elif conclusion == "inconsistent":
+                status = "source_inconsistency_detected"
+            else:
+                status = "needs_math_review"
+            details = list(evidence_steps)
+            if note:
+                details.append(note)
+            if conclusion == "passed" and not answers_match:
+                details.append(f"独立答案“{independent_answer}”与当前答案“{source_answer}”不一致，系统拒绝标记通过。")
+            raw = json.loads(row["raw_json"])
+            raw["verification"] = {
+                "status": status,
+                "methods": ["teacher_independent_derivation"],
+                "details": details,
+                "computed_answer": independent_answer or None,
+                "source_answer": source_answer or None,
+                "answers_match": answers_match,
+                "evidence": {"steps": evidence_steps, "note": note, "verifier_id": verifier_id},
+                "verified_at": now,
+            }
+            report = raw["verification"]
+            connection.execute(
+                """
+                INSERT INTO verification_reports
+                (package_id, question_id, status, report_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (package_id, question_id, status, json.dumps(report, ensure_ascii=False), now),
+            )
+            connection.execute(
+                """
+                UPDATE questions SET status = ?, review_status = 'pending',
+                    verification_status = ?, solution_approved = 0, raw_json = ?, updated_at = ?
+                WHERE question_id = ?
+                """,
+                (
+                    "verified" if status == "passed" else "imported",
+                    status,
+                    json.dumps(raw, ensure_ascii=False),
+                    now,
+                    question_id,
+                ),
+            )
+        return status
+
     def add_image(
         self,
         question_id: str,
@@ -1415,6 +1549,10 @@ class QuestionBank:
                 f"SELECT {column}, COUNT(*) FROM questions GROUP BY {column} ORDER BY COUNT(*) DESC"
             ).fetchall()
         }
+
+    @staticmethod
+    def _normalize_answer(value: str) -> str:
+        return "".join(value.replace("$", "").replace("\\,", "").split()).lower()
 
     @staticmethod
     def _now() -> str:

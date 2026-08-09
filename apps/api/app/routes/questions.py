@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Response, Uploa
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
+from app.modules.curriculum import CsvCurriculumCatalog
 from app.modules.math_verifier import MathVerifier
 from app.modules.question_bank import (
     QuestionBank,
@@ -35,6 +36,14 @@ from app.modules.question_variants import (
     QuestionVariantProviderError,
     QuestionVariantService,
     QuestionVariantServiceError,
+)
+from app.modules.question_quality import (
+    CurriculumMappingCommand,
+    ManualVerificationCommand,
+    QualityActionResult,
+    QuestionQualityError,
+    QuestionQualityWorkflow,
+    QuestionQualityWorkspace,
 )
 
 
@@ -77,6 +86,15 @@ def get_question_variant_service() -> QuestionVariantService:
         else LocalDiagnosticVariantProvider()
     )
     return QuestionVariantService(question_bank=get_question_bank(), provider=provider)
+
+
+@lru_cache
+def get_question_quality_workflow() -> QuestionQualityWorkflow:
+    settings = get_settings()
+    return QuestionQualityWorkflow(
+        question_bank=get_question_bank(),
+        curriculum_catalog=CsvCurriculumCatalog(settings.curriculum_csv),
+    )
 
 
 @router.post("/question-bank/import-pilot", response_model=ImportResult)
@@ -206,6 +224,46 @@ def revise_question(
         raise HTTPException(status_code=404, detail="题目不存在") from exc
     except QuestionBankError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get(
+    "/questions/{question_id}/quality", response_model=QuestionQualityWorkspace
+)
+def question_quality_workspace(question_id: str) -> QuestionQualityWorkspace:
+    try:
+        return get_question_quality_workflow().inspect(question_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+
+
+@router.post(
+    "/questions/{question_id}/quality/curriculum", response_model=QualityActionResult
+)
+def apply_question_curriculum(
+    question_id: str, command: CurriculumMappingCommand
+) -> QualityActionResult:
+    try:
+        return get_question_quality_workflow().apply_curriculum(question_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+    except QuestionQualityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/questions/{question_id}/quality/verification", response_model=QualityActionResult
+)
+def record_question_verification(
+    question_id: str, command: ManualVerificationCommand
+) -> QualityActionResult:
+    try:
+        return get_question_quality_workflow().record_verification(question_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+    except QuestionQualityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/questions/{question_id}/images", response_model=QuestionImage, status_code=201)

@@ -84,6 +84,35 @@ type QuestionVariantResult = {
   warnings: string[];
 };
 
+type CurriculumSuggestion = {
+  node_id: string;
+  name: string;
+  volume: string;
+  chapter: string;
+  section: string;
+  confidence: number;
+  reasons: string[];
+};
+
+type QuestionQuality = {
+  question_id: string;
+  current_curriculum: {
+    volume: string | null;
+    chapter: string | null;
+    section: string | null;
+    knowledge_point_ids: string[];
+  };
+  curriculum_suggestions: CurriculumSuggestion[];
+  verification: {
+    status: string;
+    capability: "already_verified" | "rule_based" | "teacher_evidence_required";
+    source_answer: string | null;
+    computed_answer: string | null;
+    method: string | null;
+    details: string[];
+  };
+};
+
 const apiBase = "";
 const imageAccept = "image/png,image/jpeg,image/webp";
 
@@ -163,6 +192,12 @@ export default function SearchPage() {
   const [variantKind, setVariantKind] = useState<VariantKind>("diagnostic");
   const [variantDifficulty, setVariantDifficulty] = useState("");
   const [variantInstruction, setVariantInstruction] = useState("");
+  const [quality, setQuality] = useState<QuestionQuality | null>(null);
+  const [qualityLoading, setQualityLoading] = useState(false);
+  const [verificationConclusion, setVerificationConclusion] = useState<"passed" | "inconsistent" | "inconclusive">("passed");
+  const [computedAnswer, setComputedAnswer] = useState("");
+  const [verificationSteps, setVerificationSteps] = useState("");
+  const [independentlyChecked, setIndependentlyChecked] = useState(false);
 
   const searchUrl = useMemo(() => {
     const params = new URLSearchParams({ page_size: "50" });
@@ -182,6 +217,22 @@ export default function SearchPage() {
     setDetail(updated);
     setEditDraft(draftFromDetail(updated));
     setItems((current) => current.map((item) => item.question_id === questionId ? { ...item, ...updated } : item));
+  }
+
+  async function refreshQuality(questionId = selectedId) {
+    if (!questionId) return;
+    setQualityLoading(true);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/questions/${questionId}/quality`);
+      if (!response.ok) throw new Error(await errorText(response));
+      const updated: QuestionQuality = await response.json();
+      setQuality(updated);
+      setComputedAnswer(updated.verification.computed_answer || "");
+      setVerificationSteps(updated.verification.details.join("\n"));
+      setIndependentlyChecked(false);
+    } finally {
+      setQualityLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -226,10 +277,14 @@ export default function SearchPage() {
     if (!selectedId) {
       setDetail(null);
       setEditDraft(null);
+      setQuality(null);
       return;
     }
     setDetailMode("preview");
-    refreshDetail(selectedId).catch(() => setMessage("无法读取题目详情。"));
+    setDetail(null);
+    setEditDraft(null);
+    setQuality(null);
+    Promise.all([refreshDetail(selectedId), refreshQuality(selectedId)]).catch(() => setMessage("无法读取题目详情或质量工作区。"));
   }, [selectedId]);
 
   function submitSearch(event: FormEvent) {
@@ -259,7 +314,7 @@ export default function SearchPage() {
       setEditDraft(draftFromDetail(result.question));
       setItems((current) => current.map((item) => item.question_id === selectedId ? { ...item, ...result.question } : item));
       setDetailMode("preview");
-      await loadStats();
+      await Promise.all([loadStats(), refreshQuality(selectedId)]);
       setMessage(result.verification_reset ? "修订已保存为新版本；数学内容发生变化，旧验证已自动失效。" : "修订已保存为新版本；题干、选项和答案未变化，验证状态保持不变。" );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "题目修订保存失败");
@@ -284,8 +339,59 @@ export default function SearchPage() {
       setMessage(await errorText(response));
       return;
     }
-    await Promise.all([refreshDetail(), loadStats()]);
+    await Promise.all([refreshDetail(), refreshQuality(), loadStats()]);
     setMessage(decision === "approved" ? "审核已保存；发布门禁仍会独立检查。" : "审核结论已保存。" );
+  }
+
+  async function applyCurriculum(nodeId: string) {
+    if (!selectedId) return;
+    setWorking(true);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/questions/${selectedId}/quality/curriculum`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node_id: nodeId, teacher_id: "owner_teacher" }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      setQuality(result.workspace);
+      await Promise.all([refreshDetail(selectedId), loadStats()]);
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "教材知识点应用失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function recordVerification() {
+    if (!selectedId) return;
+    const evidenceSteps = verificationSteps.split("\n").map((item) => item.trim()).filter(Boolean);
+    setWorking(true);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/questions/${selectedId}/quality/verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conclusion: verificationConclusion,
+          computed_answer: computedAnswer.trim(),
+          evidence_steps: evidenceSteps,
+          note: "教师在题目质量工作台提交独立核验记录",
+          independently_checked: independentlyChecked,
+          verifier_id: "owner_teacher",
+        }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      setQuality(result.workspace);
+      setIndependentlyChecked(false);
+      await Promise.all([refreshDetail(selectedId), loadStats()]);
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "独立核验记录保存失败");
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function checkPublish() {
@@ -510,6 +616,40 @@ export default function SearchPage() {
               <div className="answer-line"><span>{detail.verification_status === "passed" ? "独立验证答案" : "当前答案"}</span><strong>{detail.raw.verification?.computed_answer || detail.answer_value || "待独立求解"}</strong></div>
               {!!detail.raw.solutions?.[0]?.steps_latex?.length && <div className="solution-card"><header><span>自有解析草稿</span><strong>{detail.raw.solutions[0].method}</strong></header><ol>{detail.raw.solutions[0].steps_latex?.map((step, index) => <li key={index}><MathText text={step} /></li>)}</ol><small>需由教师确认后才可作为正式解析</small></div>}
               {renderImages("solution")}
+              <details className="question-quality-workspace" open={detail.verification_status !== "passed" || !detail.knowledge_point_ids.length}>
+                <summary><span><strong>教材映射与数学核验</strong><small>建议只供参考，应用与通过均由教师确认</small></span><i>{qualityLoading ? "读取中" : detail.verification_status === "passed" ? "已核验" : "待处理"}</i></summary>
+                {quality && <div className="quality-workspace-grid">
+                  <section className="curriculum-quality-panel">
+                    <header><div><strong>教材知识点</strong><span>人教 A 版</span></div><small>当前：{quality.current_curriculum.section || quality.current_curriculum.chapter || "尚未映射"}</small></header>
+                    {!!quality.current_curriculum.knowledge_point_ids.length && <p className="mapping-current">已关联 {quality.current_curriculum.knowledge_point_ids.length} 个知识点：{quality.current_curriculum.knowledge_point_ids.join("、")}</p>}
+                    <div className="curriculum-suggestions">
+                      {quality.curriculum_suggestions.map((suggestion) => <article className="curriculum-suggestion" key={suggestion.node_id}>
+                        <div><strong>{suggestion.name}</strong><span>{Math.round(suggestion.confidence * 100)}% 匹配</span></div>
+                        <p>{suggestion.chapter} · {suggestion.section}</p>
+                        <small>{suggestion.reasons.join("；")}</small>
+                        <button type="button" disabled={working || quality.current_curriculum.knowledge_point_ids.includes(suggestion.node_id)} onClick={() => applyCurriculum(suggestion.node_id)}>{quality.current_curriculum.knowledge_point_ids.includes(suggestion.node_id) ? "当前知识点" : "应用此知识点"}</button>
+                      </article>)}
+                      {!quality.curriculum_suggestions.length && <div className="quality-empty"><strong>暂未找到可靠建议</strong><span>可先修订题干与解析；教材目录中的人工选择入口会在后续补充。</span></div>}
+                    </div>
+                  </section>
+
+                  <section className="verification-quality-panel">
+                    <header><div><strong>独立数学核验</strong><span>{quality.verification.capability === "teacher_evidence_required" ? "教师证据" : quality.verification.capability === "rule_based" ? "规则可验" : "已有证据"}</span></div><small>{verificationLabels[quality.verification.status] ?? quality.verification.status}</small></header>
+                    {quality.verification.status === "passed" ? <div className="verification-evidence">
+                      <strong>独立答案：{quality.verification.computed_answer || "已验证"}</strong>
+                      <p>{quality.verification.details.join("；") || "验证证据已保存；数学内容再次修订后会自动失效。"}</p>
+                    </div> : <div className="verification-evidence-form">
+                      <label><span>核验结论</span><select value={verificationConclusion} onChange={(event) => setVerificationConclusion(event.target.value as "passed" | "inconsistent" | "inconclusive")}><option value="passed">答案与独立结果一致</option><option value="inconsistent">发现当前答案不一致</option><option value="inconclusive">证据不足，继续复核</option></select></label>
+                      <label><span>独立求得的答案</span><input value={computedAnswer} onChange={(event) => setComputedAnswer(event.target.value)} placeholder="不要照抄当前答案，填写独立计算结果" /></label>
+                      <label><span>推导证据（每行一步）</span><textarea value={verificationSteps} onChange={(event) => setVerificationSteps(event.target.value)} placeholder={"写出关键推导，例如：\n1. 由定义域得 x > 0\n2. 求导并判断单调区间"} /></label>
+                      <label className="independent-check"><input type="checkbox" checked={independentlyChecked} onChange={(event) => setIndependentlyChecked(event.target.checked)} /><span>我确认以上答案与推导是独立验算所得，而非直接复制来源解析。</span></label>
+                      <p className="verification-rule">只有独立答案与当前答案一致时才能通过；不一致会自动标记为“来源矛盾”。</p>
+                      <button type="button" disabled={working || !verificationSteps.trim() || !independentlyChecked} onClick={recordVerification}>{working ? "保存中…" : "保存核验记录"}</button>
+                    </div>}
+                  </section>
+                </div>}
+                {!quality && !qualityLoading && <p className="quality-load-error">质量工作区暂不可用，请确认接口已启动后重试。</p>}
+              </details>
               <div className="question-editor-form">
                 <div className="editor-safety-note"><strong>生成私有变式</strong><span>只允许从独立验证通过的原题生成；新题保留母题和生成记录，并重新进入教师审核门禁。</span></div>
                 <div className="question-editor-two">
