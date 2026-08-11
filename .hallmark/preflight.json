@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "scanned_at": "2026-08-11",
+  "scope": "component",
+  "framework": "Next.js 16 App Router",
+  "font_stack": "Inter, PingFang SC, Microsoft YaHei",
+  "palette": "apps/web/app/globals.css custom properties",
+  "motion": "CSS-only motion cut with reduced-motion fallback",
+  "preserve": [
+    "existing font stack",
+    "existing blue, teal and amber palette",
+    "existing app shell and page layout"
+  ]
+}

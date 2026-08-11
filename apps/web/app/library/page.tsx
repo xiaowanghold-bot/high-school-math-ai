@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { ResizableColumns } from "../components/resizable-columns";
+import { useToast } from "../components/toast-provider";
 import "./library.css";
 
 type LibrarySummary = {
@@ -52,7 +53,7 @@ export default function LibraryPage() {
   const [candidateBusy, setCandidateBusy] = useState(false);
   const [candidates, setCandidates] = useState<QuestionCandidate[]>([]);
   const [ocrConsent, setOcrConsent] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { auto: setMessage } = useToast();
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -211,7 +212,6 @@ export default function LibraryPage() {
 
   return <div className="page-content library-workspace">
     <section className="page-title library-title"><div><p className="eyebrow">个人资料库 · 默认私人</p><h1>先安全收进来，再逐份校对。</h1><p className="subtle">原文件、提取文本与教师修订分开保存；未经明确授权不会进入公共题库或模型训练。</p></div><button className="primary-button" type="button" onClick={() => setUploadOpen((current) => !current)}>{uploadOpen ? "收起上传" : "＋ 上传资料"}</button></section>
-    {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
     <section className="library-stats"><div><span>私人资料</span><strong>{stats?.total ?? "—"}</strong><small>不会公开检索</small></div><div><span>待人工校对</span><strong>{stats?.pending_review ?? "—"}</strong><small>保留原始提取文本</small></div><div className="confirmed"><span>已确认文本</span><strong>{stats?.confirmed ?? "—"}</strong><small>可进入后续结构化</small></div><div className={stats?.needs_ocr ? "attention" : ""}><span>待 OCR / 转录</span><strong>{stats?.needs_ocr ?? "—"}</strong><small>图片或扫描件</small></div></section>
 

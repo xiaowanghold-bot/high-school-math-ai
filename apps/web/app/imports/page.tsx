@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, u
 import { AdminGuard } from "../components/admin-guard";
 import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
+import { useToast } from "../components/toast-provider";
 import "./imports.css";
 
 type ImportStatus = "registered" | "queued" | "analyzing" | "paused" | "ready_for_segmentation" | "failed";
@@ -79,7 +80,7 @@ function ImportsPageContent() {
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [queueRunning, setQueueRunning] = useState(false);
-  const [message, setMessage] = useState("");
+  const { auto: setMessage } = useToast();
 
   const selectedBatch = useMemo(() => workspace?.batches.find((batch) => batch.batch_id === selected?.batch_id) ?? null, [selected, workspace]);
 
@@ -397,7 +398,6 @@ function ImportsPageContent() {
 
   return <div className="page-content import-workspace">
     <section className="page-title import-title"><div><p className="eyebrow">题库生产 · 来源可追溯</p><h1>批量 PDF 加工中心</h1><p className="subtle">先登记来源和权利，再逐页分析与校对题目边界；任何内容都不会自动进入正式题库。</p></div><button className="primary-button" type="button" onClick={() => setUploadOpen((value) => !value)}>{uploadOpen ? "收起登记" : "＋ 新建批次"}</button></section>
-    {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage("")}>关闭</button></div>}
     <section className="import-stats"><div><span>导入批次</span><strong>{workspace?.stats.batches ?? "—"}</strong><small>保留权利声明</small></div><div><span>PDF 文件</span><strong>{workspace?.stats.files ?? "—"}</strong><small>{workspace?.stats.pages ?? 0} 页</small></div><div className="ready"><span>页面处理进度</span><strong>{workspace ? `${workspace.stats.analyzed_pages}/${workspace.stats.pages}` : "—"}</strong><small>{workspace?.stats.ready_files ?? 0} 份可进入拆题</small></div><div><span>候选题量估计</span><strong>{workspace?.stats.estimated_questions ?? "—"}</strong><small>来自题量审计表</small></div><div className={workspace?.stats.scan_pages ? "attention" : ""}><span>待 OCR 页面</span><strong>{workspace?.stats.scan_pages ?? "—"}</strong><small>{workspace?.stats.failed_files ?? 0} 份失败待重试</small></div></section>
 
     {uploadOpen && <form className="import-upload-panel" onSubmit={upload}>

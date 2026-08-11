@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
+import { useToast } from "../components/toast-provider";
 import "./solver.css";
 
 type QuestionSample = { question_id: string; stem_plain: string; chapter: string | null; difficulty: number };
@@ -37,7 +38,7 @@ export default function SolvePage() {
   const [samples, setSamples] = useState<QuestionSample[]>([]);
   const [result, setResult] = useState<SolutionResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { auto: setMessage } = useToast();
 
   useEffect(() => {
     fetch("/api/v1/questions?verification_status=passed&page_size=3")
@@ -72,7 +73,6 @@ export default function SolvePage() {
         <div className="solver-safety-badge"><strong>三档可信度</strong><span>程序验证 · 模型复核 · 教师复核</span></div>
       </section>
 
-      {message && <div className="notice warning solver-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
       <ResizableColumns className="solver-layout" storageKey="solver-workspace" initialLeftPercent={36} leftMin={260} rightMin={420} collapse="compact" label="调整题目输入与解答结果宽度">
         <aside className="solver-input-panel">

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminGuard } from "../../components/admin-guard";
 import { ResizableColumns } from "../../components/resizable-columns";
+import { useToast } from "../../components/toast-provider";
 
 type ReviewStatus = "pending" | "draft" | "approved" | "changes_requested";
 type ReviewDecision = Exclude<ReviewStatus, "pending">;
@@ -49,7 +50,7 @@ function CurriculumReviewPageContent() {
   const [cascade, setCascade] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const { auto: setMessage } = useToast();
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -124,7 +125,7 @@ function CurriculumReviewPageContent() {
       <div className="curriculum-page-actions"><a className="review-secondary-button" href="/curriculum">返回教材目录</a><button className="primary-button" type="button" disabled={saving || !workspace?.volume_node_id} onClick={approveVolume}>批准本册全部</button></div>
     </section>
     <div className="curriculum-review-safety"><strong>原始目录受保护</strong><span>审核结果以独立版本记录保存；草稿可供您的备课流程试用，只有“已批准”才表示教师终审完成。</span></div>
-    {error && <div className="notice warning">{error}</div>}{message && <div className="notice review-success">{message}</div>}
+    {error && <div className="notice warning">{error}</div>}
 
     <ResizableColumns className="catalog-review-layout" storageKey="curriculum-review" initialLeftPercent={34} leftMin={300} rightMin={440} collapse="compact" label="调整教材目录与审核表单宽度">
       <aside className="catalog-review-sidebar">

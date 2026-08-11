@@ -3,6 +3,7 @@ import "katex/dist/katex.min.css";
 import { AppSidebar } from "./components/app-sidebar";
 import { RoleProvider } from "./components/role-provider";
 import { TopbarTools } from "./components/topbar-tools";
+import { ToastProvider } from "./components/toast-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,15 +15,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN">
       <body>
-        <RoleProvider>
-          <div className="app-shell">
-            <AppSidebar />
-            <main className="main-column">
-              <TopbarTools />
-              {children}
-            </main>
-          </div>
-        </RoleProvider>
+        <ToastProvider>
+          <RoleProvider>
+            <div className="app-shell">
+              <AppSidebar />
+              <main className="main-column">
+                <TopbarTools />
+                {children}
+              </main>
+            </div>
+          </RoleProvider>
+        </ToastProvider>
       </body>
     </html>
   );

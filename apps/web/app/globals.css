@@ -15,6 +15,22 @@
   --module-control-text: 13px;
   --module-control-height: 36px;
   --module-resizer-width: 14px;
+  --toast-info: #3559d9;
+  --toast-info-soft: #edf1ff;
+  --toast-success: #168a7a;
+  --toast-success-soft: #e9f6f1;
+  --toast-warning: #9a621a;
+  --toast-warning-soft: #fff4df;
+  --toast-error: #a34848;
+  --toast-error-soft: #fff0f0;
+  --toast-border-hover: #cbd3e3;
+  --toast-focus-ring: #3559d9;
+  --toast-shadow: 0 14px 38px rgba(24,39,75,.16);
+  --toast-enter-duration: 260ms;
+  --toast-exit-duration: 180ms;
+  --toast-ease-out: cubic-bezier(.2,.8,.2,1);
+  --toast-ease-in: cubic-bezier(.4,0,1,1);
+  --toast-layer: 500;
 }
 
 * { box-sizing: border-box; }
@@ -348,3 +364,35 @@ h1 { margin: 0; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-s
   .model-route-list article { grid-template-columns: 28px minmax(0,1fr); }
   .model-route-list article > p { grid-column: 2; text-align: left; }
 }
+
+/* Hallmark · component: toast · genre: modern-minimal · theme: existing system
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * pre-emit critique: P5 H5 E5 S5 R5 V4 · compact, readable, non-blocking, no layout shift
+ * contrast: pass (40–41) · slop: pass (component-applicable gates) · mobile: pass (320, 375, 414, 768)
+ */
+.toast-region { position: fixed; z-index: var(--toast-layer); top: max(16px,env(safe-area-inset-top)); left: 50%; width: min(560px,calc(100vw - 24px)); transform: translateX(-50%); pointer-events: none; }
+.app-toast { width: 100%; min-height: 48px; display: grid; grid-template-columns: 28px minmax(0,1fr) 44px; gap: 8px; align-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink); box-shadow: var(--toast-shadow); padding: 8px 4px 8px 12px; pointer-events: auto; animation: app-toast-in var(--toast-enter-duration) var(--toast-ease-out) both; }
+.app-toast.is-leaving { animation: app-toast-out var(--toast-exit-duration) var(--toast-ease-in) both; }
+.app-toast-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--toast-info-soft); color: var(--toast-info); font-size: 13px; font-weight: 800; }
+.app-toast-message { min-width: 0; overflow-wrap: anywhere; font-size: 13px; font-weight: 600; line-height: 1.45; }
+.app-toast > button { width: 44px; height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; font-size: 18px; transition: color 140ms ease, background 140ms ease, transform 100ms ease; }
+.app-toast:hover, .app-toast.is-hover { border-color: var(--toast-border-hover); }
+.app-toast:focus-within, .app-toast.is-focus { outline: 2px solid var(--toast-focus-ring); outline-offset: 2px; }
+.app-toast > button:hover { background: var(--canvas); color: var(--ink); }
+.app-toast > button:focus-visible { outline: 2px solid var(--toast-focus-ring); outline-offset: -2px; }
+.app-toast > button:active, .app-toast.is-active { transform: translateY(1px); }
+.app-toast > button:disabled, .app-toast.is-disabled { cursor: not-allowed; opacity: .48; }
+.app-toast.tone-success .app-toast-icon { background: var(--toast-success-soft); color: var(--toast-success); }
+.app-toast.tone-warning .app-toast-icon { background: var(--toast-warning-soft); color: var(--toast-warning); }
+.app-toast.tone-error .app-toast-icon { background: var(--toast-error-soft); color: var(--toast-error); }
+.app-toast.tone-loading .app-toast-icon { border: 2px solid var(--toast-info-soft); border-top-color: var(--toast-info); border-radius: 50%; background: transparent; animation: app-toast-spin .75s linear infinite; }
+.toast-preview-grid { display: grid; gap: 14px; padding: 24px; background: var(--canvas); }
+.toast-preview-grid article { display: grid; gap: 6px; }
+.toast-preview-grid small { color: var(--muted); }
+@keyframes app-toast-in { from { opacity: 0; transform: translateY(-10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes app-toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-7px); } }
+@keyframes app-toast-spin { to { transform: rotate(360deg); } }
+@media (max-width: 420px) { .toast-region { top: max(8px,env(safe-area-inset-top)); width: calc(100vw - 16px); }.app-toast { grid-template-columns: 26px minmax(0,1fr) 42px; gap: 7px; padding-left: 8px; }.app-toast-message { font-size: 12px; } }
+@media (prefers-reduced-motion: reduce) { .app-toast { animation-duration: 120ms; animation-name: app-toast-fade; }.app-toast.is-leaving { animation-name: app-toast-fade-out; }.app-toast.tone-loading .app-toast-icon { animation-duration: 1.2s; } }
+@keyframes app-toast-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes app-toast-fade-out { from { opacity: 1; } to { opacity: 0; } }

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ResizableColumns } from "../components/resizable-columns";
+import { useToast } from "../components/toast-provider";
 
 type CurriculumNode = {
   node_id: string;
@@ -166,7 +167,7 @@ export default function LessonPlansPage() {
   const [pendingRewrite, setPendingRewrite] = useState<PendingRewrite | null>(null);
   const [lastAcceptedRewrite, setLastAcceptedRewrite] = useState<Pick<PendingRewrite, "block" | "before"> | null>(null);
   const [rewriteInstructions, setRewriteInstructions] = useState<Record<LessonPlanBlock, string>>(rewriteDefaults);
-  const [message, setMessage] = useState<string | null>(null);
+  const { auto: setMessage } = useToast();
   const [form, setForm] = useState({
     curriculum_node_id: "",
     lesson_type: "new_lesson",
@@ -450,7 +451,6 @@ export default function LessonPlansPage() {
         <div className="lesson-safety-badge"><strong>教师审核优先</strong><span>生成内容默认仅自己可见</span></div>
       </section>
 
-      {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
       <ResizableColumns className="lesson-builder-layout" storageKey="lesson-builder" initialLeftPercent={30} leftMin={260} rightMin={440} collapse="compact" label="调整教案设置与教案正文宽度">
         <aside className="lesson-control-panel">

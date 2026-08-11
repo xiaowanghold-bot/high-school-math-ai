@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
+import { useToast } from "../components/toast-provider";
 
 type Question = {
   question_id: string;
@@ -204,7 +205,7 @@ export default function SearchPage() {
   const [detailMode, setDetailMode] = useState<"preview" | "edit">("preview");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { auto: setMessage } = useToast();
   const [variantKind, setVariantKind] = useState<VariantKind>("diagnostic");
   const [variantDifficulty, setVariantDifficulty] = useState("");
   const [variantInstruction, setVariantInstruction] = useState("");
@@ -625,7 +626,6 @@ export default function SearchPage() {
         <button className="primary-button" type="button" onClick={showImportStatus}>导入记录</button>
       </section>
 
-      {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
       <section className="quality-strip" aria-label="题库质量概览">
         <div><span>试点题目</span><strong>{stats?.total ?? "—"}</strong><small>本地私有题库</small></div>

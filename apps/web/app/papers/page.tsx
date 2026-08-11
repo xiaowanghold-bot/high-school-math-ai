@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
+import { useToast } from "../components/toast-provider";
 
 type Question = { question_id: string; review_status: string; question_type: string; stem_plain: string; answer_value: string | null; chapter: string | null; section: string | null; difficulty: number; verification_status: string; source_document: string };
 type PaperQuestionSnapshot = Question & { stem_latex: string | null; images: { asset_id: string }[] };
@@ -43,7 +44,7 @@ export default function PapersPage() {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [composing, setComposing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { auto: setMessage } = useToast();
   const [draftWarnings, setDraftWarnings] = useState<string[]>(["保存试卷后会固定题目和图片快照。"]);
   const [autoTarget, setAutoTarget] = useState(50);
   const [autoProfile, setAutoProfile] = useState("balanced");
@@ -148,7 +149,6 @@ export default function PapersPage() {
 
   return <div className="page-content lesson-page paper-page">
     <section className="page-title lesson-title"><div><p className="eyebrow">智能组卷 · 版本快照</p><h1>把选题、分值和导出连成一条线。</h1><p className="subtle">只调用独立验证通过的题目；保存后，题库修订不会改变历史试卷。</p></div><button className="primary-button" type="button" onClick={newPaper}>＋ 新建试卷</button></section>
-    {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
     <ResizableColumns className="lesson-builder-layout" storageKey="paper-builder" initialLeftPercent={32} leftMin={280} rightMin={440} collapse="compact" label="调整组卷设置与试卷正文宽度">
       <aside className="lesson-control-panel paper-control">
         <form onSubmit={savePaper}>
