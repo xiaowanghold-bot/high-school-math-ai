@@ -17,7 +17,6 @@ export default function DashboardPage() {
           <h1>上午好，开始准备下一节数学课。</h1>
           <p className="subtle">从教材章节进入，或者直接告诉 AI 这节课要解决什么问题。</p>
         </div>
-        <div className="date-card"><span>阶段 1/6</span><strong>教案生成 MVP</strong><small>课程树与题库已联动</small></div>
       </section>
 
       <section className="quick-grid" aria-label="快捷操作">

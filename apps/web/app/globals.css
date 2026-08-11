@@ -85,11 +85,6 @@ h1 { margin: 0; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-s
 .page-title h1 { overflow-wrap: anywhere; min-width: 0; font-size: clamp(24px,2.2vw,31px); line-height: 1.2; letter-spacing: -.01em; }
 .page-title .subtle { max-width: 960px; margin-top: 8px; font-size: 12px; line-height: 1.55; }
 .page-title .primary-button { flex: none; min-height: 40px; padding: 8px 12px; font-size: 12px; white-space: nowrap; }
-.date-card { min-width: 210px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 17px 19px; box-shadow: var(--shadow); }
-.date-card span, .date-card strong, .date-card small { display: block; }
-.date-card span { color: var(--blue); font-size: 11px; font-weight: 700; }
-.date-card strong { margin-top: 6px; }
-.date-card small { color: var(--muted); margin-top: 6px; }
 .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 28px 0 38px; }
 .quick-card { position: relative; min-height: 122px; display: grid; grid-template-columns: 46px 1fr 20px; align-items: center; gap: 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 15px; padding: 20px; box-shadow: var(--shadow); transition: transform .18s ease, border-color .18s ease; }
 .quick-card:hover { transform: translateY(-2px); border-color: #cbd3e3; }
