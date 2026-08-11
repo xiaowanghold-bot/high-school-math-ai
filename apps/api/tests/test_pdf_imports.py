@@ -15,6 +15,7 @@ from app.modules.pdf_imports import (
     PdfImportStudio,
     StructuredMediaReference,
     StructuredMediaCropCommand,
+    StructuredFormulaReviewCommand,
     StructuredQuestionDraftUpdate,
 )
 from app.modules.question_bank import QuestionBank
@@ -323,7 +324,7 @@ def test_structured_draft_requires_confirmed_boundary_and_formula_review(tmp_pat
     assert "Answer" not in draft.stem_plain
     assert imports.propose_structured_question_drafts(file_id).created_count == 0
 
-    with pytest.raises(PdfImportError, match="公式校对"):
+    with pytest.raises(PdfImportError, match="当前版本公式"):
         imports.update_structured_question_draft(
             file_id,
             draft.draft_id,
@@ -335,17 +336,38 @@ def test_structured_draft_requires_confirmed_boundary_and_formula_review(tmp_pat
             ),
         )
 
-    confirmed = imports.update_structured_question_draft(
+    saved = imports.update_structured_question_draft(
         file_id,
         draft.draft_id,
         StructuredQuestionDraftUpdate(
             **{
                 **draft.model_dump(exclude={"draft_id", "file_id", "boundary_candidate_id", "position", "start_page", "end_page", "source_text", "warnings", "imported_question_id", "created_at", "updated_at"}),
-                "formula_status": "confirmed",
-                "status": "confirmed",
+                "stem_latex": "Given $x=2$ choose an answer",
+                "formula_status": "needs_review",
+                "status": "draft",
                 "media_references": [
                     StructuredMediaReference(page_number=1, placement="stem", note="图形待裁剪")
                 ],
+            }
+        ),
+    )
+    checked = imports.review_structured_formula(
+        file_id, draft.draft_id, StructuredFormulaReviewCommand(confirm=False)
+    )
+    assert checked.formula_check.status == "passed"
+    assert not checked.formula_check.teacher_confirmed
+    assert checked.formula_status == "pending"
+    formula_confirmed = imports.review_structured_formula(
+        file_id, draft.draft_id, StructuredFormulaReviewCommand(confirm=True)
+    )
+    assert formula_confirmed.formula_check.teacher_confirmed
+    confirmed = imports.update_structured_question_draft(
+        file_id,
+        draft.draft_id,
+        StructuredQuestionDraftUpdate(
+            **{
+                **formula_confirmed.model_dump(exclude={"draft_id", "file_id", "boundary_candidate_id", "position", "start_page", "end_page", "source_text", "warnings", "media_crops", "formula_check", "imported_question_id", "created_at", "updated_at"}),
+                "status": "confirmed",
             }
         ),
     )
@@ -362,6 +384,19 @@ def test_structured_draft_requires_confirmed_boundary_and_formula_review(tmp_pat
                 }
             ),
         )
+    invalidated = imports.update_structured_question_draft(
+        file_id,
+        draft.draft_id,
+        StructuredQuestionDraftUpdate(
+            **{
+                **confirmed.model_dump(exclude={"draft_id", "file_id", "boundary_candidate_id", "position", "start_page", "end_page", "source_text", "warnings", "media_crops", "formula_check", "imported_question_id", "created_at", "updated_at"}),
+                "stem_latex": "Given $x=3$ choose an answer",
+                "status": "draft",
+            }
+        ),
+    )
+    assert invalidated.formula_status == "needs_review"
+    assert invalidated.formula_check is None
 
 
 def test_structured_draft_http_import_is_private_and_idempotent(
@@ -392,10 +427,23 @@ def test_structured_draft_http_import_is_private_and_idempotent(
     proposed = client.post(f"/api/v1/imports/files/{file_id}/structured-drafts/propose")
     assert proposed.status_code == 200
     draft = proposed.json()["drafts"]["items"][0]
-    draft.update({"formula_status": "confirmed", "status": "confirmed"})
+    draft.update({"formula_status": "needs_review", "status": "draft"})
     updated = client.patch(
         f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}",
         json={key: value for key, value in draft.items() if key in StructuredQuestionDraftUpdate.model_fields},
+    )
+    assert updated.status_code == 200
+    formula_review = client.post(
+        f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}/formula-review",
+        json={"confirm": True, "reviewer_id": "owner_teacher"},
+    )
+    assert formula_review.status_code == 200
+    assert formula_review.json()["formula_status"] == "confirmed"
+    reviewed_draft = formula_review.json()
+    reviewed_draft["status"] = "confirmed"
+    updated = client.patch(
+        f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}",
+        json={key: value for key, value in reviewed_draft.items() if key in StructuredQuestionDraftUpdate.model_fields},
     )
     assert updated.status_code == 200
 
@@ -442,6 +490,45 @@ def test_structured_draft_http_import_is_private_and_idempotent(
     assert len(question.images) == 1
     assert question.images[0].placement == "stem"
     assert question.images[0].width == crop["pixel_width"]
+
+
+def test_formula_review_locates_unreadable_glyphs_and_latex_structure(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(), [("公式异常.pdf", pdf_bytes(["1. Formula question with enough text"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    boundary = imports.propose_boundary_candidates(file_id).candidates.items[0]
+    imports.update_boundary_candidate(
+        file_id,
+        boundary.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1, end_page=1, stem_text=boundary.stem_text,
+            question_type="open_response", status="confirmed",
+        ),
+    )
+    draft = imports.propose_structured_question_drafts(file_id).drafts.items[0]
+    imports.update_structured_question_draft(
+        file_id,
+        draft.draft_id,
+        StructuredQuestionDraftUpdate(
+            **{
+                **draft.model_dump(exclude={"draft_id", "file_id", "boundary_candidate_id", "position", "start_page", "end_page", "source_text", "warnings", "media_crops", "formula_check", "imported_question_id", "created_at", "updated_at"}),
+                "stem_plain": "已知函数 fx=x+1",
+                "stem_latex": "已知函数 $f(x)=\\frac{x+1$",
+            }
+        ),
+    )
+    reviewed = imports.review_structured_formula(
+        file_id, draft.draft_id, StructuredFormulaReviewCommand(confirm=True)
+    )
+    assert reviewed.formula_status == "needs_review"
+    assert not reviewed.formula_check.teacher_confirmed
+    issue_codes = {issue.code for issue in reviewed.formula_check.issues}
+    assert "unreadable_glyph" in issue_codes
+    assert "unbalanced_braces" in issue_codes
+    assert any(issue.excerpt for issue in reviewed.formula_check.issues)
 
 
 def test_structured_media_crop_gates_and_delete(tmp_path: Path) -> None:

@@ -15,6 +15,7 @@ ImportFileStatus = Literal["registered", "analyzing", "ready_for_segmentation", 
 BoundaryCandidateStatus = Literal["draft", "confirmed", "discarded"]
 StructuredDraftStatus = Literal["draft", "confirmed", "imported"]
 FormulaReviewStatus = Literal["pending", "needs_review", "confirmed"]
+FormulaIssueSeverity = Literal["blocking", "warning"]
 BoundaryQuestionType = Literal[
     "single_choice",
     "multiple_choice",
@@ -197,6 +198,28 @@ class StructuredMediaCropView(StructuredMediaCropCommand):
     created_at: str
 
 
+class StructuredFormulaIssue(BaseModel):
+    code: str
+    severity: FormulaIssueSeverity
+    field: str
+    message: str
+    excerpt: str = ""
+
+
+class StructuredFormulaCheck(BaseModel):
+    status: Literal["passed", "blocked"]
+    content_signature: str
+    issues: list[StructuredFormulaIssue] = Field(default_factory=list)
+    checked_at: str
+    checked_by: str
+    teacher_confirmed: bool = False
+
+
+class StructuredFormulaReviewCommand(BaseModel):
+    confirm: bool = False
+    reviewer_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
 class StructuredQuestionDraftUpdate(BaseModel):
     question_type: BoundaryQuestionType
     stem_plain: str = Field(min_length=1, max_length=40_000)
@@ -224,6 +247,7 @@ class StructuredQuestionDraftView(StructuredQuestionDraftUpdate):
     source_text: str
     warnings: list[str] = Field(default_factory=list)
     media_crops: list[StructuredMediaCropView] = Field(default_factory=list)
+    formula_check: StructuredFormulaCheck | None = None
     imported_question_id: str | None = None
     created_at: str
     updated_at: str

@@ -23,6 +23,7 @@ from app.modules.pdf_imports import (
     PdfImportStudio,
     StructuredDraftImportResult,
     StructuredDraftProposalResult,
+    StructuredFormulaReviewCommand,
     StructuredMediaCropCommand,
     StructuredMediaCropView,
     StructuredQuestionDraftList,
@@ -230,6 +231,21 @@ def update_structured_draft(
         return get_pdf_import_studio().update_structured_question_draft(
             file_id, draft_id, command
         )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="结构化题目草稿不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/files/{file_id}/structured-drafts/{draft_id}/formula-review",
+    response_model=StructuredQuestionDraftView,
+)
+def review_structured_formula(
+    file_id: str, draft_id: str, command: StructuredFormulaReviewCommand
+) -> StructuredQuestionDraftView:
+    try:
+        return get_pdf_import_studio().review_structured_formula(file_id, draft_id, command)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="结构化题目草稿不存在") from exc
     except PdfImportError as exc:

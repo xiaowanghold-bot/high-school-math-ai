@@ -24,13 +24,24 @@
 ## 安全门
 
 - 未确认边界不能生成结构化草稿。
-- 题型仍为“待判断”或公式未标记“已核对”时，草稿不能确认。
+- 题型仍为“待判断”或当前内容版本的公式未经教师确认时，草稿不能确认。
 - 选择题至少需要两个不重复编号的选项。
 - 图片引用页必须属于当前 PDF 的有效页码；引用只表示归属，题库审核时仍需裁剪或替换。
 - 原答案和原解析不会被自动当成已核验内容；解析默认要求独立编写。
 - 只有教师确认的结构化草稿可以送入题库。
 - 入库题始终为 `private / pending / needs_math_review`，不能自动公开或用于正式组卷。
 - 已入库草稿在加工区锁定，后续修订统一进入题库版本历史。
+
+## 公式校对助手
+
+公式状态不能通过下拉框直接改成“已核对”，而是经过两层校对：
+
+1. 自动检查当前题干、LaTeX 题干、选项、答案与解析，定位 PDF 字体乱码、奇数个 `$`、不成对花括号、LaTeX 环境不匹配和数学定界缺失；
+2. 自动检查无阻断问题后，教师必须对照左侧原 PDF 确认当前版本。
+
+每次检查都会为上述内容生成 SHA-256 内容指纹，并保存检查时间、检查人、问题字段与上下文摘录。题干、选项、答案或解析任一内容发生变化时，旧指纹、检查结果和教师确认立即失效，已确认结构也会退回草稿状态。这样可以避免“先确认公式、后改内容”绕过门禁。
+
+警告项允许教师在复核后确认；乱码、分隔符或 LaTeX 结构错误属于阻断项，修正前不能确认公式。
 
 ## 数据对象
 
@@ -63,6 +74,7 @@
 - `GET /api/v1/imports/files/{file_id}/structured-drafts`
 - `POST /api/v1/imports/files/{file_id}/structured-drafts/propose`
 - `PATCH /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}`
+- `POST /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}/formula-review`
 - `POST /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}/media-crops`
 - `GET /api/v1/imports/media-crops/{crop_id}/file`
 - `DELETE /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}/media-crops/{crop_id}`

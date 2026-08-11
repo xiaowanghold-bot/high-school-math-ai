@@ -69,6 +69,42 @@
 .structured-editor textarea.compact { min-height: 74px; }
 .structured-editor :disabled { background: #f5f6f8; color: #7b8494; }
 .structured-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.formula-summary { display: grid; align-content: start; gap: 5px; min-width: 0; margin-top: 10px; }
+.formula-summary > span { color: #657087; font-size: var(--module-text-xs); font-weight: 700; }
+.formula-summary > strong { width: fit-content; border-radius: 999px; background: #eef0f4; color: #667184; padding: 6px 9px; font-size: var(--module-text-sm); }
+.formula-summary > strong.needs_review { background: #fff0e8; color: #a5542a; }
+.formula-summary > strong.confirmed { background: #e5f5ef; color: #19705c; }
+.formula-summary > small { color: var(--muted); font-size: var(--module-text-xs); line-height: 1.45; }
+.formula-review-panel { margin-top: 12px; overflow: hidden; border: 1px solid #dce3ef; border-radius: 9px; background: #f9fafc; }
+.formula-review-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid #e3e8f1; background: white; padding: 10px 11px; }
+.formula-review-panel > header strong, .formula-review-panel > header small { display: block; }
+.formula-review-panel > header strong { color: #344056; font-size: var(--module-text-sm); }
+.formula-review-panel > header small { margin-top: 3px; color: var(--muted); font-size: var(--module-text-xs); line-height: 1.45; }
+.formula-review-panel > header > div:last-child { display: flex; flex: none; gap: 6px; }
+.formula-review-panel button { min-height: var(--module-control-height); border: 1px solid #cbd4e5; border-radius: 7px; background: white; color: #536078; padding: 8px 10px; font-size: var(--module-text-xs); font-weight: 700; cursor: pointer; }
+.formula-review-panel button.formula-confirm { border-color: #2a7b66; background: #2a7b66; color: white; }
+.formula-review-panel button:disabled { opacity: .42; cursor: not-allowed; }
+.formula-preview { margin: 10px; border: 1px solid #e0e5ef; border-radius: 8px; background: white; padding: 10px 11px; }
+.formula-preview > span { display: block; margin-bottom: 6px; color: #6679b8; font-size: var(--module-text-xs); font-weight: 700; }
+.formula-preview p { margin: 0; color: #202c42; font-family: "Songti SC", "Noto Serif SC", serif; font-size: var(--module-control-text); line-height: 1.8; overflow-wrap: anywhere; }
+.formula-preview > div { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 4px 16px; margin-top: 6px; }
+.formula-preview b { margin-right: 4px; font-family: inherit; }
+.formula-result { margin: 0 10px 10px; border-left: 3px solid #2a7b66; background: #edf8f4; padding: 9px 10px; }
+.formula-review-panel.blocked .formula-result { border-left-color: #c96b43; background: #fff6f1; }
+.formula-result > div:first-child { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.formula-result > div:first-child strong { color: #276b5b; font-size: var(--module-text-sm); }
+.formula-review-panel.blocked .formula-result > div:first-child strong { color: #9a4b2e; }
+.formula-result > div:first-child small { color: var(--muted); font-size: var(--module-text-xs); }
+.formula-result > p, .formula-empty { margin: 7px 0 0; color: #526275; font-size: var(--module-text-xs); line-height: 1.6; }
+.formula-empty { margin: 0; padding: 0 11px 11px; }
+.formula-result ul { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.formula-result li { display: grid; grid-template-columns: minmax(0,1fr) minmax(120px,.55fr); gap: 9px; border-top: 1px solid rgba(95,112,139,.16); padding-top: 7px; }
+.formula-result li:first-child { border-top: 0; padding-top: 0; }
+.formula-result li strong, .formula-result li span { display: block; }
+.formula-result li strong { color: #8f4a2f; font-size: var(--module-text-xs); }
+.formula-result li.warning strong { color: #7d682b; }
+.formula-result li span { margin-top: 2px; color: #526275; font-size: var(--module-text-xs); line-height: 1.5; }
+.formula-result code { align-self: start; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,.78); color: #4d586a; padding: 5px 7px; font: var(--module-text-xs)/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .structured-warnings { border-left: 3px solid #d99027; background: #fff8ec; padding: 8px 10px; }
 .structured-warnings p { margin: 2px 0; color: #7d5923; font-size: var(--module-text-xs); line-height: 1.5; }
 .structured-options, .structured-media { margin-top: 12px; border: 1px solid #e0e5ef; border-radius: 8px; padding: 10px; }
@@ -103,4 +139,4 @@
 .structured-editor > footer button:disabled { opacity: .42; cursor: not-allowed; }
 @media (max-width: 1300px) { .import-preview-layout.structured-mode { grid-template-columns: 1fr; }.structured-mode .import-pdf-preview { border-right: 0; border-bottom: 1px solid var(--line); }.structured-mode .import-preview-scroll { height: 520px; }.structured-body { height: 680px; } }
 @media (max-width: 850px) { .structured-body.resizable-columns { height: auto; }.structured-body.resizable-columns .structured-list { max-height: 330px; border-bottom: 1px solid var(--line); }.structured-fields { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 700px) { .structured-fields { grid-template-columns: 1fr; }.structured-media > div:not(.crop-actions):not(.crop-gallery) { grid-template-columns: 62px 82px minmax(0,1fr) 28px; }.structured-media > .crop-actions { grid-template-columns: 1fr 1fr; }.crop-actions input { grid-column: 1 / -1; }.structured-editor > footer { flex-direction: column; }.structured-editor > footer button, .structured-editor > footer a { width: 100%; } }
+@media (max-width: 700px) { .structured-fields { grid-template-columns: 1fr; }.formula-review-panel > header, .formula-result > div:first-child { align-items: flex-start; flex-direction: column; }.formula-review-panel > header > div:last-child { width: 100%; }.formula-review-panel button { flex: 1; }.formula-preview > div, .formula-result li { grid-template-columns: 1fr; }.structured-media > div:not(.crop-actions):not(.crop-gallery) { grid-template-columns: 62px 82px minmax(0,1fr) 28px; }.structured-media > .crop-actions { grid-template-columns: 1fr 1fr; }.crop-actions input { grid-column: 1 / -1; }.structured-editor > footer { flex-direction: column; }.structured-editor > footer button, .structured-editor > footer a { width: 100%; } }

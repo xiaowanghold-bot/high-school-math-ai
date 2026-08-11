@@ -30,6 +30,9 @@ from .schemas import (
     ImportWorkspace,
     ImportWorkspaceStats,
     StructuredDraftProposalResult,
+    StructuredFormulaCheck,
+    StructuredFormulaIssue,
+    StructuredFormulaReviewCommand,
     StructuredMediaCropCommand,
     StructuredMediaCropView,
     StructuredMediaReference,
@@ -611,6 +614,14 @@ class PdfImportStudio:
                 raise KeyError(draft_id)
             if row["status"] == "imported":
                 raise PdfImportError("已导入题库的草稿不能在加工区继续修改，请前往题库审核台修订")
+            previous_signature = self._formula_signature(self._formula_payload_from_row(row))
+            next_signature = self._formula_signature(self._formula_payload_from_command(command))
+            formula_changed = previous_signature != next_signature
+            effective_formula_status = "needs_review" if formula_changed else row["formula_status"]
+            formula_check_json = None if formula_changed else row["formula_check_json"]
+            formula_checked_signature = "" if formula_changed else row["formula_checked_signature"]
+            if command.status == "confirmed" and effective_formula_status != "confirmed":
+                raise PdfImportError("确认结构化草稿前必须检查并由教师确认当前版本公式")
             self._validate_structured_draft(file.page_count, command)
             connection.execute(
                 """
@@ -618,6 +629,7 @@ class PdfImportStudio:
                 SET question_type = ?, stem_plain = ?, stem_latex = ?, options_json = ?,
                     answer_value = ?, solution_method = ?, solution_steps_json = ?,
                     final_answer = ?, difficulty = ?, formula_status = ?,
+                    formula_check_json = ?, formula_checked_signature = ?,
                     media_references_json = ?, status = ?, note = ?, editor_id = ?, updated_at = ?
                 WHERE file_id = ? AND draft_id = ?
                 """,
@@ -629,10 +641,50 @@ class PdfImportStudio:
                     command.solution_method.strip(),
                     json.dumps([step.strip() for step in command.solution_steps if step.strip()], ensure_ascii=False),
                     command.final_answer.strip() if command.final_answer else None,
-                    command.difficulty, command.formula_status,
+                    command.difficulty, effective_formula_status,
+                    formula_check_json, formula_checked_signature,
                     json.dumps([item.model_dump() for item in command.media_references], ensure_ascii=False),
                     command.status, command.note.strip(), command.editor_id, self._now(),
                     file_id, draft_id,
+                ),
+            )
+            updated = connection.execute(
+                "SELECT * FROM import_structured_question_drafts WHERE draft_id = ?",
+                (draft_id,),
+            ).fetchone()
+        return self._structured_draft(updated)
+
+    def review_structured_formula(
+        self, file_id: str, draft_id: str, command: StructuredFormulaReviewCommand
+    ) -> StructuredQuestionDraftView:
+        self.inspect(file_id)
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM import_structured_question_drafts
+                   WHERE file_id = ? AND draft_id = ?""",
+                (file_id, draft_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(draft_id)
+            if row["status"] == "imported":
+                raise PdfImportError("已入库草稿请在题库审核台继续校对公式")
+            check = self._analyze_formula(row, reviewer_id=command.reviewer_id)
+            blocking = any(issue.severity == "blocking" for issue in check.issues)
+            teacher_confirmed = command.confirm and not blocking
+            check = check.model_copy(update={"teacher_confirmed": teacher_confirmed})
+            formula_status = (
+                "confirmed" if teacher_confirmed else "needs_review" if blocking else "pending"
+            )
+            connection.execute(
+                """
+                UPDATE import_structured_question_drafts
+                SET formula_status = ?, formula_check_json = ?,
+                    formula_checked_signature = ?, editor_id = ?, updated_at = ?
+                WHERE file_id = ? AND draft_id = ?
+                """,
+                (
+                    formula_status, check.model_dump_json(), check.content_signature,
+                    command.reviewer_id, self._now(), file_id, draft_id,
                 ),
             )
             updated = connection.execute(
@@ -1003,6 +1055,10 @@ class PdfImportStudio:
             ],
             status=row["status"], warnings=json.loads(row["warnings_json"]),
             media_crops=media_crops or [],
+            formula_check=(
+                StructuredFormulaCheck.model_validate_json(row["formula_check_json"])
+                if row["formula_check_json"] else None
+            ),
             note=row["note"], editor_id=row["editor_id"],
             imported_question_id=row["imported_question_id"],
             created_at=row["created_at"], updated_at=row["updated_at"],
@@ -1057,6 +1113,121 @@ class PdfImportStudio:
         }
 
     @staticmethod
+    def _formula_payload_from_row(row: sqlite3.Row) -> dict:
+        return {
+            "stem_plain": row["stem_plain"],
+            "stem_latex": row["stem_latex"] or "",
+            "options": json.loads(row["options_json"]),
+            "answer_value": row["answer_value"] or "",
+            "solution_method": row["solution_method"],
+            "solution_steps": json.loads(row["solution_steps_json"]),
+            "final_answer": row["final_answer"] or "",
+        }
+
+    @staticmethod
+    def _formula_payload_from_command(command: StructuredQuestionDraftUpdate) -> dict:
+        return {
+            "stem_plain": command.stem_plain.strip(),
+            "stem_latex": (command.stem_latex or "").strip(),
+            "options": [item.model_dump() for item in command.options],
+            "answer_value": (command.answer_value or "").strip(),
+            "solution_method": command.solution_method.strip(),
+            "solution_steps": [step.strip() for step in command.solution_steps if step.strip()],
+            "final_answer": (command.final_answer or "").strip(),
+        }
+
+    @staticmethod
+    def _formula_signature(payload: dict) -> str:
+        normalized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _analyze_formula(
+        cls, row: sqlite3.Row, *, reviewer_id: str
+    ) -> StructuredFormulaCheck:
+        payload = cls._formula_payload_from_row(row)
+        fields: list[tuple[str, str]] = [
+            ("题干正文", payload["stem_plain"]),
+            ("LaTeX 题干", payload["stem_latex"]),
+            *[
+                (f"选项 {item.get('key', index + 1)}", str(item.get("text", "")))
+                for index, item in enumerate(payload["options"])
+            ],
+            ("参考答案", payload["answer_value"]),
+            *[
+                (f"解析步骤 {index + 1}", str(step))
+                for index, step in enumerate(payload["solution_steps"])
+            ],
+            ("最终答案", payload["final_answer"]),
+        ]
+        issues: list[StructuredFormulaIssue] = []
+        suspicious = re.compile(r"[�□■\uf000-\uf8ff]")
+        for field, text in fields:
+            match = suspicious.search(text)
+            if match:
+                start = max(0, match.start() - 16)
+                end = min(len(text), match.start() + 17)
+                issues.append(
+                    StructuredFormulaIssue(
+                        code="unreadable_glyph", severity="blocking", field=field,
+                        message="含有 PDF 字体映射产生的不可读字符，必须对照原页重建。",
+                        excerpt=text[start:end],
+                    )
+                )
+            dollar_count = len(re.findall(r"(?<!\\)\$", text))
+            if dollar_count % 2:
+                issues.append(
+                    StructuredFormulaIssue(
+                        code="unbalanced_math_delimiter", severity="blocking", field=field,
+                        message="数学定界符 $ 数量为奇数，公式无法稳定渲染。", excerpt=text[:80],
+                    )
+                )
+            balance = 0
+            for token in re.findall(r"(?<!\\)[{}]", text):
+                balance += 1 if token == "{" else -1
+                if balance < 0:
+                    break
+            if balance != 0:
+                issues.append(
+                    StructuredFormulaIssue(
+                        code="unbalanced_braces", severity="blocking", field=field,
+                        message="LaTeX 花括号不成对，请检查分式、根式或上下标。", excerpt=text[:80],
+                    )
+                )
+            begins = re.findall(r"\\begin\{([^}]+)\}", text)
+            ends = re.findall(r"\\end\{([^}]+)\}", text)
+            if sorted(begins) != sorted(ends):
+                issues.append(
+                    StructuredFormulaIssue(
+                        code="unbalanced_environment", severity="blocking", field=field,
+                        message="LaTeX 环境的 begin/end 不匹配。", excerpt=text[:80],
+                    )
+                )
+        math_signal = re.compile(r"[=<>≤≥∑√∞∈∪∩]|[A-Za-z]\s*\(")
+        stem_latex = payload["stem_latex"]
+        if math_signal.search(payload["stem_plain"]) and not stem_latex:
+            issues.append(
+                StructuredFormulaIssue(
+                    code="latex_not_rebuilt", severity="warning", field="LaTeX 题干",
+                    message="题干含数学表达式但尚未填写 LaTeX 版本，建议对照原页重建。",
+                )
+            )
+        if stem_latex and math_signal.search(stem_latex) and "$" not in stem_latex:
+            issues.append(
+                StructuredFormulaIssue(
+                    code="missing_math_delimiter", severity="blocking", field="LaTeX 题干",
+                    message="LaTeX 题干包含数学表达式，但没有使用 $...$ 定界。",
+                    excerpt=stem_latex[:80],
+                )
+            )
+        blocking = any(issue.severity == "blocking" for issue in issues)
+        return StructuredFormulaCheck(
+            status="blocked" if blocking else "passed",
+            content_signature=cls._formula_signature(payload), issues=issues,
+            checked_at=cls._now(), checked_by=reviewer_id,
+        )
+
+    @staticmethod
     def _validate_structured_draft(
         page_count: int, command: StructuredQuestionDraftUpdate
     ) -> None:
@@ -1070,8 +1241,6 @@ class PdfImportStudio:
         if command.status == "confirmed":
             if command.question_type == "unknown":
                 raise PdfImportError("确认结构化草稿前必须选择题型")
-            if command.formula_status != "confirmed":
-                raise PdfImportError("确认结构化草稿前必须完成公式校对")
         for item in command.media_references:
             if item.page_number > page_count:
                 raise PdfImportError(f"图片来源页必须在 1 到 {page_count} 之间")
@@ -1145,7 +1314,9 @@ class PdfImportStudio:
                     options_json TEXT NOT NULL, answer_value TEXT,
                     solution_method TEXT NOT NULL, solution_steps_json TEXT NOT NULL,
                     final_answer TEXT, difficulty INTEGER NOT NULL,
-                    formula_status TEXT NOT NULL, media_references_json TEXT NOT NULL,
+                    formula_status TEXT NOT NULL, formula_check_json TEXT,
+                    formula_checked_signature TEXT NOT NULL DEFAULT '',
+                    media_references_json TEXT NOT NULL,
                     status TEXT NOT NULL, warnings_json TEXT NOT NULL,
                     note TEXT NOT NULL, editor_id TEXT NOT NULL,
                     imported_question_id TEXT,
@@ -1175,6 +1346,18 @@ class PdfImportStudio:
             self._ensure_column(connection, "import_files", "image_page_count", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_files", "embedded_image_count", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_pages", "embedded_image_count", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(connection, "import_structured_question_drafts", "formula_check_json", "TEXT")
+            self._ensure_column(connection, "import_structured_question_drafts", "formula_checked_signature", "TEXT NOT NULL DEFAULT ''")
+            connection.execute(
+                """
+                UPDATE import_structured_question_drafts
+                SET formula_status = 'needs_review',
+                    status = CASE WHEN status = 'confirmed' THEN 'draft' ELSE status END
+                WHERE formula_status = 'confirmed'
+                  AND formula_checked_signature = ''
+                  AND status != 'imported'
+                """
+            )
 
     @staticmethod
     def _ensure_column(
