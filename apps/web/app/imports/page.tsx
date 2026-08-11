@@ -6,16 +6,16 @@ import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
 import "./imports.css";
 
-type ImportStatus = "registered" | "analyzing" | "ready_for_segmentation" | "failed";
+type ImportStatus = "registered" | "queued" | "analyzing" | "paused" | "ready_for_segmentation" | "failed";
 type CandidateStatus = "draft" | "confirmed" | "discarded";
 type DraftStatus = "draft" | "confirmed" | "imported";
 type FormulaStatus = "pending" | "needs_review" | "confirmed";
 type QuestionType = "single_choice" | "multiple_choice" | "fill_blank" | "open_response" | "unknown";
 type ImportPage = { page_id: string; page_number: number; width_points: number; height_points: number; extracted_text: string; character_count: number; question_marker_count: number; embedded_image_count: number; has_text_layer: boolean; warnings: string[] };
-type ImportFile = { file_id: string; batch_id: string; original_filename: string; size_bytes: number; sha256: string; page_count: number; status: ImportStatus; analyzed_page_count: number; text_page_count: number; scan_page_count: number; extracted_character_count: number; question_marker_count: number; image_page_count: number; embedded_image_count: number; warnings: string[]; error_message: string; created_at: string; updated_at: string };
+type ImportFile = { file_id: string; batch_id: string; original_filename: string; size_bytes: number; sha256: string; page_count: number; status: ImportStatus; analysis_attempts: number; analyzed_page_count: number; progress_percent: number; resume_page: number | null; text_page_count: number; scan_page_count: number; extracted_character_count: number; question_marker_count: number; estimated_question_count: number; image_page_count: number; embedded_image_count: number; warnings: string[]; error_message: string; created_at: string; updated_at: string };
 type ImportFileDetail = ImportFile & { pages: ImportPage[] };
-type ImportBatch = { batch_id: string; title: string; rights_basis: string; rights_statement: string; owner_id: string; file_count: number; registered_count: number; ready_count: number; failed_count: number; page_count: number; question_marker_count: number; created_at: string; updated_at: string; files: ImportFile[] };
-type ImportWorkspace = { stats: { batches: number; files: number; pages: number; ready_files: number; scan_pages: number; question_markers: number }; batches: ImportBatch[] };
+type ImportBatch = { batch_id: string; title: string; rights_basis: string; rights_statement: string; owner_id: string; file_count: number; registered_count: number; queued_count: number; analyzing_count: number; paused_count: number; ready_count: number; failed_count: number; page_count: number; analyzed_page_count: number; progress_percent: number; question_marker_count: number; estimated_question_count: number; created_at: string; updated_at: string; files: ImportFile[] };
+type ImportWorkspace = { stats: { batches: number; files: number; pages: number; analyzed_pages: number; ready_files: number; queued_files: number; failed_files: number; scan_pages: number; question_markers: number; estimated_questions: number }; batches: ImportBatch[] };
 type BoundaryCandidate = { candidate_id: string; file_id: string; position: number; start_page: number; end_page: number; stem_text: string; question_type: QuestionType; subquestion_count: number; status: CandidateStatus; note: string; editor_id: string; source_analysis_updated_at: string; created_at: string; updated_at: string };
 type BoundaryList = { file_id: string; source_analysis_updated_at: string; total: number; draft_count: number; confirmed_count: number; discarded_count: number; items: BoundaryCandidate[] };
 type StructuredOption = { key: string; text: string };
@@ -27,7 +27,7 @@ type CropRect = { x_ratio: number; y_ratio: number; width_ratio: number; height_
 type StructuredDraft = { draft_id: string; file_id: string; boundary_candidate_id: string; position: number; start_page: number; end_page: number; source_text: string; question_type: QuestionType; stem_plain: string; stem_latex: string | null; options: StructuredOption[]; answer_value: string | null; solution_method: string; solution_steps: string[]; final_answer: string | null; difficulty: number; formula_status: FormulaStatus; formula_check: FormulaCheck | null; media_references: MediaReference[]; media_crops: MediaCrop[]; status: DraftStatus; warnings: string[]; note: string; editor_id: string; imported_question_id: string | null; created_at: string; updated_at: string };
 type StructuredDraftList = { file_id: string; total: number; draft_count: number; confirmed_count: number; imported_count: number; items: StructuredDraft[] };
 
-const statusLabels: Record<ImportStatus, string> = { registered: "待分析", analyzing: "分析中", ready_for_segmentation: "可进入拆题", failed: "分析失败" };
+const statusLabels: Record<ImportStatus, string> = { registered: "待分析", queued: "队列中", analyzing: "分析中", paused: "已暂停", ready_for_segmentation: "可进入拆题", failed: "分析失败" };
 const candidateStatusLabels: Record<CandidateStatus, string> = { draft: "待校对", confirmed: "已确认", discarded: "已弃用" };
 const draftStatusLabels: Record<DraftStatus, string> = { draft: "待校对", confirmed: "可入题库", imported: "已入题库" };
 const formulaStatusLabels: Record<FormulaStatus, string> = { pending: "待检查", needs_review: "需校正", confirmed: "已核对" };
@@ -70,6 +70,7 @@ function ImportsPageContent() {
   const [cropPlacement, setCropPlacement] = useState<"stem" | "solution">("stem");
   const [cropNote, setCropNote] = useState("题目配图");
   const cropStart = useRef<{ x: number; y: number } | null>(null);
+  const queueStopRequested = useRef(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("三文件结构化试点");
@@ -77,6 +78,7 @@ function ImportsPageContent() {
   const [rightsStatement, setRightsStatement] = useState("本人确认仅使用题目事实，不复用原 PDF 版式、封面、水印、讲义文字和原解析表述。");
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [queueRunning, setQueueRunning] = useState(false);
   const [message, setMessage] = useState("");
 
   const selectedBatch = useMemo(() => workspace?.batches.find((batch) => batch.batch_id === selected?.batch_id) ?? null, [selected, workspace]);
@@ -151,22 +153,52 @@ function ImportsPageContent() {
     if (!selected) return;
     setBusy(true); setMessage("");
     try {
-      const response = await fetch(`/api/v1/imports/files/${selected.file_id}/analyze`, { method: "POST" });
+      const force = selected.status === "ready_for_segmentation" ? "?force=true" : "";
+      const response = await fetch(`/api/v1/imports/files/${selected.file_id}/analyze${force}`, { method: "POST" });
       if (!response.ok) throw new Error(await errorText(response));
       const result = await response.json(); await refresh(selected.file_id); setMessage(result.message);
     } catch (error) { setMessage(error instanceof Error ? error.message : "文件分析失败"); }
     finally { setBusy(false); }
   }
 
-  async function analyzeBatch() {
+  async function processBatchQueue() {
     if (!selectedBatch) return;
-    setBusy(true); setMessage("");
+    const batchId = selectedBatch.batch_id;
+    const preferredFileId = selected?.file_id;
+    queueStopRequested.current = false;
+    setQueueRunning(true); setMessage("");
     try {
-      const response = await fetch(`/api/v1/imports/batches/${selectedBatch.batch_id}/analyze`, { method: "POST" });
+      const queuedResponse = await fetch(`/api/v1/imports/batches/${batchId}/queue`, { method: "POST" });
+      if (!queuedResponse.ok) throw new Error(await errorText(queuedResponse));
+      let lastMessage = (await queuedResponse.json()).message as string;
+      while (!queueStopRequested.current) {
+        const response = await fetch(`/api/v1/imports/batches/${batchId}/process-next?page_budget=12`, { method: "POST" });
+        if (!response.ok) throw new Error(await errorText(response));
+        const step = await response.json();
+        lastMessage = step.message;
+        await refresh(preferredFileId);
+        setMessage(`${step.message} 批次总进度 ${step.batch.analyzed_page_count}/${step.batch.page_count} 页。`);
+        if (step.remaining_count === 0) break;
+      }
+      if (queueStopRequested.current) {
+        await fetch(`/api/v1/imports/batches/${batchId}/pause`, { method: "POST" });
+        await refresh(preferredFileId);
+        setMessage("批次已暂停；已完成的页面检查点均已保存，下次将从断点继续。");
+      } else {
+        setMessage(lastMessage || "批次队列处理完成。");
+      }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "批次队列处理失败"); }
+    finally { setQueueRunning(false); }
+  }
+
+  async function pauseBatchQueue() {
+    if (!selectedBatch) return;
+    queueStopRequested.current = true;
+    try {
+      const response = await fetch(`/api/v1/imports/batches/${selectedBatch.batch_id}/pause`, { method: "POST" });
       if (!response.ok) throw new Error(await errorText(response));
-      const result = await response.json(); await refresh(selected?.file_id); setMessage(result.message);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "批次分析失败"); }
-    finally { setBusy(false); }
+      setMessage("正在完成当前页组，随后暂停队列…");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "暂停队列失败"); }
   }
 
   async function proposeBoundaries() {
@@ -366,7 +398,7 @@ function ImportsPageContent() {
   return <div className="page-content import-workspace">
     <section className="page-title import-title"><div><p className="eyebrow">题库生产 · 来源可追溯</p><h1>批量 PDF 加工中心</h1><p className="subtle">先登记来源和权利，再逐页分析与校对题目边界；任何内容都不会自动进入正式题库。</p></div><button className="primary-button" type="button" onClick={() => setUploadOpen((value) => !value)}>{uploadOpen ? "收起登记" : "＋ 新建批次"}</button></section>
     {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage("")}>关闭</button></div>}
-    <section className="import-stats"><div><span>导入批次</span><strong>{workspace?.stats.batches ?? "—"}</strong><small>保留权利声明</small></div><div><span>PDF 文件</span><strong>{workspace?.stats.files ?? "—"}</strong><small>{workspace?.stats.pages ?? 0} 页</small></div><div className="ready"><span>已完成页分析</span><strong>{workspace?.stats.ready_files ?? "—"}</strong><small>可进入拆题准备</small></div><div className={workspace?.stats.scan_pages ? "attention" : ""}><span>待 OCR 页面</span><strong>{workspace?.stats.scan_pages ?? "—"}</strong><small>文字层不足</small></div><div><span>题号标记</span><strong>{workspace?.stats.question_markers ?? "—"}</strong><small>仅作边界候选</small></div></section>
+    <section className="import-stats"><div><span>导入批次</span><strong>{workspace?.stats.batches ?? "—"}</strong><small>保留权利声明</small></div><div><span>PDF 文件</span><strong>{workspace?.stats.files ?? "—"}</strong><small>{workspace?.stats.pages ?? 0} 页</small></div><div className="ready"><span>页面处理进度</span><strong>{workspace ? `${workspace.stats.analyzed_pages}/${workspace.stats.pages}` : "—"}</strong><small>{workspace?.stats.ready_files ?? 0} 份可进入拆题</small></div><div><span>候选题量估计</span><strong>{workspace?.stats.estimated_questions ?? "—"}</strong><small>来自题量审计表</small></div><div className={workspace?.stats.scan_pages ? "attention" : ""}><span>待 OCR 页面</span><strong>{workspace?.stats.scan_pages ?? "—"}</strong><small>{workspace?.stats.failed_files ?? 0} 份失败待重试</small></div></section>
 
     {uploadOpen && <form className="import-upload-panel" onSubmit={upload}>
       <header><span>01</span><div><h2>登记一批 PDF</h2><p>每批最多 12 份、单份不超过 100 MB；登记后由教师决定何时分析。</p></div></header>
@@ -379,12 +411,12 @@ function ImportsPageContent() {
     <ResizableColumns className="import-layout" storageKey="pdf-import-queue" initialLeftPercent={32} leftMin={260} rightMin={480} collapse="compact" label="调整 PDF 处理队列与加工区宽度">
       <aside className="import-queue"><header><strong>处理队列</strong><span>{workspace?.stats.files ?? 0} 份</span></header>
         {!workspace?.batches.length && <div className="import-empty"><strong>暂无导入批次</strong><p>从上方选择 PDF，登记后再逐份分析。</p></div>}
-        {workspace?.batches.map((batch) => <section key={batch.batch_id} className="import-batch-group"><header><div><strong>{batch.title}</strong><small>{batch.file_count} 份 · {batch.page_count} 页 · {rightsLabels[batch.rights_basis]}</small></div><em>{batch.ready_count}/{batch.file_count}</em></header>{batch.files.map((file) => <button type="button" className={selectedFileId === file.file_id ? "active" : ""} key={file.file_id} onClick={() => openFile(file.file_id).catch((error: Error) => setMessage(error.message))}><span className={`import-file-status ${file.status}`}>PDF</span><div><b>{file.original_filename}</b><small>{file.page_count} 页 · {formatBytes(file.size_bytes)}</small></div><em className={file.status}>{statusLabels[file.status]}</em></button>)}</section>)}
+        {workspace?.batches.map((batch) => <section key={batch.batch_id} className="import-batch-group"><header><div><strong>{batch.title}</strong><small>{batch.file_count} 份 · {batch.page_count} 页 · 估计 {batch.estimated_question_count || "待统计"} 题</small></div><em>{batch.progress_percent}%</em></header><div className="import-batch-progress"><span style={{ width: `${batch.progress_percent}%` }} /></div><div className="import-batch-state"><span>{batch.analyzed_page_count}/{batch.page_count} 页</span><span>{batch.queued_count + batch.analyzing_count ? `${batch.queued_count + batch.analyzing_count} 份排队` : batch.paused_count ? `${batch.paused_count} 份暂停` : batch.failed_count ? `${batch.failed_count} 份失败` : `${batch.ready_count}/${batch.file_count} 完成`}</span></div>{batch.files.map((file) => <button type="button" className={selectedFileId === file.file_id ? "active" : ""} key={file.file_id} onClick={() => openFile(file.file_id).catch((error: Error) => setMessage(error.message))}><span className={`import-file-status ${file.status}`}>PDF</span><div><b>{file.original_filename}</b><small>{file.analyzed_page_count}/{file.page_count} 页 · 估计 {file.estimated_question_count || "—"} 题 · {formatBytes(file.size_bytes)}</small><span className="import-file-progress"><i style={{ width: `${file.progress_percent}%` }} /></span></div><em className={file.status}>{statusLabels[file.status]}</em></button>)}</section>)}
       </aside>
 
       <main className="import-inspector">{!selected ? <div className="import-inspector-empty"><span>PDF</span><h2>选择文件检查页面质量</h2><p>这里会显示原文件、文字层覆盖、题号标记和需要 OCR 的页面。</p></div> : <>
-        <header className="import-inspector-heading"><div><p>{selectedBatch?.title}</p><h2>{selected.original_filename}</h2><small>SHA-256：{selected.sha256.slice(0, 18)}… · {formatBytes(selected.size_bytes)}</small></div><div><a href={`/api/v1/imports/files/${selected.file_id}/source`} target="_blank" rel="noreferrer">打开原 PDF</a><button type="button" disabled={busy} onClick={analyzeFile}>{busy ? "处理中…" : selected.status === "ready_for_segmentation" ? "重新分析" : "分析此文件"}</button><button className="primary" type="button" disabled={busy || !selectedBatch || selectedBatch.ready_count === selectedBatch.file_count} onClick={analyzeBatch}>分析本批全部</button></div></header>
-        <section className="import-file-metrics"><div><span>状态</span><strong className={selected.status}>{statusLabels[selected.status]}</strong></div><div><span>总页数</span><strong>{selected.page_count}</strong></div><div><span>有文字层</span><strong>{selected.text_page_count}</strong></div><div><span>待 OCR</span><strong>{selected.scan_page_count}</strong></div><div><span>题号 / 图片</span><strong>{selected.question_marker_count} / {selected.embedded_image_count}</strong></div></section>
+        <header className="import-inspector-heading"><div><p>{selectedBatch?.title}</p><h2>{selected.original_filename}</h2><small>SHA-256：{selected.sha256.slice(0, 18)}… · {formatBytes(selected.size_bytes)}</small></div><div><a href={`/api/v1/imports/files/${selected.file_id}/source`} target="_blank" rel="noreferrer">打开原 PDF</a><button type="button" disabled={busy || queueRunning} onClick={analyzeFile}>{busy ? "处理中…" : selected.status === "ready_for_segmentation" ? "重新分析" : selected.analyzed_page_count ? `从第 ${selected.resume_page} 页继续` : "分析此文件"}</button>{queueRunning ? <button className="pause" type="button" onClick={pauseBatchQueue}>暂停队列</button> : <button className="primary" type="button" disabled={busy || !selectedBatch || selectedBatch.ready_count === selectedBatch.file_count} onClick={processBatchQueue}>{selectedBatch && (selectedBatch.paused_count || selectedBatch.failed_count || selectedBatch.analyzed_page_count) ? "继续本批队列" : "启动本批队列"}</button>}</div></header>
+        <section className="import-file-metrics"><div><span>状态</span><strong className={selected.status}>{statusLabels[selected.status]}</strong></div><div><span>页面进度</span><strong>{selected.analyzed_page_count}/{selected.page_count}</strong></div><div><span>处理完成度</span><strong>{selected.progress_percent}%</strong></div><div><span>待 OCR</span><strong>{selected.scan_page_count}</strong></div><div><span>估计题量 / 题号</span><strong>{selected.estimated_question_count || "—"} / {selected.question_marker_count}</strong></div></section>
         {selected.error_message && <div className="notice warning">{selected.error_message}</div>}{selected.warnings.map((warning) => <p className="import-warning" key={warning}>{warning}</p>)}
         <nav className="import-stage-tabs"><button type="button" className={viewMode === "pages" ? "active" : ""} onClick={() => setViewMode("pages")}><span>01</span><div><strong>逐页分析</strong><small>文字层、题号与图片</small></div></button><button type="button" className={viewMode === "boundaries" ? "active" : ""} disabled={selected.status !== "ready_for_segmentation"} onClick={() => setViewMode("boundaries")}><span>02</span><div><strong>题目边界</strong><small>{boundaries.total ? `${boundaries.confirmed_count}/${boundaries.total} 已确认` : "生成候选后人工校对"}</small></div></button><button type="button" className={viewMode === "structured" ? "active" : ""} disabled={!boundaries.confirmed_count} onClick={() => setViewMode("structured")}><span>03</span><div><strong>内容结构化</strong><small>{drafts.total ? `${drafts.confirmed_count + drafts.imported_count}/${drafts.total} 已校对` : "题干、选项、公式与配图"}</small></div></button></nav>
         <ResizableColumns className={`import-preview-layout ${viewMode === "boundaries" ? "boundary-mode" : viewMode === "structured" ? "structured-mode" : ""}`} storageKey={`pdf-preview-${viewMode}`} initialLeftPercent={viewMode === "pages" ? 63 : 45} leftMin={viewMode === "pages" ? 340 : 320} rightMin={viewMode === "pages" ? 240 : 360} collapse="wide" label="调整 PDF 原文预览与分析校对区宽度">

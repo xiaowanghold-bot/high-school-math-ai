@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     pdf_import_dir: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "pdf-import-files"
     )
+    pdf_question_estimates_csv: Path = Field(
+        default=PROJECT_ROOT
+        / "docs"
+        / "high-school-math-ai"
+        / "audits"
+        / "batch-2026-08-001-question-estimates.csv"
+    )
     lesson_plan_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "lesson-plans.sqlite3"
     )

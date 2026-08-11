@@ -11,7 +11,14 @@ ImportRightsBasis = Literal[
     "original",
     "private_research_only",
 ]
-ImportFileStatus = Literal["registered", "analyzing", "ready_for_segmentation", "failed"]
+ImportFileStatus = Literal[
+    "registered",
+    "queued",
+    "analyzing",
+    "paused",
+    "ready_for_segmentation",
+    "failed",
+]
 BoundaryCandidateStatus = Literal["draft", "confirmed", "discarded"]
 StructuredDraftStatus = Literal["draft", "confirmed", "imported"]
 FormulaReviewStatus = Literal["pending", "needs_review", "confirmed"]
@@ -54,11 +61,15 @@ class ImportFileSummary(BaseModel):
     sha256: str
     page_count: int
     status: ImportFileStatus
+    analysis_attempts: int = 0
     analyzed_page_count: int
+    progress_percent: float = 0
+    resume_page: int | None = None
     text_page_count: int
     scan_page_count: int
     extracted_character_count: int
     question_marker_count: int
+    estimated_question_count: int = 0
     image_page_count: int
     embedded_image_count: int
     warnings: list[str] = Field(default_factory=list)
@@ -79,10 +90,16 @@ class ImportBatchSummary(BaseModel):
     owner_id: str
     file_count: int
     registered_count: int
+    queued_count: int = 0
+    analyzing_count: int = 0
+    paused_count: int = 0
     ready_count: int
     failed_count: int
     page_count: int
+    analyzed_page_count: int = 0
+    progress_percent: float = 0
     question_marker_count: int
+    estimated_question_count: int = 0
     created_at: str
     updated_at: str
     files: list[ImportFileSummary] = Field(default_factory=list)
@@ -92,9 +109,13 @@ class ImportWorkspaceStats(BaseModel):
     batches: int = 0
     files: int = 0
     pages: int = 0
+    analyzed_pages: int = 0
     ready_files: int = 0
+    queued_files: int = 0
+    failed_files: int = 0
     scan_pages: int = 0
     question_markers: int = 0
+    estimated_questions: int = 0
 
 
 class ImportWorkspace(BaseModel):
@@ -116,6 +137,20 @@ class ImportBatchAnalysisResult(BaseModel):
     batch: ImportBatchSummary
     analyzed_count: int
     failed_count: int
+    message: str
+
+
+class ImportBatchQueueResult(BaseModel):
+    batch: ImportBatchSummary
+    queued_count: int
+    message: str
+
+
+class ImportQueueStepResult(BaseModel):
+    batch: ImportBatchSummary
+    file: ImportFileDetail | None = None
+    processed_pages: int = 0
+    remaining_count: int = 0
     message: str
 
 

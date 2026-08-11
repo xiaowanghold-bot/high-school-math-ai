@@ -14,9 +14,11 @@ from app.modules.pdf_imports import (
     BoundaryProposalResult,
     ImportAnalysisResult,
     ImportBatchAnalysisResult,
+    ImportBatchQueueResult,
     ImportBatchCommand,
     ImportBatchResult,
     ImportFileDetail,
+    ImportQueueStepResult,
     ImportRightsBasis,
     ImportWorkspace,
     PdfImportError,
@@ -39,7 +41,11 @@ router = APIRouter(prefix="/imports", tags=["pdf-imports"])
 @lru_cache
 def get_pdf_import_studio() -> PdfImportStudio:
     settings = get_settings()
-    return PdfImportStudio(settings.pdf_import_db, settings.pdf_import_dir)
+    return PdfImportStudio(
+        settings.pdf_import_db,
+        settings.pdf_import_dir,
+        settings.pdf_question_estimates_csv,
+    )
 
 
 @lru_cache
@@ -98,9 +104,15 @@ def import_file_detail(file_id: str) -> ImportFileDetail:
 
 
 @router.post("/files/{file_id}/analyze", response_model=ImportAnalysisResult)
-def analyze_import_file(file_id: str) -> ImportAnalysisResult:
+def analyze_import_file(
+    file_id: str,
+    force: bool = Query(default=False),
+    page_budget: int | None = Query(default=None, ge=1, le=200),
+) -> ImportAnalysisResult:
     try:
-        return get_pdf_import_studio().analyze(file_id)
+        return get_pdf_import_studio().analyze(
+            file_id, force=force, page_budget=page_budget
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="导入文件不存在") from exc
     except PdfImportError as exc:
@@ -115,6 +127,44 @@ def analyze_import_batch(batch_id: str) -> ImportBatchAnalysisResult:
         return get_pdf_import_studio().analyze_batch(batch_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="导入批次不存在") from exc
+
+
+@router.post(
+    "/batches/{batch_id}/queue", response_model=ImportBatchQueueResult
+)
+def queue_import_batch(
+    batch_id: str,
+    retry_failed: bool = Query(default=True),
+) -> ImportBatchQueueResult:
+    try:
+        return get_pdf_import_studio().queue_batch(batch_id, retry_failed=retry_failed)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入批次不存在") from exc
+
+
+@router.post(
+    "/batches/{batch_id}/pause", response_model=ImportBatchQueueResult
+)
+def pause_import_batch(batch_id: str) -> ImportBatchQueueResult:
+    try:
+        return get_pdf_import_studio().pause_batch(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入批次不存在") from exc
+
+
+@router.post(
+    "/batches/{batch_id}/process-next", response_model=ImportQueueStepResult
+)
+def process_import_queue_step(
+    batch_id: str,
+    page_budget: int = Query(default=20, ge=1, le=100),
+) -> ImportQueueStepResult:
+    try:
+        return get_pdf_import_studio().process_next(batch_id, page_budget=page_budget)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入批次不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/files/{file_id}/source")

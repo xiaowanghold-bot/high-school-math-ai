@@ -109,6 +109,101 @@ def test_analyze_extracts_page_metrics_and_is_idempotent(tmp_path: Path) -> None
     assert second.question_marker_count == 2
 
 
+def test_batch_queue_pauses_and_resumes_from_page_checkpoints(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(),
+        [
+            (
+                "函数与导数.pdf",
+                pdf_bytes(
+                    ["1. First page with enough searchable text"],
+                    ["2. Second page with enough searchable text"],
+                    ["3. Third page with enough searchable text"],
+                ),
+            )
+        ],
+    )
+    batch_id = created.batch.batch_id
+    file_id = created.batch.files[0].file_id
+
+    queued = imports.queue_batch(batch_id)
+    assert queued.queued_count == 1
+    assert queued.batch.queued_count == 1
+
+    first_step = imports.process_next(batch_id, page_budget=1)
+    assert first_step.processed_pages == 1
+    assert first_step.file is not None
+    assert first_step.file.status == "queued"
+    assert first_step.file.progress_percent == pytest.approx(33.3)
+    assert first_step.file.resume_page == 2
+
+    paused = imports.pause_batch(batch_id)
+    assert paused.batch.paused_count == 1
+    resumed = imports.queue_batch(batch_id)
+    assert resumed.batch.queued_count == 1
+
+    imports.process_next(batch_id, page_budget=1)
+    completed = imports.process_next(batch_id, page_budget=1)
+    assert completed.file is not None
+    assert completed.file.status == "ready_for_segmentation"
+    assert completed.file.analyzed_page_count == 3
+    assert completed.file.resume_page is None
+    assert completed.remaining_count == 0
+    assert imports.inspect(file_id).question_marker_count == 3
+
+
+def test_failed_analysis_preserves_pages_and_retries_from_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(),
+        [("概率统计.pdf", pdf_bytes(["1. First valid page"], ["2. Second valid page"]))],
+    )
+    batch_id = created.batch.batch_id
+    file_id = created.batch.files[0].file_id
+    original_checkpoint = imports._checkpoint_page
+
+    def fail_second_page(target_file_id: str, page_number: int, page: object) -> None:
+        if page_number == 2:
+            raise RuntimeError("synthetic page failure")
+        original_checkpoint(target_file_id, page_number, page)
+
+    monkeypatch.setattr(imports, "_checkpoint_page", fail_second_page)
+    with pytest.raises(PdfImportError, match="synthetic page failure"):
+        imports.analyze(file_id)
+
+    failed = imports.inspect(file_id)
+    assert failed.status == "failed"
+    assert failed.analyzed_page_count == 1
+    assert failed.resume_page == 2
+
+    monkeypatch.setattr(imports, "_checkpoint_page", original_checkpoint)
+    imports.queue_batch(batch_id)
+    retried = imports.process_next(batch_id, page_budget=10)
+    assert retried.file is not None
+    assert retried.file.status == "ready_for_segmentation"
+    assert retried.processed_pages == 1
+
+
+def test_question_estimate_is_loaded_from_audit_catalog(tmp_path: Path) -> None:
+    estimates = tmp_path / "estimates.csv"
+    estimates.write_text(
+        "filename,preliminary_question_estimate\n大题 函数与导数.pdf,40\n",
+        encoding="utf-8",
+    )
+    imports = PdfImportStudio(
+        tmp_path / "imports.sqlite3", tmp_path / "files", estimates
+    )
+
+    created = imports.create_batch(
+        command(), [("大题 函数与导数.pdf", pdf_bytes(["1. Function question"]))]
+    )
+
+    assert created.batch.estimated_question_count == 40
+    assert created.batch.files[0].estimated_question_count == 40
+    assert imports.workspace().stats.estimated_questions == 40
+
+
 def test_duplicate_invalid_and_rights_gates(tmp_path: Path) -> None:
     imports = studio(tmp_path)
     content = pdf_bytes(["1. A valid question with enough text"])
@@ -169,6 +264,34 @@ def test_batch_analysis_and_http_contract(tmp_path: Path, monkeypatch: pytest.Mo
     assert preview.status_code == 200
     assert preview.headers["content-type"].startswith("image/png")
     assert preview.content.startswith(b"\x89PNG")
+
+
+def test_queue_http_contract_processes_bounded_page_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    imports = studio(tmp_path)
+    monkeypatch.setattr("app.routes.imports.get_pdf_import_studio", lambda: imports)
+    client = TestClient(app)
+    created = imports.create_batch(
+        command(title="断点队列接口测试"),
+        [("queue.pdf", pdf_bytes(["1. First page"], ["2. Second page"]))],
+    )
+    batch_id = created.batch.batch_id
+
+    queued = client.post(f"/api/v1/imports/batches/{batch_id}/queue")
+    first = client.post(
+        f"/api/v1/imports/batches/{batch_id}/process-next",
+        params={"page_budget": 1},
+    )
+    paused = client.post(f"/api/v1/imports/batches/{batch_id}/pause")
+
+    assert queued.status_code == 200
+    assert queued.json()["queued_count"] == 1
+    assert first.status_code == 200
+    assert first.json()["processed_pages"] == 1
+    assert first.json()["file"]["resume_page"] == 2
+    assert paused.status_code == 200
+    assert paused.json()["batch"]["paused_count"] == 1
 
 
 def test_question_marker_supports_exam_source_style() -> None:
