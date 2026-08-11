@@ -25,6 +25,7 @@ from app.modules.pdf_imports import (
     PdfImportStudio,
     StructuredDraftImportResult,
     StructuredDraftProposalResult,
+    StructuredDraftRepairResult,
     StructuredFormulaReviewCommand,
     StructuredMediaCropCommand,
     StructuredMediaCropView,
@@ -264,6 +265,23 @@ def list_structured_drafts(file_id: str) -> StructuredQuestionDraftList:
 def propose_structured_drafts(file_id: str) -> StructuredDraftProposalResult:
     try:
         return get_pdf_import_studio().propose_structured_question_drafts(file_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/files/{file_id}/structured-drafts/auto-repair",
+    response_model=StructuredDraftRepairResult,
+)
+def auto_repair_structured_drafts(
+    file_id: str, math_ocr: bool = Query(default=False)
+) -> StructuredDraftRepairResult:
+    try:
+        return get_pdf_import_studio().auto_repair_structured_question_drafts(
+            file_id, use_math_ocr=math_ocr
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="导入文件不存在") from exc
     except PdfImportError as exc:

@@ -34,6 +34,7 @@ from .schemas import (
     ImportWorkspace,
     ImportWorkspaceStats,
     StructuredDraftProposalResult,
+    StructuredDraftRepairResult,
     StructuredFormulaCheck,
     StructuredFormulaIssue,
     StructuredFormulaReviewCommand,
@@ -45,6 +46,7 @@ from .schemas import (
     StructuredQuestionDraftView,
     StructuredQuestionOption,
 )
+from .text_repair import needs_math_ocr, repair_structured_text
 
 
 class PdfImportError(ValueError):
@@ -683,7 +685,7 @@ class PdfImportStudio:
                     f"imp_draft_{uuid4().hex[:16]}", file_id, boundary.candidate_id,
                     boundary.position, boundary.start_page, boundary.end_page,
                     boundary.stem_text, boundary.question_type, parsed["stem_plain"],
-                    None, json.dumps(parsed["options"], ensure_ascii=False), None,
+                    parsed["stem_latex"], json.dumps(parsed["options"], ensure_ascii=False), None,
                     "待独立编写", "[]", None, 3, parsed["formula_status"],
                     json.dumps(media, ensure_ascii=False), "draft",
                     json.dumps(warnings, ensure_ascii=False), "", "system_proposal",
@@ -708,6 +710,160 @@ class PdfImportStudio:
             drafts=drafts,
             created_count=len(records),
             message=f"已从 {len(records)} 个确认边界生成结构化草稿；请逐题校对公式、选项和图片归属。",
+        )
+
+    def auto_repair_structured_question_drafts(
+        self, file_id: str, *, use_math_ocr: bool = False
+    ) -> StructuredDraftRepairResult:
+        self.inspect(file_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM import_structured_question_drafts
+                   WHERE file_id = ? ORDER BY position""",
+                (file_id,),
+            ).fetchall()
+            if not rows:
+                raise PdfImportError("当前文件还没有结构化草稿，请先同步确认后的题目边界")
+
+            repaired_count = 0
+            skipped_teacher_edits = 0
+            skipped_imported = 0
+            review_required_count = 0
+            unresolved_glyph_count = 0
+            now = self._now()
+            for row in rows:
+                if row["status"] == "imported":
+                    skipped_imported += 1
+                    continue
+                if row["editor_id"] not in {"system_proposal", "auto_formula_repair"}:
+                    # Do not replace teacher-authored content with the original
+                    # source. If unreadable PDF glyphs remain, repair the current
+                    # teacher version in-place; otherwise preserve it verbatim.
+                    current_text = row["stem_plain"]
+                    if not re.search(r"[�□■\uf000-\uf8ff]", current_text):
+                        skipped_teacher_edits += 1
+                        continue
+                    repair_source = current_text
+                    editor_id = row["editor_id"]
+                else:
+                    repair_source = row["source_text"]
+                    editor_id = "auto_formula_repair"
+
+                repaired = repair_structured_text(repair_source, row["question_type"])
+                preserved_latex = (
+                    row["stem_latex"]
+                    if row["editor_id"] == "auto_formula_repair" and row["stem_latex"]
+                    else repaired.stem_latex
+                )
+                repaired_warnings = list(repaired.warnings)
+                if preserved_latex:
+                    repaired_warnings.extend(
+                        warning
+                        for warning in json.loads(row["warnings_json"])
+                        if warning.startswith("数学 OCR 已从第")
+                    )
+                if repaired.formula_status == "needs_review":
+                    review_required_count += 1
+                unresolved_glyph_count += sum(
+                    0xF000 <= ord(char) <= 0xF8FF for char in repaired.stem_plain
+                )
+                connection.execute(
+                    """
+                    UPDATE import_structured_question_drafts
+                    SET stem_plain = ?, stem_latex = ?, options_json = ?,
+                        formula_status = ?, formula_check_json = NULL,
+                        formula_checked_signature = '', status = 'draft',
+                        warnings_json = ?, editor_id = ?, updated_at = ?
+                    WHERE draft_id = ?
+                    """,
+                    (
+                        repaired.stem_plain,
+                        preserved_latex,
+                        json.dumps(repaired.options, ensure_ascii=False),
+                        repaired.formula_status,
+                        json.dumps(repaired_warnings, ensure_ascii=False),
+                        editor_id,
+                        now,
+                        row["draft_id"],
+                    ),
+                )
+                repaired_count += 1
+
+        math_ocr_count = 0
+        math_ocr_failed_count = 0
+        if use_math_ocr:
+            from .math_ocr import recognize_question_candidates
+
+            source_path, _ = self.source_file(file_id)
+            with self._connect() as connection:
+                ocr_rows = connection.execute(
+                    """SELECT * FROM import_structured_question_drafts
+                       WHERE file_id = ? AND status != 'imported'
+                       ORDER BY position""",
+                    (file_id,),
+                ).fetchall()
+            requests = [
+                (
+                    row["draft_id"], row["source_text"], row["start_page"], row["end_page"]
+                )
+                for row in ocr_rows
+                if not (row["stem_latex"] or "").strip()
+                and needs_math_ocr(row["stem_plain"])
+            ]
+            if requests:
+                try:
+                    recognized = recognize_question_candidates(source_path, requests)
+                except Exception:  # preserve fast repair when OCR is unavailable
+                    recognized = {}
+                    math_ocr_failed_count = len(requests)
+                else:
+                    math_ocr_failed_count = len(requests) - len(recognized)
+                with self._connect() as connection:
+                    for row in ocr_rows:
+                        candidate = recognized.get(row["draft_id"])
+                        if candidate is None:
+                            continue
+                        warnings = json.loads(row["warnings_json"])
+                        warnings.append(
+                            f"数学 OCR 已从第 {candidate.page_number} 页生成公式候选"
+                            f"（匹配度 {candidate.score:.0%}）；请对照原页抽查。"
+                        )
+                        connection.execute(
+                            """
+                            UPDATE import_structured_question_drafts
+                            SET stem_latex = ?, formula_status = 'needs_review',
+                                formula_check_json = NULL, formula_checked_signature = '',
+                                warnings_json = ?, updated_at = ?
+                            WHERE draft_id = ?
+                            """,
+                            (
+                                candidate.text,
+                                json.dumps(warnings, ensure_ascii=False),
+                                self._now(),
+                                row["draft_id"],
+                            ),
+                        )
+                        math_ocr_count += 1
+
+        drafts = self.structured_question_drafts(file_id)
+        review_required_count = sum(
+            item.formula_status == "needs_review" for item in drafts.items
+        )
+        math_ocr_count = sum(bool((item.stem_latex or "").strip()) for item in drafts.items)
+        return StructuredDraftRepairResult(
+            drafts=drafts,
+            repaired_count=repaired_count,
+            skipped_teacher_edits=skipped_teacher_edits,
+            skipped_imported=skipped_imported,
+            review_required_count=review_required_count,
+            unresolved_glyph_count=unresolved_glyph_count,
+            math_ocr_count=math_ocr_count,
+            math_ocr_failed_count=math_ocr_failed_count,
+            message=(
+                f"已自动整理 {repaired_count} 道题的正文和公式字符；"
+                f"数学 OCR 已生成 {math_ocr_count} 道公式候选；"
+                f"{review_required_count} 道含数学表达式，请对照原页抽查。"
+            ),
         )
 
     def update_structured_question_draft(
@@ -1273,38 +1429,13 @@ class PdfImportStudio:
 
     @classmethod
     def _structure_boundary_text(cls, source_text: str, question_type: str) -> dict:
-        text = source_text.strip()
-        answer_marker = re.search(r"(?mi)^\s*(?:【?(?:答案|解析|分析|详解)】?|Answer)\s*[:：]?", text)
-        question_text = text[:answer_marker.start()].strip() if answer_marker else text
-        option_pattern = re.compile(
-            r"(?ms)(?:^|\s)([A-H])\s*[\.．、)]\s*(.*?)(?=(?:\s+[A-H]\s*[\.．、)]\s)|\Z)"
-        )
-        matches = list(option_pattern.finditer(question_text))
-        options = [
-            {"key": match.group(1), "text": re.sub(r"\s+", " ", match.group(2)).strip()}
-            for match in matches
-        ]
-        if matches:
-            stem_plain = question_text[:matches[0].start()].strip()
-        else:
-            stem_plain = question_text
-        stem_plain = re.sub(r"^\s*(?:例|题)?\s*\d{1,3}\s*[\.．、)]\s*", "", stem_plain).strip()
-        warnings: list[str] = []
-        if answer_marker:
-            warnings.append("已将原答案或解析段隔离；解析需独立编写并核验")
-        if question_type in {"single_choice", "multiple_choice"} and len(options) < 2:
-            warnings.append("未稳定拆出选择题选项，请对照原页手工补充")
-        if not stem_plain:
-            stem_plain = question_text
-            warnings.append("未稳定分离题干，请手工整理")
-        formula_status = "needs_review" if re.search(r"[�□■]|[A-Za-z]\s*[=<>≤≥]|[∑√∞∈∪∩]", question_text) else "pending"
-        if formula_status == "needs_review":
-            warnings.append("检测到公式或异常字形，必须对照原页完成 LaTeX 校正")
+        repaired = repair_structured_text(source_text, question_type)
         return {
-            "stem_plain": stem_plain,
-            "options": options,
-            "formula_status": formula_status,
-            "warnings": warnings,
+            "stem_plain": repaired.stem_plain,
+            "stem_latex": repaired.stem_latex,
+            "options": repaired.options,
+            "formula_status": repaired.formula_status,
+            "warnings": repaired.warnings,
         }
 
     @staticmethod

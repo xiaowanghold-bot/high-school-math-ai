@@ -303,6 +303,18 @@ class StructuredDraftProposalResult(BaseModel):
     message: str
 
 
+class StructuredDraftRepairResult(BaseModel):
+    drafts: StructuredQuestionDraftList
+    repaired_count: int
+    skipped_teacher_edits: int
+    skipped_imported: int
+    review_required_count: int
+    unresolved_glyph_count: int
+    math_ocr_count: int = 0
+    math_ocr_failed_count: int = 0
+    message: str
+
+
 class StructuredDraftImportResult(BaseModel):
     draft: StructuredQuestionDraftView
     question_id: str

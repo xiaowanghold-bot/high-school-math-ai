@@ -24,6 +24,9 @@ dev = [
   "httpx>=0.28,<1",
   "pytest>=8.4,<9",
 ]
+math-ocr = [
+  "pix2text==1.1.6",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

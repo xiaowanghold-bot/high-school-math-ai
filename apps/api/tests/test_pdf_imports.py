@@ -522,6 +522,62 @@ def test_structured_draft_requires_confirmed_boundary_and_formula_review(tmp_pat
     assert invalidated.formula_check is None
 
 
+def test_auto_repair_structured_drafts_repairs_system_content_and_preserves_teacher_edits(
+    tmp_path: Path,
+) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(), [("MathType.pdf", pdf_bytes(["1. Formula question with enough text"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    boundary = imports.propose_boundary_candidates(file_id).candidates.items[0]
+    imports.update_boundary_candidate(
+        file_id,
+        boundary.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1,
+            end_page=1,
+            stem_text="已知函数fx\uf0ee\uf0ee=x22，证明fx\uf0ee\uf0ee在1,+∞\uf0ee\uf0ee上递增。",
+            question_type="open_response",
+            status="confirmed",
+        ),
+    )
+    draft = imports.propose_structured_question_drafts(file_id).drafts.items[0]
+
+    repaired = imports.auto_repair_structured_question_drafts(file_id)
+
+    assert repaired.repaired_count == 1
+    assert repaired.unresolved_glyph_count == 0
+    assert "f(x)=x²/2" in repaired.drafts.items[0].stem_plain
+
+    current = repaired.drafts.items[0]
+    teacher_text = "教师已经核对并修改的题干"
+    imports.update_structured_question_draft(
+        file_id,
+        current.draft_id,
+        StructuredQuestionDraftUpdate(
+            **{
+                **current.model_dump(
+                    exclude={
+                        "draft_id", "file_id", "boundary_candidate_id", "position",
+                        "start_page", "end_page", "source_text", "warnings", "media_crops",
+                        "formula_check", "imported_question_id", "created_at", "updated_at",
+                    }
+                ),
+                "stem_plain": teacher_text,
+                "editor_id": "owner_teacher",
+            }
+        ),
+    )
+
+    repeated = imports.auto_repair_structured_question_drafts(file_id)
+
+    assert repeated.repaired_count == 0
+    assert repeated.skipped_teacher_edits == 1
+    assert repeated.drafts.items[0].stem_plain == teacher_text
+
+
 def test_structured_draft_http_import_is_private_and_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

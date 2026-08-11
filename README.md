@@ -59,6 +59,14 @@ python -m venv .venv
 
 复制 `.env.example` 为 `.env`，填写 `MATH_AI_OPENAI_API_KEY`。默认使用 `gpt-5.6-terra`；不填写时自动使用本地教案模板和错因诊断变式规则，核心生成、编辑和版本保存流程仍可运行。
 
+### 可选：启用本地数学公式 OCR
+
+批量 PDF 加工中心可使用 Pix2Text 将 MathType 公式、分式、上下标和括号自动转成混合 LaTeX。首次安装和识别会下载本地 CPU 模型，之后复用本机缓存；未安装时仍可使用基础字符清洗，但复杂公式不会自动生成 OCR 候选。
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".\apps\api[math-ocr]"
+```
+
 导出文件默认写入本地 `output/docx` 和 `output/pdf`（已从 Git 忽略）。Linux 部署若未自动发现 Noto Sans CJK，可配置 `MATH_AI_CJK_FONT_REGULAR` 与 `MATH_AI_CJK_FONT_BOLD`。
 
 题目配图默认写入 `data/runtime/question-media`（已从 Git 忽略）。仅接受经过内容校验的 PNG、JPEG 和 WebP，单张不超过 8 MB、像素总量不超过 2500 万。
