@@ -737,10 +737,25 @@ class PdfImportStudio:
                     continue
                 if row["editor_id"] not in {"system_proposal", "auto_formula_repair"}:
                     # Do not replace teacher-authored content with the original
-                    # source. If unreadable PDF glyphs remain, repair the current
-                    # teacher version in-place; otherwise preserve it verbatim.
+                    # source. Safe deterministic formula cleanup may still run
+                    # against the teacher version itself; ordinary teacher text
+                    # remains byte-for-byte untouched.
                     current_text = row["stem_plain"]
-                    if not re.search(r"[�□■\uf000-\uf8ff]", current_text):
+                    current_repair = repair_structured_text(
+                        current_text, row["question_type"]
+                    )
+                    from .math_ocr import compose_readable_candidate
+
+                    current_latex = row["stem_latex"] or ""
+                    composed_latex = (
+                        compose_readable_candidate(current_text, current_latex)
+                        if current_latex else current_latex
+                    )
+                    if (
+                        not re.search(r"[�□■\uf000-\uf8ff]", current_text)
+                        and not current_repair.auto_repaired
+                        and composed_latex == current_latex
+                    ):
                         skipped_teacher_edits += 1
                         continue
                     repair_source = current_text
@@ -755,6 +770,14 @@ class PdfImportStudio:
                     if row["editor_id"] == "auto_formula_repair" and row["stem_latex"]
                     else repaired.stem_latex
                 )
+                if row["stem_latex"] and not preserved_latex:
+                    preserved_latex = row["stem_latex"]
+                if preserved_latex:
+                    from .math_ocr import compose_readable_candidate
+
+                    preserved_latex = compose_readable_candidate(
+                        repaired.stem_plain, preserved_latex
+                    )
                 repaired_warnings = list(repaired.warnings)
                 if preserved_latex:
                     repaired_warnings.extend(
@@ -792,7 +815,7 @@ class PdfImportStudio:
         math_ocr_count = 0
         math_ocr_failed_count = 0
         if use_math_ocr:
-            from .math_ocr import recognize_question_candidates
+            from .math_ocr import compose_readable_candidate, recognize_question_candidates
 
             source_path, _ = self.source_file(file_id)
             with self._connect() as connection:
@@ -837,7 +860,7 @@ class PdfImportStudio:
                             WHERE draft_id = ?
                             """,
                             (
-                                candidate.text,
+                                compose_readable_candidate(row["stem_plain"], candidate.text),
                                 json.dumps(warnings, ensure_ascii=False),
                                 self._now(),
                                 row["draft_id"],

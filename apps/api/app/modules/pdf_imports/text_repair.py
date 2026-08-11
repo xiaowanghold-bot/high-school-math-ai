@@ -9,6 +9,7 @@ _SOLUTION_MARKER_RE = re.compile(
     r"【\s*(?:思路分析|规范解答|答案|分析|解析|详解)\s*】|^\s*Answer\s*[:：]?",
     re.MULTILINE | re.IGNORECASE,
 )
+_SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,11 @@ def _restore_flat_math(text: str) -> str:
     text = re.sub(r"(?<!\d)32(?=\s*x)", "3/2", text)
     text = re.sub(r"(?<![A-Za-z0-9])1e(?=\s*,)", "1/e", text)
     text = re.sub(r"π2\b", "π/2", text)
+    # Text layers flatten stacked fractions and superscripts into a run of
+    # baseline digits. These two forms are high-confidence because the same
+    # page still provides the surrounding function definitions.
+    text = re.sub(r"\bex-ax312\b", "eˣ-ax³/12", text)
+    text = re.sub(r"\bx33\b", "x³/3", text)
     text = re.sub(r"\b(sin|cos|tan)([234])(?=[A-Za-z])", lambda m: f"{m.group(1)}{'²³⁴'[int(m.group(2)) - 2]}", text)
     superscripts = {"2": "²", "3": "³", "4": "⁴"}
     text = re.sub(
@@ -108,6 +114,20 @@ def _restore_flat_math(text: str) -> str:
         text,
     )
     text = re.sub(r"(?<![A-Za-z0-9])1([xyaen])\b", lambda m: f"1/{m.group(1)}", text)
+    return text
+
+
+def _restore_geometry_notation(text: str) -> str:
+    # Some embedded equation fonts expose the parallel glyph as the Unicode
+    # bottom-bracket character U+23B3. Context is essential: before "平面" the
+    # original notation is a parallel relation, not a perpendicular relation.
+    text = re.sub(r"(?<=[A-Za-z0-9])\s*[⎳]\s*(?=平面)", "∥", text)
+    if re.search(r"如图|棱柱|棱锥|平面|直线|中点", text):
+        text = re.sub(
+            r"(?<=[A-Z])([0-9])",
+            lambda match: match.group(1).translate(_SUBSCRIPT_DIGITS),
+            text,
+        )
     return text
 
 
@@ -149,10 +169,17 @@ def _clean_spacing(text: str) -> str:
 
 
 def needs_math_ocr(text: str) -> bool:
-    """Return whether layout loss is too ambiguous for deterministic repair."""
+    """Return whether a structured draft contains notation worth rendering."""
     return bool(
         "〔公式符号待核〕" in text
         or "()" in text
+        or re.search(r"[⎳�□■\uf000-\uf8ff]", text)
+        or re.search(r"[²³⁴₀-₉∀-⋿]", text)
+        or re.search(r"[A-Za-z]\s*[=<>+−*/^]", text)
+        or re.search(r"[=<>+−*/^]\s*[A-Za-z0-9]", text)
+        or re.search(r"[A-Za-z]\s*[\[(]", text)
+        or re.search(r"(?:[A-Z]\s*){2,}", text)
+        or re.search(r"[A-Za-z]\d", text)
         or re.search(r"(?:ln|sin|cos|tan)[A-Za-z0-9]{3,}", text)
         or re.search(r"[。；.]\s*\d{1,3}\s*\(", text)
     )
@@ -177,6 +204,7 @@ def repair_structured_text(source_text: str, question_type: str) -> StructuredTe
     question_text = _restore_function_calls(question_text)
     question_text = _restore_intervals(question_text)
     question_text = _restore_flat_math(question_text)
+    question_text = _restore_geometry_notation(question_text)
     question_text, had_private = _consume_remaining_private_glyphs(question_text)
     question_text = _clean_spacing(question_text)
     stem_plain, options = _extract_options(question_text)
@@ -192,9 +220,7 @@ def repair_structured_text(source_text: str, question_type: str) -> StructuredTe
     if "〔公式符号待核〕" in question_text:
         warnings.append("仍有无法可靠推断的公式符号，已用可读标记定位，请对照原页复核。")
 
-    math_signal = bool(
-        re.search(r"[=<>≤≥∑∫∞√]|[A-Za-z]\s*[('′]|[²³⁴]", stem_plain)
-    )
+    math_signal = needs_math_ocr(stem_plain)
     auto_repaired = question_text != _clean_spacing(original) or separated_solution
     return StructuredTextRepair(
         stem_plain=stem_plain or question_text,

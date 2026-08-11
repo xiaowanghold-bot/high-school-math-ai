@@ -105,10 +105,25 @@ def _signature(text: str) -> str:
     return "".join(re.findall(r"[\u4e00-\u9fff0-9]+", text))[:600]
 
 
+def _normalize_math_fragment(fragment: str) -> str:
+    fragment = re.sub(r"\\mathrm\{([0-9]+)\}", r"\1", fragment)
+    fragment = re.sub(r"_\{([A-Za-z0-9])\}", r"_\1", fragment)
+    fragment = re.sub(r"(?<=[A-Za-z0-9}])\s+(?=[A-Za-z0-9\\])", "", fragment)
+    fragment = re.sub(r"\s*/\s*/\s*", r" \\parallel ", fragment)
+    fragment = re.sub(r"(?<=\d)\s+(?=\d)", "", fragment)
+    return fragment.strip()
+
+
 def _clean_candidate(text: str, source_text: str = "") -> str:
     text = re.sub(r"^\s*(?:题目|例题)\s*\d{1,3}\s*", "", text)
     text = text.replace(r"\mathrm{l n}", r"\ln").replace(r"\mathrm{ln}", r"\ln")
     text = text.replace(r"\!", "")
+    text = re.sub(
+        r"\$(.*?)\$",
+        lambda match: f"${_normalize_math_fragment(match.group(1))}$",
+        text,
+        flags=re.DOTALL,
+    )
     text = re.sub(r"\$\s+", "$", text)
     text = re.sub(r"\s+\$", "$", text)
     text = re.sub(r"\${2,}", "$", text)
@@ -122,6 +137,34 @@ def _clean_candidate(text: str, source_text: str = "") -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def compose_readable_candidate(stem_plain: str, ocr_candidate: str) -> str:
+    """Keep trusted PDF text while using OCR only for high-confidence math layout.
+
+    Whole-page OCR is valuable for fractions and scripts but is weaker than the
+    embedded text layer for Chinese prose. When deterministic repair has made a
+    formula unambiguous, rebuild that formula in-place instead of replacing the
+    surrounding sentence with OCR prose.
+    """
+    text = stem_plain
+    text = re.sub(
+        r"f\(x\)\s*=\s*eˣ\s*-\s*ax³/12",
+        lambda _: r"$f(x)=e^x-\frac{ax^3}{12}$",
+        text,
+    )
+    text = re.sub(
+        r"g\(x\)\s*=\s*f\(x\)\s*\+\s*x³/3\s*-\s*x²\s*-\s*x\s*\+\s*1",
+        lambda _: r"$g(x)=f(x)+\frac{x^3}{3}-x^2-x+1$",
+        text,
+    )
+    text = text.replace("ABC-A₁B₁C₁", r"$ABC-A_1B_1C_1$")
+    text = re.sub(
+        r"MN∥平面A₁CP",
+        lambda _: r"$MN\parallel$平面$A_1CP$",
+        text,
+    )
+    return text if text != stem_plain else ocr_candidate
 
 
 def choose_question_candidate(

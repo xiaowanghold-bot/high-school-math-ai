@@ -50,7 +50,36 @@ def test_repair_structured_text_never_leaves_private_use_glyphs() -> None:
     assert not any(0xF000 <= ord(char) <= 0xF8FF for char in repaired.stem_plain)
 
 
-def test_math_ocr_is_reserved_for_ambiguous_layout_loss() -> None:
-    assert not needs_math_ocr("已知函数f(x)=x²/2，求其导数。")
+def test_math_ocr_is_requested_for_structured_math_content() -> None:
+    assert needs_math_ocr("已知函数f(x)=x²/2，求其导数。")
     assert needs_math_ocr("已知函数f(x)=1/x+a()lnx。")
     assert needs_math_ocr("当a∈(0,1)时，〔公式符号待核〕。")
+
+
+def test_math_ocr_detects_flattened_fraction_power_and_geometry_notation() -> None:
+    assert needs_math_ocr(
+        "已知函数f(x)=ex-ax312，设g(x)=f(x)+x33-x²-x+1。"
+    )
+    assert needs_math_ocr(
+        "正三棱柱ABC-A1B1C1中，证明MN⎳平面A1CP。"
+    )
+
+
+def test_repair_structured_text_restores_parallel_symbol_and_vertex_subscripts() -> None:
+    repaired = repair_structured_text(
+        "正三棱柱ABC-A1B1C1中，证明MN⎳平面A1CP。",
+        "open_response",
+    )
+
+    assert "ABC-A₁B₁C₁" in repaired.stem_plain
+    assert "MN∥平面A₁CP" in repaired.stem_plain
+
+
+def test_repair_structured_text_restores_flattened_exponential_fractions() -> None:
+    repaired = repair_structured_text(
+        "已知函数f(x)=ex-ax312，设g(x)=f(x)+x33-x²-x+1。",
+        "open_response",
+    )
+
+    assert "f(x)=eˣ-ax³/12" in repaired.stem_plain
+    assert "g(x)=f(x)+x³/3-x²-x+1" in repaired.stem_plain

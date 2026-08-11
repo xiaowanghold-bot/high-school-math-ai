@@ -258,10 +258,15 @@ function ImportsPageContent() {
       const response = await fetch(`/api/v1/imports/files/${selected.file_id}/structured-drafts/propose`, { method: "POST" });
       if (!response.ok) throw new Error(await errorText(response));
       const result = await response.json();
-      setDrafts(result.drafts);
-      const first: StructuredDraft | null = result.drafts.items[0] ?? null;
+      const repairResponse = await fetch(`/api/v1/imports/files/${selected.file_id}/structured-drafts/auto-repair?math_ocr=true`, { method: "POST" });
+      if (!repairResponse.ok) throw new Error(await errorText(repairResponse));
+      const repaired: StructuredDraftRepairResult = await repairResponse.json();
+      setDrafts(repaired.drafts);
+      const first: StructuredDraft | null = repaired.drafts.items[0] ?? null;
       setDraft(first); if (first) setPreviewPage(first.start_page);
-      setViewMode("structured"); setMessage(result.message);
+      setViewMode("structured");
+      const ocrFailed = repaired.math_ocr_failed_count ? `；${repaired.math_ocr_failed_count} 道未匹配到 OCR 候选` : "";
+      setMessage(`${result.message}数学公式已自动识别 ${repaired.math_ocr_count} 道${ocrFailed}。`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "生成结构化草稿失败"); }
     finally { setBusy(false); }
   }

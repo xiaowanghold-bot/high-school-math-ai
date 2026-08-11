@@ -578,6 +578,101 @@ def test_auto_repair_structured_drafts_repairs_system_content_and_preserves_teac
     assert repeated.drafts.items[0].stem_plain == teacher_text
 
 
+def test_auto_repair_requests_math_ocr_for_every_unrendered_math_draft(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.modules.pdf_imports.math_ocr import OcrQuestionCandidate
+
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(), [("formula.pdf", pdf_bytes(["1. Formula question with enough text"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    boundary = imports.propose_boundary_candidates(file_id).candidates.items[0]
+    imports.update_boundary_candidate(
+        file_id,
+        boundary.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1,
+            end_page=1,
+            stem_text="已知函数f(x)=x²/2，求其导数。",
+            question_type="open_response",
+            status="confirmed",
+        ),
+    )
+    draft = imports.propose_structured_question_drafts(file_id).drafts.items[0]
+    captured: list[tuple[str, str, int, int]] = []
+
+    def fake_recognize(_path: Path, requests: list[tuple[str, str, int, int]]):
+        captured.extend(requests)
+        return {
+            draft.draft_id: OcrQuestionCandidate(
+                text=r"已知函数 $f(x)=\frac{x^2}{2}$，求其导数。",
+                page_number=1,
+                score=0.95,
+            )
+        }
+
+    monkeypatch.setattr(
+        "app.modules.pdf_imports.math_ocr.recognize_question_candidates",
+        fake_recognize,
+    )
+
+    repaired = imports.auto_repair_structured_question_drafts(file_id, use_math_ocr=True)
+
+    assert [item[0] for item in captured] == [draft.draft_id]
+    assert repaired.drafts.items[0].stem_latex == r"已知函数 $f(x)=\frac{x^2}{2}$，求其导数。"
+
+
+def test_auto_repair_applies_safe_formula_cleanup_inside_teacher_draft(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(), [("teacher.pdf", pdf_bytes(["1. Formula question with enough text"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    boundary = imports.propose_boundary_candidates(file_id).candidates.items[0]
+    imports.update_boundary_candidate(
+        file_id,
+        boundary.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1,
+            end_page=1,
+            stem_text="已知函数f(x)=ex-ax312，设g(x)=f(x)+x33-x²-x+1。",
+            question_type="open_response",
+            status="confirmed",
+        ),
+    )
+    draft = imports.propose_structured_question_drafts(file_id).drafts.items[0]
+    imports.update_structured_question_draft(
+        file_id,
+        draft.draft_id,
+        StructuredQuestionDraftUpdate(
+            **{
+                **draft.model_dump(
+                    exclude={
+                        "draft_id", "file_id", "boundary_candidate_id", "position",
+                        "start_page", "end_page", "source_text", "warnings", "media_crops",
+                        "formula_check", "imported_question_id", "created_at", "updated_at",
+                    }
+                ),
+                "stem_plain": "已知函数f(x)=ex-ax312，设g(x)=f(x)+x33-x²-x+1。",
+                "stem_latex": "已知两数$f(x)=e^x-\\frac{ax^3}{12}$，其中将数a",
+                "editor_id": "owner_teacher",
+            }
+        ),
+    )
+
+    repaired = imports.auto_repair_structured_question_drafts(file_id)
+
+    assert repaired.repaired_count == 1
+    assert "eˣ-ax³/12" in repaired.drafts.items[0].stem_plain
+    assert "x³/3" in repaired.drafts.items[0].stem_plain
+    assert "已知函数" in (repaired.drafts.items[0].stem_latex or "")
+    assert "已知两数" not in (repaired.drafts.items[0].stem_latex or "")
+
+
 def test_structured_draft_http_import_is_private_and_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
