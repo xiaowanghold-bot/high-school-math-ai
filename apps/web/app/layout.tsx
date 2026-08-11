@@ -17,6 +17,7 @@ const navItems = [
   ["教案", "/lesson-plans"],
   ["组卷", "/papers"],
   ["我的资料", "/library"],
+  ["批量导入", "/imports"],
 ];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

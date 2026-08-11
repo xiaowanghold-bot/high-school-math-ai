@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     private_library_dir: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "private-library-files"
     )
+    pdf_import_db: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "pdf-imports.sqlite3"
+    )
+    pdf_import_dir: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "pdf-import-files"
+    )
     lesson_plan_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "lesson-plans.sqlite3"
     )

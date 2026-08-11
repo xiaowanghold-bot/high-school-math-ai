@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.routes.curriculum import router as curriculum_router
 from app.routes.exam_papers import router as exam_papers_router
+from app.routes.imports import router as imports_router
 from app.routes.lesson_plans import router as lesson_plans_router
 from app.routes.library import router as library_router
 from app.routes.questions import router as questions_router
@@ -29,6 +30,7 @@ def health() -> dict[str, str]:
 
 
 app.include_router(curriculum_router, prefix="/api/v1")
+app.include_router(imports_router, prefix="/api/v1")
 app.include_router(questions_router, prefix="/api/v1")
 app.include_router(lesson_plans_router, prefix="/api/v1")
 app.include_router(exam_papers_router, prefix="/api/v1")
