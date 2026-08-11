@@ -23,7 +23,7 @@ from app.modules.lesson_plans import (
     OpenAIResponsesLessonPlanProvider,
     TemplateLessonPlanProvider,
 )
-from app.routes.curriculum import _catalog_for_path
+from app.routes.curriculum import _governance_for_paths
 from app.routes.questions import get_question_bank
 
 
@@ -48,7 +48,10 @@ def get_lesson_plan_studio() -> LessonPlanStudio:
     )
     return LessonPlanStudio(
         database_path=settings.lesson_plan_db,
-        curriculum_catalog=_catalog_for_path(str(settings.curriculum_csv.resolve())),
+        curriculum_catalog=_governance_for_paths(
+            str(settings.curriculum_csv.resolve()),
+            str(settings.curriculum_review_db.resolve()),
+        ).catalog,
         question_bank=get_question_bank(),
         provider=provider,
     )

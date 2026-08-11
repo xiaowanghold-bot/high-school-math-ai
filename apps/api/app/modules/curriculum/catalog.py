@@ -28,6 +28,9 @@ class InMemoryCurriculumCatalog:
         except KeyError as exc:
             raise KeyError(f"Unknown curriculum node: {node_id}") from exc
 
+    def list_nodes(self) -> list[CurriculumNode]:
+        return list(self._nodes.values())
+
     def get_tree(self) -> CurriculumTreeNode:
         roots = [node for node in self._nodes.values() if node.parent_id is None]
         if len(roots) != 1:

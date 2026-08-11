@@ -23,6 +23,9 @@ class Settings(BaseSettings):
         / "curriculum"
         / "pep-a-full-knowledge-tree-v1.csv"
     )
+    curriculum_review_db: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "curriculum-reviews.sqlite3"
+    )
     question_bank_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "question-bank.sqlite3"
     )

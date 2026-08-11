@@ -6,7 +6,6 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Response, Uploa
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
-from app.modules.curriculum import CsvCurriculumCatalog
 from app.modules.math_verifier import MathVerifier
 from app.modules.question_bank import (
     QuestionBank,
@@ -45,6 +44,7 @@ from app.modules.question_quality import (
     QuestionQualityWorkflow,
     QuestionQualityWorkspace,
 )
+from app.routes.curriculum import _governance_for_paths
 
 
 router = APIRouter(tags=["question-bank"])
@@ -93,7 +93,10 @@ def get_question_quality_workflow() -> QuestionQualityWorkflow:
     settings = get_settings()
     return QuestionQualityWorkflow(
         question_bank=get_question_bank(),
-        curriculum_catalog=CsvCurriculumCatalog(settings.curriculum_csv),
+        curriculum_catalog=_governance_for_paths(
+            str(settings.curriculum_csv.resolve()),
+            str(settings.curriculum_review_db.resolve()),
+        ).catalog,
     )
 
 
