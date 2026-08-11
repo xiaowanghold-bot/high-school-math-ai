@@ -72,6 +72,8 @@ type Stats = {
   by_review_status: Record<string, number>;
   by_verification_status: Record<string, number>;
   by_chapter: Record<string, number>;
+  by_work_queue: Record<string, number>;
+  by_module: Record<string, number>;
   publishable: number;
 };
 
@@ -156,13 +158,28 @@ const blockerLabels: Record<string, string> = {
   question_rejected: "题目已被拒绝",
 };
 
+const workQueueShortcuts = [
+  { label: "全部题目", key: "" },
+  { label: "待教师审核", key: "teacher_review" },
+  { label: "验证通过待确认", key: "verified_pending_teacher" },
+  { label: "待公式校正", key: "formula_review" },
+  { label: "待数学验算", key: "math_review" },
+  { label: "来源矛盾", key: "source_conflict" },
+  { label: "需要修改", key: "changes_requested" },
+  { label: "当前可发布", key: "publishable" },
+];
+
 const moduleShortcuts = [
-  { label: "全部", chapter: "" },
-  { label: "集合", chapter: "第一章 集合与常用逻辑用语" },
-  { label: "函数", chapter: "第三章 函数的概念与性质" },
-  { label: "立体几何", chapter: "第八章 立体几何初步" },
-  { label: "圆锥曲线", chapter: "第三章 圆锥曲线的方程" },
-  { label: "概率", chapter: "第七章 随机变量及其分布" },
+  { label: "全部模块", key: "" },
+  { label: "集合与逻辑", key: "sets_logic" },
+  { label: "函数与导数", key: "functions_derivatives" },
+  { label: "三角函数", key: "trigonometry" },
+  { label: "数列", key: "sequences" },
+  { label: "平面向量", key: "vectors" },
+  { label: "立体几何", key: "solid_geometry" },
+  { label: "解析几何", key: "analytic_geometry" },
+  { label: "计数原理", key: "counting" },
+  { label: "统计与概率", key: "statistics_probability" },
 ];
 
 function draftFromDetail(detail: QuestionDetail): EditDraft {
@@ -199,6 +216,10 @@ export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [chapter, setChapter] = useState("");
   const [verification, setVerification] = useState("");
+  const [reviewStatus, setReviewStatus] = useState("");
+  const [module, setModule] = useState("");
+  const [workQueue, setWorkQueue] = useState("");
+  const [listVersion, setListVersion] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<QuestionDetail | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
@@ -226,8 +247,11 @@ export default function SearchPage() {
     if (query) params.set("query", query);
     if (chapter) params.set("chapter", chapter);
     if (verification) params.set("verification_status", verification);
+    if (reviewStatus) params.set("review_status", reviewStatus);
+    if (module) params.set("module", module);
+    if (workQueue) params.set("work_queue", workQueue);
     return `${apiBase}/api/v1/questions?${params.toString()}`;
-  }, [query, chapter, verification]);
+  }, [query, chapter, verification, reviewStatus, module, workQueue]);
 
   const loadStats = () => fetch(`${apiBase}/api/v1/question-bank/stats`).then((response) => response.json()).then(setStats);
 
@@ -265,8 +289,14 @@ export default function SearchPage() {
     const params = new URLSearchParams(window.location.search);
     const initialQuery = params.get("q")?.trim() || "";
     const initialVerification = params.get("verification") || "";
+    const initialReview = params.get("review") || "";
+    const initialModule = params.get("module") || "";
+    const initialQueue = params.get("queue") || "";
     if (initialQuery) { setQueryInput(initialQuery); setQuery(initialQuery); }
     if (initialVerification) setVerification(initialVerification);
+    if (initialReview) setReviewStatus(initialReview);
+    if (initialModule) setModule(initialModule);
+    if (initialQueue) setWorkQueue(initialQueue);
     function receiveGlobalSearch(event: Event) {
       const keyword = String((event as CustomEvent).detail || "").trim();
       setQueryInput(keyword);
@@ -293,7 +323,7 @@ export default function SearchPage() {
       .catch(() => active && setMessage("题库接口暂时不可用，请确认后端已启动。"))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [searchUrl]);
+  }, [searchUrl, listVersion]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -341,6 +371,7 @@ export default function SearchPage() {
       setItems((current) => current.map((item) => item.question_id === selectedId ? { ...item, ...result.question } : item));
       setDetailMode("preview");
       await Promise.all([loadStats(), refreshQuality(selectedId)]);
+      setListVersion((value) => value + 1);
       setMessage(result.verification_reset ? "修订已保存为新版本；数学内容发生变化，旧验证已自动失效。" : "修订已保存为新版本；题干、选项和答案未变化，验证状态保持不变。" );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "题目修订保存失败");
@@ -366,6 +397,7 @@ export default function SearchPage() {
       return;
     }
     await Promise.all([refreshDetail(), refreshQuality(), loadStats()]);
+    setListVersion((value) => value + 1);
     setMessage(decision === "approved" ? "审核已保存；发布门禁仍会独立检查。" : "审核结论已保存。" );
   }
 
@@ -439,6 +471,7 @@ export default function SearchPage() {
       setQuality(result.workspace);
       setIndependentlyChecked(false);
       await Promise.all([refreshDetail(selectedId), loadStats()]);
+      setListVersion((value) => value + 1);
       setMessage(result.message);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "独立核验记录保存失败");
@@ -451,6 +484,10 @@ export default function SearchPage() {
     if (!selectedId) return;
     const response = await fetch(`${apiBase}/api/v1/questions/${selectedId}/publish`, { method: "POST" });
     const decision = await response.json();
+    if (decision.allowed) {
+      await Promise.all([refreshDetail(selectedId), loadStats()]);
+      setListVersion((value) => value + 1);
+    }
     setMessage(decision.allowed ? "全部门禁通过，题目已发布。" : `暂不可发布：${decision.blockers.map((item: string) => blockerLabels[item] ?? item).join("、")}`);
   }
 
@@ -638,12 +675,24 @@ export default function SearchPage() {
 
       <form className="question-filters" onSubmit={submitSearch}>
         <label className="search-field"><span>⌕</span><input aria-label="搜索题目" value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="搜索题干、章节或来源，例如：集合、椭圆、概率" /></label>
-        <select value={chapter} onChange={(event) => setChapter(event.target.value)} aria-label="按章节筛选"><option value="">全部章节</option>{Object.keys(stats?.by_chapter ?? {}).map((item) => <option key={item} value={item}>{item}</option>)}</select>
-        <select value={verification} onChange={(event) => setVerification(event.target.value)} aria-label="按验证状态筛选"><option value="">全部质量状态</option><option value="passed">验证通过</option><option value="needs_formula_review">待公式校正</option><option value="needs_math_review">待数学验算</option><option value="source_inconsistency_detected">来源存在矛盾</option></select>
+        <select value={chapter} onChange={(event) => { setChapter(event.target.value); setModule(""); }} aria-label="按章节筛选"><option value="">全部章节</option>{Object.keys(stats?.by_chapter ?? {}).map((item) => <option key={item} value={item}>{item}</option>)}</select>
+        <select value={verification} onChange={(event) => { setVerification(event.target.value); setWorkQueue(""); }} aria-label="按验证状态筛选"><option value="">全部质量状态</option><option value="passed">验证通过</option><option value="needs_formula_review">待公式校正</option><option value="needs_math_review">待数学验算</option><option value="source_inconsistency_detected">来源存在矛盾</option></select>
+        <select value={reviewStatus} onChange={(event) => { setReviewStatus(event.target.value); setWorkQueue(""); }} aria-label="按教师审核状态筛选"><option value="">全部审核状态</option><option value="pending">待教师审核</option><option value="approved">教师已通过</option><option value="changes_requested">需要修改</option><option value="rejected">已拒绝</option></select>
         <button className="primary-button" type="submit">检索</button>
       </form>
 
-      <nav className="module-shortcuts" aria-label="按数学模块快速筛选"><span>快速进入</span>{moduleShortcuts.map((item) => <button className={chapter === item.chapter ? "active" : ""} key={item.label} type="button" onClick={() => setChapter(item.chapter)}>{item.label}{item.chapter && stats?.by_chapter[item.chapter] !== undefined ? <small>{stats.by_chapter[item.chapter]}</small> : null}</button>)}</nav>
+      <section className="review-shortcuts-panel" aria-label="题库审核快速入口">
+        <nav className="module-shortcuts work-queue-shortcuts" aria-label="按审核队列快速筛选"><span>审核队列</span>{workQueueShortcuts.map((item) => {
+          const active = item.key ? workQueue === item.key : !workQueue && !reviewStatus && !verification;
+          const count = item.key ? stats?.by_work_queue?.[item.key] ?? 0 : stats?.total ?? 0;
+          return <button className={active ? "active" : ""} key={item.label} type="button" onClick={() => { setWorkQueue(item.key); setReviewStatus(""); setVerification(""); }}>{item.label}<small>{count}</small></button>;
+        })}</nav>
+        <nav className="module-shortcuts" aria-label="按数学模块快速筛选"><span>知识模块</span>{moduleShortcuts.map((item) => {
+          const active = item.key ? module === item.key : !module && !chapter;
+          const count = item.key ? stats?.by_module?.[item.key] ?? 0 : stats?.total ?? 0;
+          return <button className={active ? "active" : ""} key={item.label} type="button" onClick={() => { setModule(item.key); setChapter(""); }}>{item.label}<small>{count}</small></button>;
+        })}</nav>
+      </section>
 
       <ResizableColumns className="question-layout" storageKey="question-search" initialLeftPercent={42} leftMin={320} rightMin={420} collapse="wide" label="调整题目列表与题目详情宽度">
         <section className="question-results" aria-label="题目列表">

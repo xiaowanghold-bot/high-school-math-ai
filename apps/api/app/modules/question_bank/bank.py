@@ -34,6 +34,29 @@ class QuestionBankError(ValueError):
     pass
 
 
+MODULE_RULES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "sets_logic": (("集合", "逻辑用语", "充要条件"), ()),
+    "trigonometry": (("三角函数", "解三角形"), ()),
+    "sequences": (("数列",), ()),
+    "vectors": (("向量",), ()),
+    "solid_geometry": (("立体几何", "空间几何"), ()),
+    "analytic_geometry": (("直线与圆", "圆锥曲线", "解析几何"), ()),
+    "counting": (("计数原理", "排列", "组合", "二项式"), ()),
+    "statistics_probability": (("统计", "概率", "随机变量", "成对数据", "线性回归"), ()),
+    "functions_derivatives": (("函数", "导数"), ("三角函数",)),
+}
+
+WORK_QUEUE_KEYS = {
+    "teacher_review",
+    "verified_pending_teacher",
+    "formula_review",
+    "math_review",
+    "source_conflict",
+    "changes_requested",
+    "publishable",
+}
+
+
 class QuestionBank:
     """Deep module for importing, reviewing, searching and publishing questions.
 
@@ -350,6 +373,8 @@ class QuestionBank:
         difficulty: int | None = None,
         verification_status: str | None = None,
         review_status: str | None = None,
+        module: str | None = None,
+        work_queue: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> QuestionSearchPage:
@@ -370,6 +395,39 @@ class QuestionBank:
             if value is not None and value != "":
                 clauses.append(f"{column} = ?")
                 values.append(value)
+        if module:
+            if module not in MODULE_RULES:
+                raise QuestionBankError("未知的数学模块")
+            includes, excludes = MODULE_RULES[module]
+            include_sql = " OR ".join("chapter LIKE ?" for _ in includes)
+            clauses.append(f"({include_sql})")
+            values.extend(f"%{keyword}%" for keyword in includes)
+            for keyword in excludes:
+                clauses.append("chapter NOT LIKE ?")
+                values.append(f"%{keyword}%")
+        if work_queue:
+            if work_queue not in WORK_QUEUE_KEYS:
+                raise QuestionBankError("未知的审核队列")
+            queue_clauses = {
+                "teacher_review": "review_status = 'pending'",
+                "verified_pending_teacher": (
+                    "review_status = 'pending' AND verification_status = 'passed'"
+                ),
+                "formula_review": "verification_status = 'needs_formula_review'",
+                "math_review": "verification_status = 'needs_math_review'",
+                "source_conflict": (
+                    "verification_status = 'source_inconsistency_detected'"
+                ),
+                "changes_requested": "review_status = 'changes_requested'",
+                "publishable": (
+                    "review_status = 'approved' AND verification_status = 'passed' "
+                    "AND solution_approved = 1 AND status != 'rejected' AND ("
+                    "license_status IN ('commercial_granted', 'public_permissive') OR ("
+                    "license_status = 'question_content_user_declared_usable' AND "
+                    "attribution_required IN ('false', 'confirmed', 'not_required')))"
+                ),
+            }
+            clauses.append(f"({queue_clauses[work_queue]})")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         offset = (page - 1) * page_size
         with self._connect() as connection:
@@ -1335,11 +1393,44 @@ class QuestionBank:
             chapters = self._group_counts(connection, "chapter")
             rows = connection.execute("SELECT * FROM questions").fetchall()
         publishable = sum(not self._publication_blockers(row) for row in rows)
+        by_module = {key: 0 for key in MODULE_RULES}
+        for row in rows:
+            chapter = str(row["chapter"] or "")
+            for key, (includes, excludes) in MODULE_RULES.items():
+                if any(keyword in chapter for keyword in includes) and not any(
+                    keyword in chapter for keyword in excludes
+                ):
+                    by_module[key] += 1
+                    break
+        by_work_queue = {
+            "teacher_review": sum(row["review_status"] == "pending" for row in rows),
+            "verified_pending_teacher": sum(
+                row["review_status"] == "pending"
+                and row["verification_status"] == "passed"
+                for row in rows
+            ),
+            "formula_review": sum(
+                row["verification_status"] == "needs_formula_review" for row in rows
+            ),
+            "math_review": sum(
+                row["verification_status"] == "needs_math_review" for row in rows
+            ),
+            "source_conflict": sum(
+                row["verification_status"] == "source_inconsistency_detected"
+                for row in rows
+            ),
+            "changes_requested": sum(
+                row["review_status"] == "changes_requested" for row in rows
+            ),
+            "publishable": publishable,
+        }
         return QuestionBankStats(
             total=total,
             by_review_status=review,
             by_verification_status=verification,
             by_chapter=chapters,
+            by_work_queue=by_work_queue,
+            by_module=by_module,
             publishable=publishable,
         )
 

@@ -179,18 +179,25 @@ def search_questions(
     difficulty: int | None = Query(default=None, ge=1, le=5),
     verification_status: str | None = None,
     review_status: str | None = None,
+    module: str | None = None,
+    work_queue: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> QuestionSearchPage:
-    return get_question_bank().search(
-        query=query,
-        chapter=chapter,
-        difficulty=difficulty,
-        verification_status=verification_status,
-        review_status=review_status,
-        page=page,
-        page_size=page_size,
-    )
+    try:
+        return get_question_bank().search(
+            query=query,
+            chapter=chapter,
+            difficulty=difficulty,
+            verification_status=verification_status,
+            review_status=review_status,
+            module=module,
+            work_queue=work_queue,
+            page=page,
+            page_size=page_size,
+        )
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/questions/{question_id}", response_model=QuestionDetail)

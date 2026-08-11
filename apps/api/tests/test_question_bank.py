@@ -67,6 +67,40 @@ def test_search_combines_keyword_and_structured_filters(tmp_path: Path) -> None:
     assert all(item.chapter == "第一章 集合与常用逻辑用语" for item in page.items)
 
 
+def test_search_supports_complete_module_and_review_work_queues(tmp_path: Path) -> None:
+    bank = make_bank(tmp_path)
+    bank.import_batch(PILOT_BATCH)
+    bank.apply_curation_package(SET_CURATION, MathVerifier())
+
+    sets = bank.search(module="sets_logic", page_size=50)
+    verified_review = bank.search(work_queue="verified_pending_teacher", page_size=50)
+    stats = bank.stats()
+
+    assert sets.total == 10
+    assert all("集合" in (item.chapter or "") for item in sets.items)
+    assert verified_review.total == stats.by_work_queue["verified_pending_teacher"]
+    assert all(
+        item.verification_status == "passed" and item.review_status == "pending"
+        for item in verified_review.items
+    )
+    assert stats.by_module["sets_logic"] == 10
+    assert "solid_geometry" in stats.by_module
+    assert "formula_review" in stats.by_work_queue
+
+
+def test_publishable_work_queue_matches_publication_gate(tmp_path: Path) -> None:
+    bank = make_bank(tmp_path)
+    bank.import_batch(PILOT_BATCH)
+    bank.apply_curation_package(SET_CURATION, MathVerifier())
+    question_id = "q_pilot_set_1_1"
+    bank.review(question_id, ReviewCommand(decision="approved", note="已审核"))
+
+    publishable = bank.search(work_queue="publishable", page_size=50)
+
+    assert question_id in {item.question_id for item in publishable.items}
+    assert publishable.total == bank.stats().by_work_queue["publishable"]
+
+
 def test_curation_package_is_independently_verified_and_idempotent(tmp_path: Path) -> None:
     bank = make_bank(tmp_path)
     bank.import_batch(PILOT_BATCH)

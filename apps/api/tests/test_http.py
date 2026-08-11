@@ -76,6 +76,8 @@ def test_question_bank_stats_and_search_endpoints() -> None:
     assert stats_response.json()["total"] >= 35
     assert stats_response.json()["by_verification_status"]["passed"] >= 22
     assert stats_response.json()["by_verification_status"]["source_inconsistency_detected"] >= 4
+    assert "verified_pending_teacher" in stats_response.json()["by_work_queue"]
+    assert "solid_geometry" in stats_response.json()["by_module"]
     assert batches_response.status_code == 200
     assert {5, 30}.issubset(
         {batch["declared_count"] for batch in batches_response.json()}
@@ -84,6 +86,16 @@ def test_question_bank_stats_and_search_endpoints() -> None:
     payload = search_response.json()
     assert payload["total"] == 10
     assert len(payload["items"]) == 5
+
+    queue_response = client.get(
+        "/api/v1/questions",
+        params={"work_queue": "source_conflict", "page_size": 50},
+    )
+    assert queue_response.status_code == 200
+    assert all(
+        item["verification_status"] == "source_inconsistency_detected"
+        for item in queue_response.json()["items"]
+    )
 
 
 def test_lesson_plan_generation_and_update_endpoints() -> None:

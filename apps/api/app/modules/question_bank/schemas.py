@@ -145,4 +145,6 @@ class QuestionBankStats(BaseModel):
     by_review_status: dict[str, int]
     by_verification_status: dict[str, int]
     by_chapter: dict[str, int]
+    by_work_queue: dict[str, int]
+    by_module: dict[str, int]
     publishable: int
