@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { MathText } from "../components/math-text";
+import { ResizableColumns } from "../components/resizable-columns";
 
 type Question = { question_id: string; review_status: string; question_type: string; stem_plain: string; answer_value: string | null; chapter: string | null; section: string | null; difficulty: number; verification_status: string; source_document: string };
 type PaperQuestionSnapshot = Question & { stem_latex: string | null; images: { asset_id: string }[] };
@@ -148,7 +149,7 @@ export default function PapersPage() {
   return <div className="page-content lesson-page paper-page">
     <section className="page-title lesson-title"><div><p className="eyebrow">智能组卷 · 版本快照</p><h1>把选题、分值和导出连成一条线。</h1><p className="subtle">只调用独立验证通过的题目；保存后，题库修订不会改变历史试卷。</p></div><button className="primary-button" type="button" onClick={newPaper}>＋ 新建试卷</button></section>
     {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
-    <div className="lesson-builder-layout">
+    <ResizableColumns className="lesson-builder-layout" storageKey="paper-builder" initialLeftPercent={32} leftMin={280} rightMin={440} collapse="compact" label="调整组卷设置与试卷正文宽度">
       <aside className="lesson-control-panel paper-control">
         <form onSubmit={savePaper}>
           <div className="control-heading"><span>01</span><div><h2>试卷设置</h2><p>设置标题、时长并从题库加入题目</p></div></div>
@@ -180,6 +181,6 @@ export default function PapersPage() {
           <div className="lesson-editor-two-column lower"><section className="lesson-editor-card"><header><h3>章节结构</h3></header>{draftChapterBreakdown.map((item) => <p className="paper-breakdown" key={item.label}><span>{item.label}</span><strong>{item.question_count} 题 · {scoreText(item.score)} 分</strong></p>)}</section><section className="lesson-editor-card paper-export-card"><header><div><h3>导出试卷</h3><p>{canExport ? `当前导出基于已保存的 v${selected?.version}` : selected ? "当前有修改，请先保存为新版本" : "请先创建试卷，随后即可下载"}</p></div><span className={canExport ? "export-ready" : "export-pending"}>{canExport ? "可导出" : "待保存"}</span></header><div className="paper-export-list">{exportEditions.map((edition) => <div className="paper-export-row" key={edition.id}><div><strong>{edition.name}</strong><small>{edition.description}</small></div><div>{canExport ? <><a href={exportUrl(edition.id, "docx")} title={`导出${edition.name} Word`}>Word</a><a href={exportUrl(edition.id, "pdf")} title={`导出${edition.name} PDF`}>PDF</a></> : <><span>Word</span><span>PDF</span></>}</div></div>)}</div></section></div>
         </>}
       </main>
-    </div>
+    </ResizableColumns>
   </div>;
 }

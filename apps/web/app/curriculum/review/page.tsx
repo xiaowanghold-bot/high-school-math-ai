@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ResizableColumns } from "../../components/resizable-columns";
 
 type ReviewStatus = "pending" | "draft" | "approved" | "changes_requested";
 type ReviewDecision = Exclude<ReviewStatus, "pending">;
@@ -124,7 +125,7 @@ export default function CurriculumReviewPage() {
     <div className="curriculum-review-safety"><strong>原始目录受保护</strong><span>审核结果以独立版本记录保存；草稿可供您的备课流程试用，只有“已批准”才表示教师终审完成。</span></div>
     {error && <div className="notice warning">{error}</div>}{message && <div className="notice review-success">{message}</div>}
 
-    <section className="catalog-review-layout">
+    <ResizableColumns className="catalog-review-layout" storageKey="curriculum-review" initialLeftPercent={34} leftMin={300} rightMin={440} collapse="compact" label="调整教材目录与审核表单宽度">
       <aside className="catalog-review-sidebar">
         <div className="catalog-review-filters">
           <label><span>教材册次</span><select value={volume} onChange={(e) => setVolume(e.target.value)}>{volumes.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -156,7 +157,7 @@ export default function CurriculumReviewPage() {
         <div className="catalog-review-actions">{detail.effective_node.node_type !== "knowledge_point" && <label><input type="checkbox" checked={cascade} onChange={(e) => setCascade(e.target.checked)} />同时处理全部下级节点（{detail.descendant_count} 项）</label>}<div><button type="button" className="review-secondary-button" disabled={saving} onClick={() => submit("draft")}>保存草稿</button><button type="button" className="review-danger-button" disabled={saving} onClick={() => submit("changes_requested")}>退回修改</button><button type="button" className="primary-button" disabled={saving} onClick={() => submit("approved")}>{saving ? "正在保存…" : "批准通过"}</button></div></div>
         <section className="catalog-review-history"><header><h3>审核记录</h3><span>{detail.history.length} 条</span></header>{!detail.history.length && <p>暂无记录。第一次保存后，这里会保留审核时间、处理人和意见。</p>}{detail.history.map((record) => <article key={record.review_id}><span className={`review-status-dot ${record.decision}`} /><div><strong>{statusLabels[record.decision]}</strong><p>{record.note || "未填写备注"}</p><small>{record.reviewer_id} · {new Date(record.created_at).toLocaleString("zh-CN", { hour12: false })}</small></div></article>)}</section>
       </>}</main>
-    </section>
+    </ResizableColumns>
   </div>;
 }
 

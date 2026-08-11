@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ResizableColumns } from "../components/resizable-columns";
 
 type CurriculumNode = {
   node_id: string;
@@ -451,7 +452,7 @@ export default function LessonPlansPage() {
 
       {message && <div className="notice info-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
-      <div className="lesson-builder-layout">
+      <ResizableColumns className="lesson-builder-layout" storageKey="lesson-builder" initialLeftPercent={30} leftMin={260} rightMin={440} collapse="compact" label="调整教案设置与教案正文宽度">
         <aside className="lesson-control-panel">
           <form onSubmit={generate}>
             <div className="control-heading"><span>01</span><div><h2>生成设置</h2><p>先定义这一课要解决什么</p></div></div>
@@ -558,7 +559,7 @@ export default function LessonPlansPage() {
             </>
           )}
         </main>
-      </div>
+      </ResizableColumns>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ResizableColumns } from "../components/resizable-columns";
 import "./library.css";
 
 type LibrarySummary = {
@@ -224,7 +225,7 @@ export default function LibraryPage() {
       <button className="library-upload-submit" disabled={busy || !file || !acknowledged || rightsStatement.trim().length < 6} type="submit">{busy ? "正在校验并提取…" : "上传并提取文字"}</button>
     </form>}
 
-    <div className="library-layout">
+    <ResizableColumns className="library-layout" storageKey="private-library" initialLeftPercent={29} leftMin={240} rightMin={440} collapse="compact" label="调整资料列表与资料校对区宽度">
       <aside className="library-list-panel">
         <header><div><strong>我的资料</strong><span>{filtered.length} 份</span></div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题或文件名" /></header>
         <div className="library-item-list">{filtered.map((item) => <button className={selected?.library_item_id === item.library_item_id ? "active" : ""} type="button" key={item.library_item_id} onClick={() => openItem(item.library_item_id).catch((error: Error) => setMessage(error.message))}><span className={`library-kind ${item.file_kind}`}>{fileKindLabels[item.file_kind]}</span><div><b>{item.title}</b><p>{item.original_filename}</p><small>{extractionLabels[item.extraction_status]} · {item.text_review_status === "confirmed" ? "教师已确认" : "待校对"} · v{item.version}</small></div></button>)}{!filtered.length && <div className="empty-state"><strong>暂无私人资料</strong><p>从上方上传第一份 PDF、Word 或图片。</p></div>}</div>
@@ -260,6 +261,6 @@ export default function LibraryPage() {
           </section>
         </>}
       </main>
-    </div>
+    </ResizableColumns>
   </div>;
 }

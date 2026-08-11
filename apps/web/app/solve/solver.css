@@ -93,3 +93,7 @@
   .solver-result-actions { align-items: flex-start; flex-direction: column; }
   .solver-result-actions button { width: 100%; }
 }
+
+/* Hallmark · readability pass: solver workspace · navigation unchanged */
+.solver-page :is(.solver-safety-badge span, .solver-input-panel header small, .solver-question-field > span, .solver-instruction-field > span, .solver-question-field > small, .solver-samples > header strong, .solver-samples > header span, .solver-samples > p, .solver-empty ol, .solver-result-heading p, .solver-confidence, .solver-question-preview > span, .solver-warning, .solver-solution-card header span, .solver-solution-card header strong, .solver-solution-card header a, .solver-solution-card > footer span, .solver-insight-grid header span, .solver-insight-grid header strong, .solver-insight-grid p, .solver-result-actions div span, .solver-result-actions div small) { font-size: var(--module-text-sm) !important; }
+.solver-page :is(.solver-submit, .solver-result-actions button) { min-height: 40px; padding: 10px 14px; font-size: var(--module-control-text) !important; }

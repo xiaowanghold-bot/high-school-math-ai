@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { MathText } from "../components/math-text";
+import { ResizableColumns } from "../components/resizable-columns";
 import "./solver.css";
 
 type QuestionSample = { question_id: string; stem_plain: string; chapter: string | null; difficulty: number };
@@ -73,7 +74,7 @@ export default function SolvePage() {
 
       {message && <div className="notice warning solver-notice"><span>{message}</span><button type="button" onClick={() => setMessage(null)}>关闭</button></div>}
 
-      <div className="solver-layout">
+      <ResizableColumns className="solver-layout" storageKey="solver-workspace" initialLeftPercent={36} leftMin={260} rightMin={420} collapse="compact" label="调整题目输入与解答结果宽度">
         <aside className="solver-input-panel">
           <form onSubmit={submit}>
             <header><span>01</span><div><strong>输入题目</strong><small>支持正文与 $...$ LaTeX 公式</small></div></header>
@@ -108,7 +109,7 @@ export default function SolvePage() {
             <footer className="solver-result-actions"><div><span>来源：{result.mode === "verified_bank" ? "独立验证私有题库" : result.model}</span>{result.match_score && <small>题干匹配度 {Math.round(result.match_score * 100)}%</small>}</div><button type="button" disabled={busy || !result.alternative_available} onClick={() => void solve("alternative")}>{busy ? "生成中…" : result.alternative_available ? "换一种解法" : "暂无第二种已验证解法"}</button></footer>
           </>}
         </main>
-      </div>
+      </ResizableColumns>
     </div>
   );
 }

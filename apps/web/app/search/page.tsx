@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { MathText } from "../components/math-text";
+import { ResizableColumns } from "../components/resizable-columns";
 
 type Question = {
   question_id: string;
@@ -644,7 +645,7 @@ export default function SearchPage() {
 
       <nav className="module-shortcuts" aria-label="按数学模块快速筛选"><span>快速进入</span>{moduleShortcuts.map((item) => <button className={chapter === item.chapter ? "active" : ""} key={item.label} type="button" onClick={() => setChapter(item.chapter)}>{item.label}{item.chapter && stats?.by_chapter[item.chapter] !== undefined ? <small>{stats.by_chapter[item.chapter]}</small> : null}</button>)}</nav>
 
-      <div className="question-layout">
+      <ResizableColumns className="question-layout" storageKey="question-search" initialLeftPercent={42} leftMin={320} rightMin={420} collapse="wide" label="调整题目列表与题目详情宽度">
         <section className="question-results" aria-label="题目列表">
           <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong><span>图片不进入列表，保持浏览稳定</span></div>
           <div className="result-list">
@@ -747,7 +748,7 @@ export default function SearchPage() {
             <button className="publish-check" type="button" onClick={checkPublish}>检查是否可以发布</button>
           </>}
         </aside>
-      </div>
+      </ResizableColumns>
     </div>
   );
 }
