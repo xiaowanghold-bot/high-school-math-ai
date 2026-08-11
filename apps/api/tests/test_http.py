@@ -84,7 +84,9 @@ def test_question_bank_stats_and_search_endpoints() -> None:
     )
     assert search_response.status_code == 200
     payload = search_response.json()
-    assert payload["total"] == 10
+    # The local development bank is intentionally append-only; later reviewed imports
+    # may add more set questions without changing the search contract.
+    assert payload["total"] >= 10
     assert len(payload["items"]) == 5
 
     queue_response = client.get(

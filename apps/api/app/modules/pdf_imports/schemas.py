@@ -19,6 +19,14 @@ ImportFileStatus = Literal[
     "ready_for_segmentation",
     "failed",
 ]
+SourceDocumentRole = Literal[
+    "question_only",
+    "solution_reference",
+    "combined",
+    "unknown",
+]
+SourcePairStatus = Literal["proposed", "confirmed", "rejected"]
+SourceCoverageStatus = Literal["self_contained", "paired", "candidates", "unpaired"]
 BoundaryCandidateStatus = Literal["draft", "confirmed", "discarded"]
 StructuredDraftStatus = Literal["draft", "confirmed", "imported"]
 FormulaReviewStatus = Literal["pending", "needs_review", "confirmed"]
@@ -121,6 +129,41 @@ class ImportWorkspaceStats(BaseModel):
 class ImportWorkspace(BaseModel):
     stats: ImportWorkspaceStats
     batches: list[ImportBatchSummary]
+
+
+class SourcePairReviewCommand(BaseModel):
+    status: Literal["confirmed", "rejected"]
+    note: str = Field(default="", max_length=2000)
+    reviewer_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class SourcePairView(BaseModel):
+    pair_id: str
+    question_file: ImportFileSummary
+    solution_file: ImportFileSummary
+    confidence: float = Field(ge=0, le=1)
+    status: SourcePairStatus
+    strategy: str
+    signals: list[str] = Field(default_factory=list)
+    note: str
+    reviewer_id: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class SourcePairingFileView(BaseModel):
+    file_id: str
+    inferred_role: SourceDocumentRole
+    coverage_status: SourceCoverageStatus
+    role_signals: list[str] = Field(default_factory=list)
+    candidates: list[SourcePairView] = Field(default_factory=list)
+
+
+class SourcePairProposalResult(BaseModel):
+    created_count: int
+    candidate_count: int
+    self_contained_count: int
+    message: str
 
 
 class ImportBatchResult(BaseModel):

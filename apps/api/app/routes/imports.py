@@ -23,6 +23,10 @@ from app.modules.pdf_imports import (
     ImportWorkspace,
     PdfImportError,
     PdfImportStudio,
+    SourcePairProposalResult,
+    SourcePairReviewCommand,
+    SourcePairingFileView,
+    SourcePairView,
     StructuredDraftImportResult,
     StructuredDraftProposalResult,
     StructuredDraftRepairResult,
@@ -58,6 +62,21 @@ def get_import_question_bank() -> QuestionBank:
 @router.get("", response_model=ImportWorkspace)
 def import_workspace(limit: int = Query(default=30, ge=1, le=100)) -> ImportWorkspace:
     return get_pdf_import_studio().workspace(limit=limit)
+
+
+@router.post("/source-pairs/propose", response_model=SourcePairProposalResult)
+def propose_source_pairs() -> SourcePairProposalResult:
+    return get_pdf_import_studio().propose_source_pairs()
+
+
+@router.patch("/source-pairs/{pair_id}", response_model=SourcePairView)
+def review_source_pair(
+    pair_id: str, command: SourcePairReviewCommand
+) -> SourcePairView:
+    try:
+        return get_pdf_import_studio().review_source_pair(pair_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="来源配对候选不存在") from exc
 
 
 @router.post("/batches", response_model=ImportBatchResult, status_code=201)
@@ -100,6 +119,14 @@ async def create_import_batch(
 def import_file_detail(file_id: str) -> ImportFileDetail:
     try:
         return get_pdf_import_studio().inspect(file_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+
+
+@router.get("/files/{file_id}/source-pairing", response_model=SourcePairingFileView)
+def import_file_source_pairing(file_id: str) -> SourcePairingFileView:
+    try:
+        return get_pdf_import_studio().source_pairing(file_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="导入文件不存在") from exc
 

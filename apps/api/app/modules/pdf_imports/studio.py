@@ -5,6 +5,7 @@ import csv
 import json
 import re
 import sqlite3
+from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -33,6 +34,10 @@ from .schemas import (
     ImportQueueStepResult,
     ImportWorkspace,
     ImportWorkspaceStats,
+    SourcePairProposalResult,
+    SourcePairReviewCommand,
+    SourcePairingFileView,
+    SourcePairView,
     StructuredDraftProposalResult,
     StructuredDraftRepairResult,
     StructuredFormulaCheck,
@@ -63,6 +68,7 @@ class PdfImportStudio:
     MIN_TEXT_LAYER_CHARS = 20
     MAX_CROPS_PER_DRAFT = 8
     CROP_RENDER_WIDTH = 1800
+    SOURCE_PAIR_MIN_CONFIDENCE = 0.72
 
     _QUESTION_MARKERS = (
         re.compile(r"(?m)^\s*(?:例|题)?\s*\d{1,3}\s*[\.．、)]\s*"),
@@ -196,6 +202,146 @@ class PdfImportStudio:
             stats=ImportWorkspaceStats(**dict(values)),
             batches=[self._batch(row["batch_id"], include_files=True) for row in batch_rows],
         )
+
+    def source_pairing(self, file_id: str) -> SourcePairingFileView:
+        """Return the complete pairing state for one source document."""
+        with self._connect() as connection:
+            file_row = connection.execute(
+                "SELECT * FROM import_files WHERE file_id = ?", (file_id,)
+            ).fetchone()
+            if file_row is None:
+                raise KeyError(file_id)
+            pair_rows = connection.execute(
+                """
+                SELECT * FROM import_source_pairs
+                WHERE question_file_id = ? OR solution_file_id = ?
+                ORDER BY CASE status WHEN 'confirmed' THEN 0 WHEN 'proposed' THEN 1 ELSE 2 END,
+                         confidence DESC, created_at
+                """,
+                (file_id, file_id),
+            ).fetchall()
+            role, role_signals = self._infer_source_role(connection, file_row)
+            pairs = [self._source_pair(connection, row) for row in pair_rows]
+        if role == "combined":
+            coverage = "self_contained"
+        elif any(item.status == "confirmed" for item in pairs):
+            coverage = "paired"
+        elif any(item.status == "proposed" for item in pairs):
+            coverage = "candidates"
+        else:
+            coverage = "unpaired"
+        return SourcePairingFileView(
+            file_id=file_id,
+            inferred_role=role,
+            coverage_status=coverage,
+            role_signals=role_signals,
+            candidates=pairs,
+        )
+
+    def propose_source_pairs(self) -> SourcePairProposalResult:
+        """Discover complementary source documents without overwriting review decisions."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM import_files ORDER BY created_at, original_filename"
+            ).fetchall()
+            classified = [
+                (row, *self._infer_source_role(connection, row)) for row in rows
+            ]
+            question_files = [item for item in classified if item[1] == "question_only"]
+            solution_files = [
+                item for item in classified if item[1] in {"solution_reference", "combined"}
+            ]
+            created_count = 0
+            for question_row, _, _ in question_files:
+                ranked: list[tuple[float, sqlite3.Row, list[str]]] = []
+                for solution_row, solution_role, _ in solution_files:
+                    confidence, signals = self._pair_confidence(
+                        question_row, solution_row, solution_role
+                    )
+                    if confidence >= self.SOURCE_PAIR_MIN_CONFIDENCE:
+                        ranked.append((confidence, solution_row, signals))
+                for confidence, solution_row, signals in sorted(
+                    ranked, key=lambda item: item[0], reverse=True
+                )[:3]:
+                    exists = connection.execute(
+                        """
+                        SELECT 1 FROM import_source_pairs
+                        WHERE question_file_id = ? AND solution_file_id = ?
+                        """,
+                        (question_row["file_id"], solution_row["file_id"]),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    now = self._now()
+                    connection.execute(
+                        """
+                        INSERT INTO import_source_pairs
+                        (pair_id, question_file_id, solution_file_id, confidence, status,
+                         strategy, signals_json, note, reviewer_id, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, 'proposed', 'filename_content_v1', ?, '', NULL, ?, ?)
+                        """,
+                        (
+                            f"src_pair_{uuid4().hex[:16]}",
+                            question_row["file_id"],
+                            solution_row["file_id"],
+                            confidence,
+                            json.dumps(signals, ensure_ascii=False),
+                            now,
+                            now,
+                        ),
+                    )
+                    created_count += 1
+            candidate_count = connection.execute(
+                "SELECT COUNT(*) FROM import_source_pairs WHERE status = 'proposed'"
+            ).fetchone()[0]
+            self_contained_count = sum(item[1] == "combined" for item in classified)
+        return SourcePairProposalResult(
+            created_count=created_count,
+            candidate_count=candidate_count,
+            self_contained_count=self_contained_count,
+            message=(
+                f"已新增 {created_count} 组配对候选；{self_contained_count} 份题解同文件资料无需额外配对。"
+            ),
+        )
+
+    def review_source_pair(
+        self, pair_id: str, command: SourcePairReviewCommand
+    ) -> SourcePairView:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM import_source_pairs WHERE pair_id = ?", (pair_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(pair_id)
+            now = self._now()
+            connection.execute(
+                """
+                UPDATE import_source_pairs
+                SET status = ?, note = ?, reviewer_id = ?, updated_at = ?
+                WHERE pair_id = ?
+                """,
+                (
+                    command.status,
+                    command.note.strip(),
+                    command.reviewer_id,
+                    now,
+                    pair_id,
+                ),
+            )
+            if command.status == "confirmed":
+                connection.execute(
+                    """
+                    UPDATE import_source_pairs
+                    SET status = 'rejected', note = CASE WHEN note = '' THEN '同一原题文件已确认其他配对' ELSE note END,
+                        reviewer_id = ?, updated_at = ?
+                    WHERE question_file_id = ? AND pair_id != ? AND status IN ('proposed', 'confirmed')
+                    """,
+                    (command.reviewer_id, now, row["question_file_id"], pair_id),
+                )
+            updated = connection.execute(
+                "SELECT * FROM import_source_pairs WHERE pair_id = ?", (pair_id,)
+            ).fetchone()
+            return self._source_pair(connection, updated)
 
     def inspect(self, file_id: str) -> ImportFileDetail:
         with self._connect() as connection:
@@ -1353,6 +1499,110 @@ class PdfImportStudio:
         )
 
     @classmethod
+    def _normalize_source_title(cls, filename: str) -> str:
+        title = re.sub(r"\.pdf$", "", filename, flags=re.IGNORECASE)
+        title = re.sub(r"[（(]\s*\d+\s*[）)]$", "", title)
+        title = re.sub(
+            r"(?:原卷版|原卷|学生版|学生用|解析版|解析|教师版|老师版|答案版|含解析|有答案)",
+            "",
+            title,
+        )
+        return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "", title).lower()
+
+    @classmethod
+    def _pair_confidence(
+        cls,
+        question_row: sqlite3.Row,
+        solution_row: sqlite3.Row,
+        solution_role: str,
+    ) -> tuple[float, list[str]]:
+        question_title = cls._normalize_source_title(question_row["original_filename"])
+        solution_title = cls._normalize_source_title(solution_row["original_filename"])
+        title_similarity = (
+            SequenceMatcher(None, question_title, solution_title).ratio()
+            if question_title and solution_title
+            else 0.0
+        )
+        question_count = (
+            question_row["estimated_question_count"] or question_row["question_marker_count"]
+        )
+        solution_count = (
+            solution_row["estimated_question_count"] or solution_row["question_marker_count"]
+        )
+        count_similarity = (
+            min(question_count, solution_count) / max(question_count, solution_count)
+            if question_count and solution_count
+            else 0.5
+        )
+        role_score = 1.0 if solution_role == "combined" else 0.85
+        confidence = round(
+            min(1.0, 0.78 * title_similarity + 0.14 * count_similarity + 0.08 * role_score),
+            3,
+        )
+        signals = [f"净化标题相似度 {round(title_similarity * 100)}%"]
+        if question_count and solution_count:
+            signals.append(
+                f"估计题量 {question_count} / {solution_count}，一致度 {round(count_similarity * 100)}%"
+            )
+        else:
+            signals.append("至少一份资料尚无稳定题量，按中性权重计算")
+        signals.append(
+            "解析文件同时包含题目与解析" if solution_role == "combined" else "答案文件可作为核验参考"
+        )
+        return confidence, signals
+
+    @staticmethod
+    def _infer_source_role(
+        connection: sqlite3.Connection, row: sqlite3.Row
+    ) -> tuple[str, list[str]]:
+        filename = row["original_filename"]
+        if re.search(r"原卷|学生版|学生用", filename):
+            return "question_only", ["文件名标记为原卷或学生版", "默认只提取题目事实"]
+        if re.search(r"解析版|教师版|老师版|含解析", filename):
+            return "combined", ["文件名标记为完整解析资料", "题目与答案解析位于同一文件"]
+        if re.search(r"答案版|答案汇总|仅答案", filename):
+            return "solution_reference", ["文件名标记为答案参考", "仅作为答案核验种子"]
+
+        text_rows = connection.execute(
+            "SELECT extracted_text FROM import_pages WHERE file_id = ? ORDER BY page_number LIMIT 30",
+            (row["file_id"],),
+        ).fetchall()
+        sample = "\n".join(item["extracted_text"] for item in text_rows)
+        has_answer = bool(re.search(r"【\s*(?:答案|解析|详解|分析)\s*】|\bAnswer\s*:", sample, re.I))
+        has_question = row["question_marker_count"] > 0
+        if has_answer and has_question:
+            return "combined", ["抽样页同时检测到题号与答案标记", "题解同文件"]
+        if has_answer:
+            return "solution_reference", ["抽样页检测到答案或解析标记", "未检测到稳定题号"]
+        if has_question:
+            return "question_only", ["检测到稳定题号", "未检测到答案或解析标记"]
+        return "unknown", ["尚无足够的题号或答案标记", "完成逐页分析后可重新识别"]
+
+    @classmethod
+    def _source_pair(
+        cls, connection: sqlite3.Connection, row: sqlite3.Row
+    ) -> SourcePairView:
+        question = connection.execute(
+            "SELECT * FROM import_files WHERE file_id = ?", (row["question_file_id"],)
+        ).fetchone()
+        solution = connection.execute(
+            "SELECT * FROM import_files WHERE file_id = ?", (row["solution_file_id"],)
+        ).fetchone()
+        return SourcePairView(
+            pair_id=row["pair_id"],
+            question_file=cls._file(question),
+            solution_file=cls._file(solution),
+            confidence=row["confidence"],
+            status=row["status"],
+            strategy=row["strategy"],
+            signals=json.loads(row["signals_json"]),
+            note=row["note"],
+            reviewer_id=row["reviewer_id"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @classmethod
     def _marker_count(cls, text: str) -> int:
         return max((len(pattern.findall(text)) for pattern in cls._QUESTION_MARKERS), default=0)
 
@@ -1643,6 +1893,26 @@ class PdfImportStudio:
                     FOREIGN KEY(file_id) REFERENCES import_files(file_id), UNIQUE(file_id, page_number)
                 );
                 CREATE INDEX IF NOT EXISTS idx_import_pages_file ON import_pages(file_id, page_number);
+                CREATE TABLE IF NOT EXISTS import_source_pairs (
+                    pair_id TEXT PRIMARY KEY,
+                    question_file_id TEXT NOT NULL,
+                    solution_file_id TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    status TEXT NOT NULL,
+                    strategy TEXT NOT NULL,
+                    signals_json TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    reviewer_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(question_file_id) REFERENCES import_files(file_id),
+                    FOREIGN KEY(solution_file_id) REFERENCES import_files(file_id),
+                    UNIQUE(question_file_id, solution_file_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_import_source_pairs_question
+                    ON import_source_pairs(question_file_id, status, confidence);
+                CREATE INDEX IF NOT EXISTS idx_import_source_pairs_solution
+                    ON import_source_pairs(solution_file_id, status, confidence);
                 CREATE TABLE IF NOT EXISTS import_boundary_candidates (
                     candidate_id TEXT PRIMARY KEY, file_id TEXT NOT NULL,
                     source_analysis_updated_at TEXT NOT NULL, position INTEGER NOT NULL,

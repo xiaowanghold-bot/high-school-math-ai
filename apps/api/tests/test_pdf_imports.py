@@ -13,6 +13,7 @@ from app.modules.pdf_imports import (
     ImportBatchCommand,
     PdfImportError,
     PdfImportStudio,
+    SourcePairReviewCommand,
     StructuredMediaReference,
     StructuredMediaCropCommand,
     StructuredFormulaReviewCommand,
@@ -202,6 +203,90 @@ def test_question_estimate_is_loaded_from_audit_catalog(tmp_path: Path) -> None:
     assert created.batch.estimated_question_count == 40
     assert created.batch.files[0].estimated_question_count == 40
     assert imports.workspace().stats.estimated_questions == 40
+
+
+def test_source_pairing_detects_complementary_documents_and_preserves_review(
+    tmp_path: Path,
+) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(title="高一函数专题配对"),
+        [
+            (
+                "高一函数专题（原卷版）.pdf",
+                pdf_bytes(["1. Function question with enough text", "2. Another question"]),
+            ),
+            (
+                "高一函数专题（解析版）.pdf",
+                pdf_bytes(["1. Function question with enough text", "Answer: A", "Details"]),
+            ),
+        ],
+    )
+    question_id = next(
+        item.file_id for item in created.batch.files if "原卷" in item.original_filename
+    )
+    solution_id = next(
+        item.file_id for item in created.batch.files if "解析" in item.original_filename
+    )
+    imports.analyze(question_id)
+    imports.analyze(solution_id)
+
+    proposed = imports.propose_source_pairs()
+
+    assert proposed.created_count == 1
+    assert proposed.self_contained_count == 1
+    question_pairing = imports.source_pairing(question_id)
+    assert question_pairing.inferred_role == "question_only"
+    assert question_pairing.coverage_status == "candidates"
+    assert question_pairing.candidates[0].solution_file.file_id == solution_id
+    assert question_pairing.candidates[0].confidence >= 0.9
+
+    confirmed = imports.review_source_pair(
+        question_pairing.candidates[0].pair_id,
+        SourcePairReviewCommand(status="confirmed", note="题目顺序一致"),
+    )
+    assert confirmed.status == "confirmed"
+    assert imports.source_pairing(question_id).coverage_status == "paired"
+    assert imports.source_pairing(solution_id).coverage_status == "self_contained"
+    assert imports.propose_source_pairs().created_count == 0
+
+
+def test_source_pairing_http_contract_and_self_contained_role(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    imports = studio(tmp_path)
+    monkeypatch.setattr("app.routes.imports.get_pdf_import_studio", lambda: imports)
+    client = TestClient(app)
+    created = imports.create_batch(
+        command(),
+        [("概率统计（解析版）.pdf", pdf_bytes(["1. Probability question", "Answer: B"]))],
+    )
+    file_id = created.batch.files[0].file_id
+
+    proposal = client.post("/api/v1/imports/source-pairs/propose")
+    pairing = client.get(f"/api/v1/imports/files/{file_id}/source-pairing")
+
+    assert proposal.status_code == 200
+    assert proposal.json()["self_contained_count"] == 1
+    assert pairing.status_code == 200
+    assert pairing.json()["inferred_role"] == "combined"
+    assert pairing.json()["coverage_status"] == "self_contained"
+    assert pairing.json()["candidates"] == []
+
+
+def test_source_pairing_does_not_match_empty_normalized_titles(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(),
+        [
+            ("原卷版.pdf", pdf_bytes(["1. Question with enough text"])),
+            ("解析版.pdf", pdf_bytes(["1. Question with enough text", "Answer: A"])),
+        ],
+    )
+    for item in created.batch.files:
+        imports.analyze(item.file_id)
+
+    assert imports.propose_source_pairs().created_count == 0
 
 
 def test_duplicate_invalid_and_rights_gates(tmp_path: Path) -> None:

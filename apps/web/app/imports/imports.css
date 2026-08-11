@@ -159,3 +159,43 @@
 .import-inspector-heading button.pause { border-color: #d89b42; background: #fff6e8; color: #8a5b16; }
 .import-file-metrics strong.queued, .import-file-metrics strong.analyzing { color: #405bb4; }
 .import-file-metrics strong.paused { color: #92631f; }
+
+.source-pair-panel { border-bottom: 1px solid var(--line); background: #fbfcff; }
+.source-pair-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #e8ecf3; }
+.source-pair-panel > header > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.source-pair-panel > header span { color: #6c7890; font-size: var(--module-text-xs); font-weight: 700; }
+.source-pair-panel > header strong { color: #28364d; font-size: var(--module-text-sm); }
+.source-pair-panel > header em { border-radius: 999px; background: #edf1f7; color: #657187; padding: 4px 7px; font-size: var(--module-text-xs); font-style: normal; white-space: nowrap; }
+.source-pair-panel.self_contained > header em, .source-pair-panel.paired > header em { background: #e8f5f0; color: #24735f; }
+.source-pair-panel.candidates > header em { background: #fff3df; color: #96621c; }
+.source-pair-panel > header > button { min-height: 34px; border: 1px solid #cbd4e5; border-radius: 8px; background: white; color: #526078; padding: 7px 11px; font-size: var(--module-text-xs); cursor: pointer; }
+.source-pair-panel > header > button:disabled { opacity: .48; cursor: not-allowed; }
+.source-pair-body { display: grid; grid-template-columns: minmax(260px,.8fr) minmax(340px,1.2fr); gap: 14px; padding: 11px 18px 13px; }
+.source-pair-explanation strong, .source-pair-explanation p, .source-pair-explanation small { display: block; margin: 0; }
+.source-pair-explanation strong { color: #27354b; font-size: var(--module-text-sm); }
+.source-pair-explanation p { margin-top: 5px; color: #647087; font-size: var(--module-text-xs); line-height: 1.55; }
+.source-pair-explanation small { margin-top: 6px; color: #8a94a5; font-size: var(--module-text-xs); line-height: 1.45; }
+.source-pair-candidates { display: grid; gap: 7px; }
+.source-pair-candidates article { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 10px; border: 1px solid #dde3ee; border-radius: 10px; background: white; padding: 9px 10px; }
+.source-pair-candidates article.confirmed { border-color: #b9dfd2; background: #f6fcfa; }
+.source-pair-candidates article > div:first-child { min-width: 0; }
+.source-pair-candidates article span, .source-pair-candidates article strong, .source-pair-candidates article small { display: block; }
+.source-pair-candidates article span { color: #778398; font-size: var(--module-text-xs); }
+.source-pair-candidates article strong { margin-top: 2px; overflow: hidden; color: #29374c; font-size: var(--module-text-sm); text-overflow: ellipsis; white-space: nowrap; }
+.source-pair-candidates article small { margin-top: 3px; overflow: hidden; color: #8791a3; font-size: var(--module-text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.source-pair-candidates article > em { border-radius: 999px; background: #e8edfb; color: #4560b4; padding: 5px 7px; font-size: var(--module-text-xs); font-style: normal; font-weight: 700; }
+.source-pair-candidates article > b { color: #26745f; font-size: var(--module-text-xs); white-space: nowrap; }
+.source-pair-actions { display: flex; gap: 5px; }
+.source-pair-actions button { min-height: 32px; border: 1px solid #d2d9e6; border-radius: 7px; background: white; color: #667187; padding: 6px 8px; font-size: var(--module-text-xs); cursor: pointer; white-space: nowrap; }
+.source-pair-actions button.confirm { border-color: #4a66bd; background: #4a66bd; color: white; }
+
+@media (max-width: 920px) {
+  .source-pair-body { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 700px) {
+  .source-pair-panel > header { align-items: flex-start; flex-direction: column; }
+  .source-pair-panel > header > div { flex-wrap: wrap; }
+  .source-pair-candidates article { grid-template-columns: minmax(0,1fr) auto; }
+  .source-pair-actions { grid-column: 1 / -1; }
+}

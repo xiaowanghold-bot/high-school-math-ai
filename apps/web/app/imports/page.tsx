@@ -17,6 +17,10 @@ type ImportFile = { file_id: string; batch_id: string; original_filename: string
 type ImportFileDetail = ImportFile & { pages: ImportPage[] };
 type ImportBatch = { batch_id: string; title: string; rights_basis: string; rights_statement: string; owner_id: string; file_count: number; registered_count: number; queued_count: number; analyzing_count: number; paused_count: number; ready_count: number; failed_count: number; page_count: number; analyzed_page_count: number; progress_percent: number; question_marker_count: number; estimated_question_count: number; created_at: string; updated_at: string; files: ImportFile[] };
 type ImportWorkspace = { stats: { batches: number; files: number; pages: number; analyzed_pages: number; ready_files: number; queued_files: number; failed_files: number; scan_pages: number; question_markers: number; estimated_questions: number }; batches: ImportBatch[] };
+type SourceRole = "question_only" | "solution_reference" | "combined" | "unknown";
+type SourcePairStatus = "proposed" | "confirmed" | "rejected";
+type SourcePair = { pair_id: string; question_file: ImportFile; solution_file: ImportFile; confidence: number; status: SourcePairStatus; strategy: string; signals: string[]; note: string; reviewer_id: string | null; created_at: string; updated_at: string };
+type SourcePairing = { file_id: string; inferred_role: SourceRole; coverage_status: "self_contained" | "paired" | "candidates" | "unpaired"; role_signals: string[]; candidates: SourcePair[] };
 type BoundaryCandidate = { candidate_id: string; file_id: string; position: number; start_page: number; end_page: number; stem_text: string; question_type: QuestionType; subquestion_count: number; status: CandidateStatus; note: string; editor_id: string; source_analysis_updated_at: string; created_at: string; updated_at: string };
 type BoundaryList = { file_id: string; source_analysis_updated_at: string; total: number; draft_count: number; confirmed_count: number; discarded_count: number; items: BoundaryCandidate[] };
 type StructuredOption = { key: string; text: string };
@@ -36,6 +40,8 @@ const formulaStatusLabels: Record<FormulaStatus, string> = { pending: "待检查
 const formulaFieldLabels: Record<string, string> = { stem_plain: "题干正文", stem_latex: "LaTeX 题干", options: "选项", answer_value: "参考答案", solution_method: "解析方法", solution_steps: "解析步骤", final_answer: "最终答案" };
 const questionTypeLabels: Record<QuestionType, string> = { single_choice: "单选题", multiple_choice: "多选题", fill_blank: "填空题", open_response: "解答题", unknown: "待判断" };
 const rightsLabels: Record<string, string> = { question_content_user_declared_usable: "题目内容经本人声明可使用", licensed: "已获得明确授权", original: "本人原创", private_research_only: "仅限内部研究" };
+const sourceRoleLabels: Record<SourceRole, string> = { question_only: "仅题目资料", solution_reference: "答案参考资料", combined: "题解同文件", unknown: "待识别" };
+const sourceCoverageLabels: Record<SourcePairing["coverage_status"], string> = { self_contained: "无需额外配对", paired: "已确认配对", candidates: "发现配对候选", unpaired: "尚未配对" };
 
 async function errorText(response: Response) {
   try { const payload = await response.json(); return payload.detail || `请求失败（HTTP ${response.status}）`; }
@@ -61,6 +67,7 @@ function ImportsPageContent() {
   const [workspace, setWorkspace] = useState<ImportWorkspace | null>(null);
   const [selectedFileId, setSelectedFileId] = useState("");
   const [selected, setSelected] = useState<ImportFileDetail | null>(null);
+  const [sourcePairing, setSourcePairing] = useState<SourcePairing | null>(null);
   const [previewPage, setPreviewPage] = useState(1);
   const [viewMode, setViewMode] = useState<"pages" | "boundaries" | "structured">("pages");
   const [boundaries, setBoundaries] = useState<BoundaryList>(emptyBoundaries());
@@ -84,6 +91,7 @@ function ImportsPageContent() {
   const { auto: setMessage } = useToast();
 
   const selectedBatch = useMemo(() => workspace?.batches.find((batch) => batch.batch_id === selected?.batch_id) ?? null, [selected, workspace]);
+  const visibleSourcePairs = useMemo(() => sourcePairing?.candidates.filter((item) => item.status !== "rejected") ?? [], [sourcePairing]);
 
   async function loadBoundaries(fileId: string, preferredCandidateId?: string) {
     const response = await fetch(`/api/v1/imports/files/${fileId}/boundary-candidates`);
@@ -105,6 +113,12 @@ function ImportsPageContent() {
     if (next) setPreviewPage(next.start_page);
   }
 
+  async function loadSourcePairing(fileId: string) {
+    const response = await fetch(`/api/v1/imports/files/${fileId}/source-pairing`);
+    if (!response.ok) throw new Error(await errorText(response));
+    setSourcePairing(await response.json());
+  }
+
   async function openFile(fileId: string) {
     const response = await fetch(`/api/v1/imports/files/${fileId}`);
     if (!response.ok) throw new Error(await errorText(response));
@@ -112,7 +126,7 @@ function ImportsPageContent() {
     setSelectedFileId(fileId);
     setSelected(detail);
     setPreviewPage(1);
-    await Promise.all([loadBoundaries(fileId), loadDrafts(fileId)]);
+    await Promise.all([loadBoundaries(fileId), loadDrafts(fileId), loadSourcePairing(fileId)]);
   }
 
   async function refresh(preferredFileId?: string) {
@@ -122,7 +136,7 @@ function ImportsPageContent() {
     setWorkspace(payload);
     const target = preferredFileId || selectedFileId || payload.batches[0]?.files[0]?.file_id;
     if (target) await openFile(target);
-    else { setSelected(null); setSelectedFileId(""); setBoundaries(emptyBoundaries()); setDrafts(emptyDrafts()); }
+    else { setSelected(null); setSelectedFileId(""); setSourcePairing(null); setBoundaries(emptyBoundaries()); setDrafts(emptyDrafts()); }
   }
 
   useEffect(() => { refresh().catch((error: Error) => setMessage(error.message)); }, []);
@@ -148,6 +162,35 @@ function ImportsPageContent() {
       const firstId = result.batch.files[0]?.file_id;
       await refresh(firstId); setFiles([]); setAcknowledged(false); setUploadOpen(false); setMessage(result.message);
     } catch (error) { setMessage(error instanceof Error ? error.message : "批次登记失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function proposeSourcePairs() {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/v1/imports/source-pairs/propose", { method: "POST" });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      await loadSourcePairing(selected.file_id);
+      setMessage(result.message);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "来源配对扫描失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function reviewSourcePair(pairId: string, status: "confirmed" | "rejected") {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/v1/imports/source-pairs/${pairId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, reviewer_id: "owner_teacher", note: status === "confirmed" ? "教师确认文件题目结构一致" : "教师排除错误配对" }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      await loadSourcePairing(selected.file_id);
+      setMessage(status === "confirmed" ? "已确认原题与解析来源配对。" : "已排除该配对候选。");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "来源配对审核失败"); }
     finally { setBusy(false); }
   }
 
@@ -443,6 +486,12 @@ function ImportsPageContent() {
         <header className="import-inspector-heading"><div><p>{selectedBatch?.title}</p><h2>{selected.original_filename}</h2><small>SHA-256：{selected.sha256.slice(0, 18)}… · {formatBytes(selected.size_bytes)}</small></div><div><a href={`/api/v1/imports/files/${selected.file_id}/source`} target="_blank" rel="noreferrer">打开原 PDF</a><button type="button" disabled={busy || queueRunning} onClick={analyzeFile}>{busy ? "处理中…" : selected.status === "ready_for_segmentation" ? "重新分析" : selected.analyzed_page_count ? `从第 ${selected.resume_page} 页继续` : "分析此文件"}</button>{queueRunning ? <button className="pause" type="button" onClick={pauseBatchQueue}>暂停队列</button> : <button className="primary" type="button" disabled={busy || !selectedBatch || selectedBatch.ready_count === selectedBatch.file_count} onClick={processBatchQueue}>{selectedBatch && (selectedBatch.paused_count || selectedBatch.failed_count || selectedBatch.analyzed_page_count) ? "继续本批队列" : "启动本批队列"}</button>}</div></header>
         <section className="import-file-metrics"><div><span>状态</span><strong className={selected.status}>{statusLabels[selected.status]}</strong></div><div><span>页面进度</span><strong>{selected.analyzed_page_count}/{selected.page_count}</strong></div><div><span>处理完成度</span><strong>{selected.progress_percent}%</strong></div><div><span>待 OCR</span><strong>{selected.scan_page_count}</strong></div><div><span>估计题量 / 题号</span><strong>{selected.estimated_question_count || "—"} / {selected.question_marker_count}</strong></div></section>
         {selected.error_message && <div className="notice warning">{selected.error_message}</div>}{selected.warnings.map((warning) => <p className="import-warning" key={warning}>{warning}</p>)}
+        {sourcePairing && <section className={`source-pair-panel ${sourcePairing.coverage_status}`}>
+          <header><div><span>原题与解析自动配对</span><strong>{sourceCoverageLabels[sourcePairing.coverage_status]}</strong><em>{sourceRoleLabels[sourcePairing.inferred_role]}</em></div><button type="button" disabled={busy} onClick={proposeSourcePairs}>{busy ? "扫描中…" : "扫描全部文件"}</button></header>
+          <div className="source-pair-body"><div className="source-pair-explanation"><strong>{sourcePairing.coverage_status === "self_contained" ? "当前文件已同时包含题目和解析" : sourcePairing.coverage_status === "paired" ? "文件关系已经教师确认" : sourcePairing.coverage_status === "candidates" ? `发现 ${visibleSourcePairs.length} 个可审核候选` : "暂未找到标题和题量足够接近的文件"}</strong><p>{sourcePairing.coverage_status === "self_contained" ? "系统将直接从本文件提取题干与答案种子，不会重复计入另一套题库。" : "系统不会依靠固定页码差；确认后仍只把答案作为核验种子，原解析不会直接发布。"}</p><small>{sourcePairing.role_signals.join(" · ")}</small></div>
+            {!!visibleSourcePairs.length && <div className="source-pair-candidates">{visibleSourcePairs.map((pair) => { const counterpart = pair.question_file.file_id === selected.file_id ? pair.solution_file : pair.question_file; return <article key={pair.pair_id} className={pair.status}><div><span>{pair.question_file.file_id === selected.file_id ? "推荐解析来源" : "对应原题来源"}</span><strong title={counterpart.original_filename}>{counterpart.original_filename}</strong><small>{pair.signals.join(" · ")}</small></div><em>{Math.round(pair.confidence * 100)}%</em>{pair.status === "proposed" ? <div className="source-pair-actions"><button type="button" disabled={busy} onClick={() => reviewSourcePair(pair.pair_id, "rejected")}>排除</button><button className="confirm" type="button" disabled={busy} onClick={() => reviewSourcePair(pair.pair_id, "confirmed")}>确认配对</button></div> : <b>教师已确认</b>}</article>; })}</div>}
+          </div>
+        </section>}
         <nav className="import-stage-tabs"><button type="button" className={viewMode === "pages" ? "active" : ""} onClick={() => setViewMode("pages")}><span>01</span><div><strong>逐页分析</strong><small>文字层、题号与图片</small></div></button><button type="button" className={viewMode === "boundaries" ? "active" : ""} disabled={selected.status !== "ready_for_segmentation"} onClick={() => setViewMode("boundaries")}><span>02</span><div><strong>题目边界</strong><small>{boundaries.total ? `${boundaries.confirmed_count}/${boundaries.total} 已确认` : "生成候选后人工校对"}</small></div></button><button type="button" className={viewMode === "structured" ? "active" : ""} disabled={!boundaries.confirmed_count} onClick={() => setViewMode("structured")}><span>03</span><div><strong>内容结构化</strong><small>{drafts.total ? `${drafts.confirmed_count + drafts.imported_count}/${drafts.total} 已校对` : "题干、选项、公式与配图"}</small></div></button></nav>
         <ResizableColumns className={`import-preview-layout ${viewMode === "boundaries" ? "boundary-mode" : viewMode === "structured" ? "structured-mode" : ""}`} storageKey={`pdf-preview-${viewMode}`} initialLeftPercent={viewMode === "pages" ? 63 : 45} leftMin={viewMode === "pages" ? 340 : 320} rightMin={viewMode === "pages" ? 240 : 360} collapse="wide" label="调整 PDF 原文预览与分析校对区宽度">
           <section className="import-pdf-preview"><header><strong>{cropMode ? "拖动框选图片范围" : "原 PDF 预览"}</strong><div className="preview-page-controls"><button type="button" disabled={previewPage <= 1 || cropMode} onClick={() => setPreviewPage((page) => Math.max(1, page - 1))}>‹</button><span>第 {previewPage} / {selected.page_count} 页</span><button type="button" disabled={previewPage >= selected.page_count || cropMode} onClick={() => setPreviewPage((page) => Math.min(selected.page_count, page + 1))}>›</button></div></header><div className="import-preview-scroll"><div className={`import-preview-page ${cropMode ? "crop-active" : ""}`} onPointerDown={beginCrop} onPointerMove={moveCrop} onPointerUp={endCrop} onPointerCancel={() => { cropStart.current = null; setCropRect(null); }}><img draggable={false} key={`${selected.file_id}-${previewPage}`} alt={`${selected.original_filename} 第 ${previewPage} 页`} src={`/api/v1/imports/files/${selected.file_id}/pages/${previewPage}/preview?width=1200`} />{viewMode === "structured" && draft?.media_crops.filter((crop) => crop.page_number === previewPage).map((crop) => <span className="saved-crop-box" key={crop.crop_id} style={{ left: `${crop.x_ratio * 100}%`, top: `${crop.y_ratio * 100}%`, width: `${crop.width_ratio * 100}%`, height: `${crop.height_ratio * 100}%` }} title={crop.note || "已保存裁剪图"} />)}{cropRect && <span className="active-crop-box" style={{ left: `${cropRect.x_ratio * 100}%`, top: `${cropRect.y_ratio * 100}%`, width: `${cropRect.width_ratio * 100}%`, height: `${cropRect.height_ratio * 100}%` }} />}</div></div></section>
