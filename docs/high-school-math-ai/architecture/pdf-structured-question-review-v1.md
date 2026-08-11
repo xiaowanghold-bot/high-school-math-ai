@@ -54,4 +54,3 @@
 - `POST /api/v1/imports/files/{file_id}/structured-drafts/propose`
 - `PATCH /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}`
 - `POST /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}/import`
-
