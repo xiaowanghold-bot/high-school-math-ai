@@ -14,6 +14,7 @@ from app.modules.solution_assistant import (
     SolutionResult,
 )
 from app.routes.questions import get_question_bank
+from app.routes.model_operations import get_model_operations_registry
 
 
 router = APIRouter(prefix="/solutions", tags=["solution-assistant"])
@@ -31,6 +32,7 @@ def get_solution_assistant() -> SolutionAssistant:
             model=settings.openai_model,
             reasoning_effort=settings.openai_reasoning_effort,
             timeout_seconds=settings.openai_timeout_seconds,
+            recorder=get_model_operations_registry(),
         )
         if use_openai
         else None

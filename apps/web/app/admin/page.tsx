@@ -65,6 +65,7 @@ function AdminDashboard() {
       <Link href="/curriculum/review" className="admin-work-card green"><span>册</span><div><p>教材治理</p><h2>人教 A 版目录审核</h2><small>维护章节、知识点、核心素养、典型题型与高考优先级。</small><strong>{metrics.pendingCurriculum} 项待处理 →</strong></div></Link>
       <Link href="/imports" className="admin-work-card amber"><span>导</span><div><p>内容生产</p><h2>批量 PDF 加工中心</h2><small>从来源登记、逐页分析、题目边界一直处理到公式与图片校对。</small><strong>{metrics.importFiles} 份 · {metrics.importPages} 页 →</strong></div></Link>
       <Link href="/library" className="admin-work-card slate"><span>资</span><div><p>资料治理</p><h2>私人资料与权利记录</h2><small>查看上传资料、OCR 状态、拆题候选和来源声明。</small><strong>{metrics.pendingLibrary} 项待处理 →</strong></div></Link>
+      <Link href="/admin/models" className="admin-work-card purple"><span>模</span><div><p>模型运营</p><h2>调用状态与用量中心</h2><small>查看能力路由、成功率、耗时、token 用量与失败记录，不展示密钥和教学正文。</small><strong>进入运行中心 →</strong></div></Link>
     </section>
   </div>;
 }
@@ -72,4 +73,3 @@ function AdminDashboard() {
 export default function AdminPage() {
   return <AdminGuard><AdminDashboard /></AdminGuard>;
 }
-

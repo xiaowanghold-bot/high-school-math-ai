@@ -9,6 +9,7 @@ from app.routes.exam_papers import router as exam_papers_router
 from app.routes.imports import router as imports_router
 from app.routes.lesson_plans import router as lesson_plans_router
 from app.routes.library import router as library_router
+from app.routes.model_operations import router as model_operations_router
 from app.routes.questions import router as questions_router
 from app.routes.solutions import router as solutions_router
 
@@ -36,3 +37,4 @@ app.include_router(lesson_plans_router, prefix="/api/v1")
 app.include_router(exam_papers_router, prefix="/api/v1")
 app.include_router(solutions_router, prefix="/api/v1")
 app.include_router(library_router, prefix="/api/v1")
+app.include_router(model_operations_router, prefix="/api/v1")

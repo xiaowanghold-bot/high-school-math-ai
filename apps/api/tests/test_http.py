@@ -1,4 +1,14 @@
+import os
+import tempfile
+from pathlib import Path
+
 from fastapi.testclient import TestClient
+
+
+_model_operations_test_dir = tempfile.TemporaryDirectory(prefix="math-ai-model-ops-")
+os.environ["MATH_AI_MODEL_OPERATIONS_DB"] = str(
+    Path(_model_operations_test_dir.name) / "model-operations.sqlite3"
+)
 
 from app.main import app
 
@@ -11,6 +21,23 @@ def test_health() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_model_operations_dashboard_endpoint() -> None:
+    response = client.get("/api/v1/admin/model-operations", params={"limit": 5})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["model"]
+    assert len(payload["routes"]) == 5
+    assert {route["feature"] for route in payload["routes"]} == {
+        "lesson_plan_generation",
+        "lesson_block_rewrite",
+        "question_variant",
+        "solution_assistant",
+        "private_resource_ocr",
+    }
+    assert len(payload["recent_runs"]) <= 5
 
 
 def test_curriculum_tree_endpoint() -> None:

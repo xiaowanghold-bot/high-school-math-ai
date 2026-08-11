@@ -10,6 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zipfile import BadZipFile, ZipFile
 
+from app.modules.model_operations import ModelRunRecorder, NullModelRunRecorder
 
 class OCRProviderError(RuntimeError):
     pass
@@ -27,12 +28,20 @@ class OpenAIResourceOCRProvider:
     name = "openai"
     MAX_EXTERNAL_BYTES = 20 * 1024 * 1024
 
-    def __init__(self, *, api_key: str, model: str, timeout_seconds: int = 90) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        timeout_seconds: int = 90,
+        recorder: ModelRunRecorder | None = None,
+    ) -> None:
         if not api_key:
             raise ValueError("OpenAI API Key 不能为空")
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.recorder = recorder or NullModelRunRecorder()
 
     def extract(
         self, *, path: Path, mime_type: str, filename: str, teacher_id: str
@@ -68,19 +77,27 @@ class OpenAIResourceOCRProvider:
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
             method="POST",
         )
-        try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            details = exc.read().decode("utf-8", errors="replace")[:500]
-            raise OCRProviderError(f"OpenAI OCR 返回 HTTP {exc.code}：{details}") from exc
-        except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            raise OCRProviderError(f"OpenAI OCR 调用失败：{exc}") from exc
-        try:
-            parsed = json.loads(self._output_text(raw))
-            return OCRTextResult(text=str(parsed["text"]), warnings=list(parsed["warnings"]))
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise OCRProviderError(f"OCR 返回内容不符合预期结构：{exc}") from exc
+        with self.recorder.track(
+            feature="private_resource_ocr",
+            provider=self.name,
+            model=self.model,
+            prompt_version="private-resource-ocr-v1",
+            actor_id=teacher_id,
+        ) as run:
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as response:
+                    raw = json.loads(response.read().decode("utf-8"))
+            except HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="replace")[:500]
+                raise OCRProviderError(f"OpenAI OCR 返回 HTTP {exc.code}：{details}") from exc
+            except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                raise OCRProviderError(f"OpenAI OCR 调用失败：{exc}") from exc
+            run.capture_response(raw)
+            try:
+                parsed = json.loads(self._output_text(raw))
+                return OCRTextResult(text=str(parsed["text"]), warnings=list(parsed["warnings"]))
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise OCRProviderError(f"OCR 返回内容不符合预期结构：{exc}") from exc
 
     @staticmethod
     def _media_inputs(content: bytes, *, mime_type: str, filename: str) -> list[dict]:

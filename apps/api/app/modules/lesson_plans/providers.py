@@ -8,6 +8,7 @@ from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app.modules.model_operations import ModelRunRecorder, NullModelRunRecorder
 from app.modules.lesson_plans.schemas import (
     GeneratedLessonPlanContent,
     LessonCurriculumContext,
@@ -58,7 +59,20 @@ class TemplateLessonPlanProvider:
     name = "local_template"
     model = "teacher-template-v1"
 
+    def __init__(self, *, recorder: ModelRunRecorder | None = None) -> None:
+        self.recorder = recorder or NullModelRunRecorder()
+
     def generate(self, context: LessonPlanGenerationContext) -> GeneratedLessonPlanContent:
+        with self.recorder.track(
+            feature="lesson_plan_generation",
+            provider=self.name,
+            model=self.model,
+            prompt_version="lesson-plan-v1",
+            actor_id=context.request.teacher_id,
+        ):
+            return self._generate(context)
+
+    def _generate(self, context: LessonPlanGenerationContext) -> GeneratedLessonPlanContent:
         curriculum = context.curriculum
         request = context.request
         phase_names = ["导入与诊断", "概念建构", "例题探究", "变式训练", "总结评价"]
@@ -136,6 +150,16 @@ class TemplateLessonPlanProvider:
         )
 
     def rewrite(self, context: LessonPlanRewriteContext) -> LessonPlanRewriteValue:
+        with self.recorder.track(
+            feature="lesson_block_rewrite",
+            provider=self.name,
+            model=self.model,
+            prompt_version="lesson-block-rewrite-v1",
+            actor_id=context.teacher_id,
+        ):
+            return self._rewrite(context)
+
+    def _rewrite(self, context: LessonPlanRewriteContext) -> LessonPlanRewriteValue:
         focus = context.instruction.strip().rstrip("。")
         if context.block == "teaching_flow":
             return [
@@ -208,6 +232,7 @@ class OpenAIResponsesLessonPlanProvider:
         model: str,
         reasoning_effort: str = "low",
         timeout_seconds: int = 90,
+        recorder: ModelRunRecorder | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("OpenAI API Key 不能为空")
@@ -215,6 +240,7 @@ class OpenAIResponsesLessonPlanProvider:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = timeout_seconds
+        self.recorder = recorder or NullModelRunRecorder()
 
     def generate(self, context: LessonPlanGenerationContext) -> GeneratedLessonPlanContent:
         safety_identifier = hashlib.sha256(
@@ -245,17 +271,25 @@ class OpenAIResponsesLessonPlanProvider:
             "safety_identifier": safety_identifier,
             "store": False,
         }
-        raw = self._request_structured_output(payload, action="教案生成")
-        if raw.get("status") == "incomplete":
-            raise LessonPlanProviderError("OpenAI 返回未完成结果，请缩短输入后重试")
-        try:
-            content = json.loads(self._extract_output_text(raw))
-            result = GeneratedLessonPlanContent.model_validate(content)
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise LessonPlanProviderError(f"OpenAI 返回内容不符合教案结构：{exc}") from exc
-        if sum(item.minutes for item in result.teaching_flow) != context.request.duration_minutes:
-            raise LessonPlanProviderError("OpenAI 返回的教学流程分钟数与课时长度不一致")
-        return result
+        with self.recorder.track(
+            feature="lesson_plan_generation",
+            provider=self.name,
+            model=self.model,
+            prompt_version="lesson-plan-v1",
+            actor_id=context.request.teacher_id,
+        ) as run:
+            raw = self._request_structured_output(payload, action="教案生成")
+            run.capture_response(raw)
+            if raw.get("status") == "incomplete":
+                raise LessonPlanProviderError("OpenAI 返回未完成结果，请缩短输入后重试")
+            try:
+                content = json.loads(self._extract_output_text(raw))
+                result = GeneratedLessonPlanContent.model_validate(content)
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise LessonPlanProviderError(f"OpenAI 返回内容不符合教案结构：{exc}") from exc
+            if sum(item.minutes for item in result.teaching_flow) != context.request.duration_minutes:
+                raise LessonPlanProviderError("OpenAI 返回的教学流程分钟数与课时长度不一致")
+            return result
 
     def rewrite(self, context: LessonPlanRewriteContext) -> LessonPlanRewriteValue:
         current_value = getattr(context.content, context.block)
@@ -289,19 +323,27 @@ class OpenAIResponsesLessonPlanProvider:
             "safety_identifier": safety_identifier,
             "store": False,
         }
-        raw = self._request_structured_output(payload, action="教案局部改写")
-        if raw.get("status") == "incomplete":
-            raise LessonPlanProviderError("OpenAI 返回未完成结果，请缩短改写指令后重试")
-        try:
-            content = json.loads(self._extract_output_text(raw))
-            if context.block == "teaching_flow":
-                return [TeachingPhase.model_validate(item) for item in content["teaching_flow"]]
-            items = content["items"]
-            if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
-                raise TypeError("items 必须是字符串数组")
-            return items
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise LessonPlanProviderError(f"OpenAI 返回的局部改写不符合结构：{exc}") from exc
+        with self.recorder.track(
+            feature="lesson_block_rewrite",
+            provider=self.name,
+            model=self.model,
+            prompt_version="lesson-block-rewrite-v1",
+            actor_id=context.teacher_id,
+        ) as run:
+            raw = self._request_structured_output(payload, action="教案局部改写")
+            run.capture_response(raw)
+            if raw.get("status") == "incomplete":
+                raise LessonPlanProviderError("OpenAI 返回未完成结果，请缩短改写指令后重试")
+            try:
+                content = json.loads(self._extract_output_text(raw))
+                if context.block == "teaching_flow":
+                    return [TeachingPhase.model_validate(item) for item in content["teaching_flow"]]
+                items = content["items"]
+                if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+                    raise TypeError("items 必须是字符串数组")
+                return items
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise LessonPlanProviderError(f"OpenAI 返回的局部改写不符合结构：{exc}") from exc
 
     def _request_structured_output(self, payload: dict, *, action: str) -> dict:
         request = Request(

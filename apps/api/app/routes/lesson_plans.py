@@ -24,6 +24,7 @@ from app.modules.lesson_plans import (
     TemplateLessonPlanProvider,
 )
 from app.routes.curriculum import _governance_for_paths
+from app.routes.model_operations import get_model_operations_registry
 from app.routes.questions import get_question_bank
 
 
@@ -42,9 +43,10 @@ def get_lesson_plan_studio() -> LessonPlanStudio:
             model=settings.openai_model,
             reasoning_effort=settings.openai_reasoning_effort,
             timeout_seconds=settings.openai_timeout_seconds,
+            recorder=get_model_operations_registry(),
         )
         if use_openai
-        else TemplateLessonPlanProvider()
+        else TemplateLessonPlanProvider(recorder=get_model_operations_registry())
     )
     return LessonPlanStudio(
         database_path=settings.lesson_plan_db,

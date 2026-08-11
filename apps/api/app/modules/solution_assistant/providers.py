@@ -6,6 +6,7 @@ from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app.modules.model_operations import ModelRunRecorder, NullModelRunRecorder
 from app.modules.solution_assistant.schemas import GeneratedSolution, SolutionRequest
 
 
@@ -30,6 +31,7 @@ class OpenAISolutionProvider:
         model: str,
         reasoning_effort: str = "low",
         timeout_seconds: int = 90,
+        recorder: ModelRunRecorder | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("OpenAI API Key 不能为空")
@@ -37,6 +39,7 @@ class OpenAISolutionProvider:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = timeout_seconds
+        self.recorder = recorder or NullModelRunRecorder()
 
     def solve(self, request_data: SolutionRequest) -> GeneratedSolution:
         task = (
@@ -74,22 +77,30 @@ class OpenAISolutionProvider:
             },
             method="POST",
         )
-        try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            details = exc.read().decode("utf-8", errors="replace")[:500]
-            raise SolutionProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
-        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise SolutionProviderError(f"OpenAI 解题失败：{exc}") from exc
-        if raw.get("status") == "incomplete":
-            raise SolutionProviderError("OpenAI 返回未完成结果，请缩短题目或要求后重试")
-        try:
-            return GeneratedSolution.model_validate(
-                json.loads(self._extract_output_text(raw))
-            )
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise SolutionProviderError(f"OpenAI 返回内容不符合解题结构：{exc}") from exc
+        with self.recorder.track(
+            feature="solution_assistant",
+            provider=self.name,
+            model=self.model,
+            prompt_version="solution-assistant-v1",
+            actor_id=request_data.teacher_id,
+        ) as run:
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as response:
+                    raw = json.loads(response.read().decode("utf-8"))
+            except HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="replace")[:500]
+                raise SolutionProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
+            except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+                raise SolutionProviderError(f"OpenAI 解题失败：{exc}") from exc
+            run.capture_response(raw)
+            if raw.get("status") == "incomplete":
+                raise SolutionProviderError("OpenAI 返回未完成结果，请缩短题目或要求后重试")
+            try:
+                return GeneratedSolution.model_validate(
+                    json.loads(self._extract_output_text(raw))
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise SolutionProviderError(f"OpenAI 返回内容不符合解题结构：{exc}") from exc
 
     @staticmethod
     def _extract_output_text(payload: dict) -> str:

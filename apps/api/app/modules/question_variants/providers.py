@@ -7,6 +7,7 @@ from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app.modules.model_operations import ModelRunRecorder, NullModelRunRecorder
 from app.modules.question_bank.schemas import QuestionDetail, QuestionOptionDraft
 from app.modules.question_variants.schemas import (
     GeneratedQuestionVariant,
@@ -37,7 +38,20 @@ class LocalDiagnosticVariantProvider:
     name = "local_rule"
     model = "diagnostic-variant-v1"
 
+    def __init__(self, *, recorder: ModelRunRecorder | None = None) -> None:
+        self.recorder = recorder or NullModelRunRecorder()
+
     def generate(self, context: QuestionVariantGenerationContext) -> GeneratedQuestionVariant:
+        with self.recorder.track(
+            feature="question_variant",
+            provider=self.name,
+            model=self.model,
+            prompt_version="question-variant-v1",
+            actor_id=context.request.teacher_id,
+        ):
+            return self._generate(context)
+
+    def _generate(self, context: QuestionVariantGenerationContext) -> GeneratedQuestionVariant:
         if context.request.variant_kind != "diagnostic":
             raise QuestionVariantProviderError(
                 "当前未配置大模型；本地模式仅支持错因诊断变式。数值、难度和情境变式需配置 OpenAI API Key。"
@@ -102,6 +116,7 @@ class OpenAIQuestionVariantProvider:
         model: str,
         reasoning_effort: str = "low",
         timeout_seconds: int = 90,
+        recorder: ModelRunRecorder | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("OpenAI API Key 不能为空")
@@ -109,6 +124,7 @@ class OpenAIQuestionVariantProvider:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = timeout_seconds
+        self.recorder = recorder or NullModelRunRecorder()
 
     def generate(self, context: QuestionVariantGenerationContext) -> GeneratedQuestionVariant:
         source = context.source
@@ -163,28 +179,36 @@ class OpenAIQuestionVariantProvider:
             },
             method="POST",
         )
-        try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            details = exc.read().decode("utf-8", errors="replace")[:500]
-            raise QuestionVariantProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
-        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise QuestionVariantProviderError(f"OpenAI 题目变式生成失败：{exc}") from exc
-        if raw.get("status") == "incomplete":
-            raise QuestionVariantProviderError("OpenAI 返回未完成结果，请缩短补充要求后重试")
-        try:
-            content = json.loads(self._extract_output_text(raw))
-            generated = GeneratedQuestionVariant.model_validate(
-                {
-                    **content,
-                    "verification_status": "needs_math_review",
-                    "verification_details": ["大模型生成了答案与解析，尚未经过独立数学验证。"],
-                }
-            )
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise QuestionVariantProviderError(f"OpenAI 返回内容不符合题目结构：{exc}") from exc
-        return generated
+        with self.recorder.track(
+            feature="question_variant",
+            provider=self.name,
+            model=self.model,
+            prompt_version="question-variant-v1",
+            actor_id=context.request.teacher_id,
+        ) as run:
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as response:
+                    raw = json.loads(response.read().decode("utf-8"))
+            except HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="replace")[:500]
+                raise QuestionVariantProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
+            except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+                raise QuestionVariantProviderError(f"OpenAI 题目变式生成失败：{exc}") from exc
+            run.capture_response(raw)
+            if raw.get("status") == "incomplete":
+                raise QuestionVariantProviderError("OpenAI 返回未完成结果，请缩短补充要求后重试")
+            try:
+                content = json.loads(self._extract_output_text(raw))
+                generated = GeneratedQuestionVariant.model_validate(
+                    {
+                        **content,
+                        "verification_status": "needs_math_review",
+                        "verification_details": ["大模型生成了答案与解析，尚未经过独立数学验证。"],
+                    }
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise QuestionVariantProviderError(f"OpenAI 返回内容不符合题目结构：{exc}") from exc
+            return generated
 
     @staticmethod
     def _extract_output_text(payload: dict) -> str:

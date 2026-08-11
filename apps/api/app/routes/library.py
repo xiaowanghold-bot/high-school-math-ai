@@ -25,6 +25,7 @@ from app.modules.private_library import (
     RightsBasis,
 )
 from app.modules.question_bank import QuestionBank, QuestionBankError
+from app.routes.model_operations import get_model_operations_registry
 
 
 router = APIRouter(prefix="/library", tags=["private-library"])
@@ -50,6 +51,7 @@ def get_library_ocr_provider() -> OpenAIResourceOCRProvider:
         api_key=settings.openai_api_key,
         model=settings.openai_model,
         timeout_seconds=settings.openai_timeout_seconds,
+        recorder=get_model_operations_registry(),
     )
 
 

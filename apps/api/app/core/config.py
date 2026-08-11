@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     exam_paper_asset_dir: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "exam-paper-assets"
     )
+    model_operations_db: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "model-operations-v1.sqlite3"
+    )
     lesson_export_dir: Path = Field(default=PROJECT_ROOT / "output")
     cjk_font_regular: Path | None = None
     cjk_font_bold: Path | None = None
@@ -63,6 +66,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.6-terra"
     openai_reasoning_effort: str = "low"
     openai_timeout_seconds: int = 90
+    openai_input_usd_per_million: float | None = None
+    openai_cached_input_usd_per_million: float | None = None
+    openai_output_usd_per_million: float | None = None
     pilot_batch_json: Path = Field(
         default=PROJECT_ROOT / "data" / "pilot" / "batch-2026-08-001-30q.json"
     )
