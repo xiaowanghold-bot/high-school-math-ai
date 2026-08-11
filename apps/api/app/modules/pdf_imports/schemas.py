@@ -13,6 +13,8 @@ ImportRightsBasis = Literal[
 ]
 ImportFileStatus = Literal["registered", "analyzing", "ready_for_segmentation", "failed"]
 BoundaryCandidateStatus = Literal["draft", "confirmed", "discarded"]
+StructuredDraftStatus = Literal["draft", "confirmed", "imported"]
+FormulaReviewStatus = Literal["pending", "needs_review", "confirmed"]
 BoundaryQuestionType = Literal[
     "single_choice",
     "multiple_choice",
@@ -161,3 +163,66 @@ class BoundaryProposalResult(BaseModel):
     candidates: BoundaryCandidateList
     created_count: int
     message: str
+
+
+class StructuredQuestionOption(BaseModel):
+    key: str = Field(min_length=1, max_length=12)
+    text: str = Field(default="", max_length=4000)
+
+
+class StructuredMediaReference(BaseModel):
+    page_number: int = Field(ge=1)
+    placement: Literal["stem", "solution"] = "stem"
+    note: str = Field(default="", max_length=1000)
+
+
+class StructuredQuestionDraftUpdate(BaseModel):
+    question_type: BoundaryQuestionType
+    stem_plain: str = Field(min_length=1, max_length=40_000)
+    stem_latex: str | None = Field(default=None, max_length=40_000)
+    options: list[StructuredQuestionOption] = Field(default_factory=list, max_length=20)
+    answer_value: str | None = Field(default=None, max_length=4000)
+    solution_method: str = Field(default="待独立编写", max_length=500)
+    solution_steps: list[str] = Field(default_factory=list, max_length=100)
+    final_answer: str | None = Field(default=None, max_length=4000)
+    difficulty: int = Field(default=3, ge=1, le=5)
+    formula_status: FormulaReviewStatus = "pending"
+    media_references: list[StructuredMediaReference] = Field(default_factory=list, max_length=30)
+    note: str = Field(default="", max_length=2000)
+    status: StructuredDraftStatus = "draft"
+    editor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class StructuredQuestionDraftView(StructuredQuestionDraftUpdate):
+    draft_id: str
+    file_id: str
+    boundary_candidate_id: str
+    position: int
+    start_page: int
+    end_page: int
+    source_text: str
+    warnings: list[str] = Field(default_factory=list)
+    imported_question_id: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class StructuredQuestionDraftList(BaseModel):
+    file_id: str
+    total: int
+    draft_count: int
+    confirmed_count: int
+    imported_count: int
+    items: list[StructuredQuestionDraftView] = Field(default_factory=list)
+
+
+class StructuredDraftProposalResult(BaseModel):
+    drafts: StructuredQuestionDraftList
+    created_count: int
+    message: str
+
+
+class StructuredDraftImportResult(BaseModel):
+    draft: StructuredQuestionDraftView
+    question_id: str
+    already_imported: bool = False

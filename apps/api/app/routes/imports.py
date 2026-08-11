@@ -21,7 +21,13 @@ from app.modules.pdf_imports import (
     ImportWorkspace,
     PdfImportError,
     PdfImportStudio,
+    StructuredDraftImportResult,
+    StructuredDraftProposalResult,
+    StructuredQuestionDraftList,
+    StructuredQuestionDraftUpdate,
+    StructuredQuestionDraftView,
 )
+from app.modules.question_bank import QuestionBank, QuestionBankError
 
 
 router = APIRouter(prefix="/imports", tags=["pdf-imports"])
@@ -31,6 +37,12 @@ router = APIRouter(prefix="/imports", tags=["pdf-imports"])
 def get_pdf_import_studio() -> PdfImportStudio:
     settings = get_settings()
     return PdfImportStudio(settings.pdf_import_db, settings.pdf_import_dir)
+
+
+@lru_cache
+def get_import_question_bank() -> QuestionBank:
+    settings = get_settings()
+    return QuestionBank(settings.question_bank_db, settings.question_media_dir)
 
 
 @router.get("", response_model=ImportWorkspace)
@@ -180,3 +192,92 @@ def update_boundary_candidate(
         raise HTTPException(status_code=404, detail="题目边界候选不存在") from exc
     except PdfImportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get(
+    "/files/{file_id}/structured-drafts", response_model=StructuredQuestionDraftList
+)
+def list_structured_drafts(file_id: str) -> StructuredQuestionDraftList:
+    try:
+        return get_pdf_import_studio().structured_question_drafts(file_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+
+
+@router.post(
+    "/files/{file_id}/structured-drafts/propose",
+    response_model=StructuredDraftProposalResult,
+)
+def propose_structured_drafts(file_id: str) -> StructuredDraftProposalResult:
+    try:
+        return get_pdf_import_studio().propose_structured_question_drafts(file_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/files/{file_id}/structured-drafts/{draft_id}",
+    response_model=StructuredQuestionDraftView,
+)
+def update_structured_draft(
+    file_id: str, draft_id: str, command: StructuredQuestionDraftUpdate
+) -> StructuredQuestionDraftView:
+    try:
+        return get_pdf_import_studio().update_structured_question_draft(
+            file_id, draft_id, command
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="结构化题目草稿不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/files/{file_id}/structured-drafts/{draft_id}/import",
+    response_model=StructuredDraftImportResult,
+)
+def import_structured_draft(file_id: str, draft_id: str) -> StructuredDraftImportResult:
+    try:
+        studio = get_pdf_import_studio()
+        file = studio.inspect(file_id)
+        batch = next(
+            item for item in studio.workspace(limit=100).batches if item.batch_id == file.batch_id
+        )
+        draft = next(
+            item for item in studio.structured_question_drafts(file_id).items
+            if item.draft_id == draft_id
+        )
+        if draft.imported_question_id:
+            return StructuredDraftImportResult(
+                draft=draft,
+                question_id=draft.imported_question_id,
+                already_imported=True,
+            )
+        if draft.status != "confirmed":
+            raise PdfImportError("结构化草稿必须先由教师确认，才能进入题库审核")
+        candidate = {
+            **draft.model_dump(),
+            "candidate_id": f"cand_pdf_{draft.draft_id}",
+            "source_version": 1,
+            "provenance_type": "pdf_import_structured_pipeline",
+            "source_reference": f"PDF 加工文件 {file_id} · 第 {draft.start_page}—{draft.end_page} 页",
+        }
+        resource = {
+            "library_item_id": file_id,
+            "title": file.original_filename,
+            "original_filename": file.original_filename,
+            "rights_basis": batch.rights_basis,
+            "rights_statement": batch.rights_statement,
+            "adaptation_allowed": batch.rights_basis != "private_research_only",
+        }
+        question = get_import_question_bank().create_private_resource_question(
+            candidate, resource=resource
+        )
+        marked = studio.mark_structured_draft_imported(file_id, draft_id, question.question_id)
+        return StructuredDraftImportResult(draft=marked, question_id=question.question_id)
+    except (KeyError, StopIteration) as exc:
+        raise HTTPException(status_code=404, detail="文件、批次或结构化草稿不存在") from exc
+    except (PdfImportError, QuestionBankError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

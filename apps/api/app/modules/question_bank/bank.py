@@ -803,11 +803,13 @@ class QuestionBank:
         now = self._now()
         batch_id = "private-resource-drafts-v1"
         rights_basis = str(resource.get("rights_basis", "private_teaching_only"))
-        license_status = (
-            "question_content_user_declared_usable"
-            if rights_basis in {"original", "licensed"}
-            else "private_use_only"
-        )
+        license_status = {
+            "original": "question_content_user_declared_usable",
+            "licensed": "commercial_granted",
+            "question_content_user_declared_usable": "question_content_user_declared_usable",
+            "private_research_only": "research_only",
+            "private_teaching_only": "private_use_only",
+        }.get(rights_basis, "private_use_only")
         options = [
             {"key": item["key"], "plain_text": item.get("text", ""), "latex": None}
             for item in candidate.get("options", [])
@@ -863,18 +865,20 @@ class QuestionBank:
             "source": {
                 "document_name": resource.get("title") or resource.get("original_filename") or "私人资料",
                 "source_question_number": str(candidate.get("position", "")),
-                "source_reference": f"私人资料 {resource.get('library_item_id')} · 文本版本 {candidate.get('source_version')}",
+                "source_reference": candidate.get("source_reference") or f"私人资料 {resource.get('library_item_id')} · 文本版本 {candidate.get('source_version')}",
                 "license_status": license_status,
-                "attribution_required": "confirmed" if rights_basis in {"original", "licensed"} else "not_confirmed",
+                "attribution_required": "confirmed" if rights_basis in {"original", "licensed", "question_content_user_declared_usable"} else "not_confirmed",
                 "rights_basis": rights_basis,
                 "rights_statement": resource.get("rights_statement", ""),
                 "allowed_uses": ["private_teaching"] + (["adapt_question"] if resource.get("adaptation_allowed") else []),
+                "media_references": candidate.get("media_references", []),
             },
             "provenance": {
-                "created_by": "private_resource_question_pipeline",
+                "created_by": candidate.get("provenance_type") or "private_resource_question_pipeline",
                 "library_item_id": resource.get("library_item_id"),
                 "library_source_version": candidate.get("source_version"),
                 "resource_candidate_id": candidate_id,
+                "boundary_candidate_id": candidate.get("boundary_candidate_id"),
             },
             "reviews": [],
             "created_at": now,
@@ -904,11 +908,12 @@ class QuestionBank:
                     license_status, attribution_required, solution_approved,
                     raw_json, created_at, updated_at
                 ) VALUES (?, ?, 'imported', 'pending', 'private', ?, ?, ?, ?, NULL, NULL, NULL,
-                          '[]', ?, 'needs_math_review', ?, NULL, NULL, ?, ?, 0, ?, ?, ?)
+                          '[]', ?, 'needs_math_review', ?, ?, ?, ?, ?, 0, ?, ?, ?)
                 """,
                 (
                     question_id, batch_id, raw["question_type"], stem, raw["stem"]["latex"],
-                    answer, difficulty, raw["source"]["document_name"], license_status,
+                    answer, difficulty, raw["source"]["document_name"],
+                    candidate.get("start_page"), candidate.get("end_page"), license_status,
                     raw["source"]["attribution_required"], json.dumps(raw, ensure_ascii=False), now, now,
                 ),
             )

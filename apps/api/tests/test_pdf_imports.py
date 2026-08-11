@@ -12,7 +12,10 @@ from app.modules.pdf_imports import (
     ImportBatchCommand,
     PdfImportError,
     PdfImportStudio,
+    StructuredMediaReference,
+    StructuredQuestionDraftUpdate,
 )
+from app.modules.question_bank import QuestionBank
 
 
 def pdf_bytes(*pages: list[str]) -> bytes:
@@ -285,3 +288,126 @@ def test_boundary_http_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     listed = client.get(f"/api/v1/imports/files/{file_id}/boundary-candidates")
     assert listed.status_code == 200
     assert listed.json()["discarded_count"] == 1
+
+
+def test_structured_draft_requires_confirmed_boundary_and_formula_review(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(),
+        [("结构化题.pdf", pdf_bytes(["1. Given x=2 choose an answer A. 1 B. 2 C. 3 D. 4", "Answer: B"]))],
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    boundary = imports.propose_boundary_candidates(file_id).candidates.items[0]
+
+    with pytest.raises(PdfImportError, match="至少确认"):
+        imports.propose_structured_question_drafts(file_id)
+
+    imports.update_boundary_candidate(
+        file_id,
+        boundary.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1,
+            end_page=1,
+            stem_text=boundary.stem_text,
+            question_type="single_choice",
+            status="confirmed",
+        ),
+    )
+    proposal = imports.propose_structured_question_drafts(file_id)
+    assert proposal.created_count == 1
+    draft = proposal.drafts.items[0]
+    assert draft.options[0].key == "A"
+    assert "Answer" not in draft.stem_plain
+    assert imports.propose_structured_question_drafts(file_id).created_count == 0
+
+    with pytest.raises(PdfImportError, match="公式校对"):
+        imports.update_structured_question_draft(
+            file_id,
+            draft.draft_id,
+            StructuredQuestionDraftUpdate(
+                **{
+                    **draft.model_dump(exclude={"draft_id", "file_id", "boundary_candidate_id", "position", "start_page", "end_page", "source_text", "warnings", "imported_question_id", "created_at", "updated_at"}),
+                    "status": "confirmed",
+                }
+            ),
+        )
+
+    confirmed = imports.update_structured_question_draft(
+        file_id,
+        draft.draft_id,
+        StructuredQuestionDraftUpdate(
+            **{
+                **draft.model_dump(exclude={"draft_id", "file_id", "boundary_candidate_id", "position", "start_page", "end_page", "source_text", "warnings", "imported_question_id", "created_at", "updated_at"}),
+                "formula_status": "confirmed",
+                "status": "confirmed",
+                "media_references": [
+                    StructuredMediaReference(page_number=1, placement="stem", note="图形待裁剪")
+                ],
+            }
+        ),
+    )
+    assert confirmed.status == "confirmed"
+    assert confirmed.formula_status == "confirmed"
+    with pytest.raises(PdfImportError, match="伪造"):
+        imports.update_structured_question_draft(
+            file_id,
+            draft.draft_id,
+            StructuredQuestionDraftUpdate(
+                **{
+                    **confirmed.model_dump(exclude={"draft_id", "file_id", "boundary_candidate_id", "position", "start_page", "end_page", "source_text", "warnings", "imported_question_id", "created_at", "updated_at"}),
+                    "status": "imported",
+                }
+            ),
+        )
+
+
+def test_structured_draft_http_import_is_private_and_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    imports = studio(tmp_path)
+    bank = QuestionBank(tmp_path / "questions.sqlite3", tmp_path / "question-media")
+    monkeypatch.setattr("app.routes.imports.get_pdf_import_studio", lambda: imports)
+    monkeypatch.setattr("app.routes.imports.get_import_question_bank", lambda: bank)
+    created = imports.create_batch(
+        command(), [("HTTP结构化.pdf", pdf_bytes(["1. Prove the identity"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    boundary = imports.propose_boundary_candidates(file_id).candidates.items[0]
+    imports.update_boundary_candidate(
+        file_id,
+        boundary.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1,
+            end_page=1,
+            stem_text=boundary.stem_text,
+            question_type="open_response",
+            status="confirmed",
+        ),
+    )
+    client = TestClient(app)
+    proposed = client.post(f"/api/v1/imports/files/{file_id}/structured-drafts/propose")
+    assert proposed.status_code == 200
+    draft = proposed.json()["drafts"]["items"][0]
+    draft.update({"formula_status": "confirmed", "status": "confirmed"})
+    updated = client.patch(
+        f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}",
+        json={key: value for key, value in draft.items() if key in StructuredQuestionDraftUpdate.model_fields},
+    )
+    assert updated.status_code == 200
+
+    imported = client.post(
+        f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}/import"
+    )
+    repeated = client.post(
+        f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}/import"
+    )
+    assert imported.status_code == 200
+    assert repeated.status_code == 200
+    assert repeated.json()["already_imported"]
+    question = bank.get_question(imported.json()["question_id"])
+    assert question.visibility == "private"
+    assert question.review_status == "pending"
+    assert question.verification_status == "needs_math_review"
+    assert question.source_page_start == 1

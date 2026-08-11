@@ -4,6 +4,7 @@ from .schemas import (
     BoundaryCandidateUpdate,
     BoundaryCandidateView,
     BoundaryProposalResult,
+    FormulaReviewStatus,
     ImportAnalysisResult,
     ImportBatchAnalysisResult,
     ImportBatchCommand,
@@ -14,6 +15,13 @@ from .schemas import (
     ImportRightsBasis,
     ImportWorkspace,
     ImportWorkspaceStats,
+    StructuredDraftImportResult,
+    StructuredDraftProposalResult,
+    StructuredMediaReference,
+    StructuredQuestionDraftList,
+    StructuredQuestionDraftUpdate,
+    StructuredQuestionDraftView,
+    StructuredQuestionOption,
 )
 from .studio import PdfImportError, PdfImportStudio
 
@@ -23,6 +31,7 @@ __all__ = [
     "BoundaryCandidateUpdate",
     "BoundaryCandidateView",
     "BoundaryProposalResult",
+    "FormulaReviewStatus",
     "ImportAnalysisResult",
     "ImportBatchAnalysisResult",
     "ImportBatchCommand",
@@ -33,6 +42,13 @@ __all__ = [
     "ImportRightsBasis",
     "ImportWorkspace",
     "ImportWorkspaceStats",
+    "StructuredDraftImportResult",
+    "StructuredDraftProposalResult",
+    "StructuredMediaReference",
+    "StructuredQuestionDraftList",
+    "StructuredQuestionDraftUpdate",
+    "StructuredQuestionDraftView",
+    "StructuredQuestionOption",
     "PdfImportError",
     "PdfImportStudio",
 ]

@@ -28,6 +28,12 @@ from .schemas import (
     ImportPageView,
     ImportWorkspace,
     ImportWorkspaceStats,
+    StructuredDraftProposalResult,
+    StructuredMediaReference,
+    StructuredQuestionDraftList,
+    StructuredQuestionDraftUpdate,
+    StructuredQuestionDraftView,
+    StructuredQuestionOption,
 )
 
 
@@ -476,6 +482,174 @@ class PdfImportStudio:
             ).fetchone()
         return self._candidate(row)
 
+    def structured_question_drafts(self, file_id: str) -> StructuredQuestionDraftList:
+        self.inspect(file_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM import_structured_question_drafts
+                WHERE file_id = ? ORDER BY position, created_at
+                """,
+                (file_id,),
+            ).fetchall()
+        items = [self._structured_draft(row) for row in rows]
+        return StructuredQuestionDraftList(
+            file_id=file_id,
+            total=len(items),
+            draft_count=sum(item.status == "draft" for item in items),
+            confirmed_count=sum(item.status == "confirmed" for item in items),
+            imported_count=sum(item.status == "imported" for item in items),
+            items=items,
+        )
+
+    def propose_structured_question_drafts(self, file_id: str) -> StructuredDraftProposalResult:
+        file = self.inspect(file_id)
+        existing = self.structured_question_drafts(file_id)
+        confirmed_boundary_ids = {
+            item.candidate_id
+            for item in self.boundary_candidates(file_id).items
+            if item.status == "confirmed"
+        }
+        existing_boundary_ids = {item.boundary_candidate_id for item in existing.items}
+        pending_ids = confirmed_boundary_ids - existing_boundary_ids
+        if not confirmed_boundary_ids:
+            raise PdfImportError("请先至少确认一道题的边界，再生成结构化草稿")
+        if not pending_ids:
+            return StructuredDraftProposalResult(
+                drafts=existing,
+                created_count=0,
+                message="所有已确认边界都已有结构化草稿，本次未覆盖教师修改。",
+            )
+
+        boundaries = [
+            item for item in self.boundary_candidates(file_id).items
+            if item.candidate_id in pending_ids
+        ]
+        now = self._now()
+        records = []
+        for boundary in boundaries:
+            parsed = self._structure_boundary_text(boundary.stem_text, boundary.question_type)
+            image_pages = [
+                page.page_number for page in file.pages
+                if boundary.start_page <= page.page_number <= boundary.end_page
+                and page.embedded_image_count > 0
+            ]
+            warnings = list(parsed["warnings"])
+            media = []
+            if image_pages:
+                warnings.append("来源页包含图片，请确认图片归属并在题库审核台裁剪或替换")
+                media = [
+                    StructuredMediaReference(
+                        page_number=page_number,
+                        placement="stem",
+                        note="来源页检测到内嵌图片，尚未完成题目级裁剪",
+                    ).model_dump()
+                    for page_number in image_pages
+                ]
+            records.append(
+                (
+                    f"imp_draft_{uuid4().hex[:16]}", file_id, boundary.candidate_id,
+                    boundary.position, boundary.start_page, boundary.end_page,
+                    boundary.stem_text, boundary.question_type, parsed["stem_plain"],
+                    None, json.dumps(parsed["options"], ensure_ascii=False), None,
+                    "待独立编写", "[]", None, 3, parsed["formula_status"],
+                    json.dumps(media, ensure_ascii=False), "draft",
+                    json.dumps(warnings, ensure_ascii=False), "", "system_proposal",
+                    now, now,
+                )
+            )
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO import_structured_question_drafts
+                (draft_id, file_id, boundary_candidate_id, position, start_page, end_page,
+                 source_text, question_type, stem_plain, stem_latex, options_json,
+                 answer_value, solution_method, solution_steps_json, final_answer,
+                 difficulty, formula_status, media_references_json, status, warnings_json,
+                 note, editor_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                records,
+            )
+        drafts = self.structured_question_drafts(file_id)
+        return StructuredDraftProposalResult(
+            drafts=drafts,
+            created_count=len(records),
+            message=f"已从 {len(records)} 个确认边界生成结构化草稿；请逐题校对公式、选项和图片归属。",
+        )
+
+    def update_structured_question_draft(
+        self, file_id: str, draft_id: str, command: StructuredQuestionDraftUpdate
+    ) -> StructuredQuestionDraftView:
+        file = self.inspect(file_id)
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM import_structured_question_drafts
+                   WHERE file_id = ? AND draft_id = ?""",
+                (file_id, draft_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(draft_id)
+            if row["status"] == "imported":
+                raise PdfImportError("已导入题库的草稿不能在加工区继续修改，请前往题库审核台修订")
+            self._validate_structured_draft(file.page_count, command)
+            connection.execute(
+                """
+                UPDATE import_structured_question_drafts
+                SET question_type = ?, stem_plain = ?, stem_latex = ?, options_json = ?,
+                    answer_value = ?, solution_method = ?, solution_steps_json = ?,
+                    final_answer = ?, difficulty = ?, formula_status = ?,
+                    media_references_json = ?, status = ?, note = ?, editor_id = ?, updated_at = ?
+                WHERE file_id = ? AND draft_id = ?
+                """,
+                (
+                    command.question_type, command.stem_plain.strip(),
+                    command.stem_latex.strip() if command.stem_latex else None,
+                    json.dumps([item.model_dump() for item in command.options], ensure_ascii=False),
+                    command.answer_value.strip() if command.answer_value else None,
+                    command.solution_method.strip(),
+                    json.dumps([step.strip() for step in command.solution_steps if step.strip()], ensure_ascii=False),
+                    command.final_answer.strip() if command.final_answer else None,
+                    command.difficulty, command.formula_status,
+                    json.dumps([item.model_dump() for item in command.media_references], ensure_ascii=False),
+                    command.status, command.note.strip(), command.editor_id, self._now(),
+                    file_id, draft_id,
+                ),
+            )
+            updated = connection.execute(
+                "SELECT * FROM import_structured_question_drafts WHERE draft_id = ?",
+                (draft_id,),
+            ).fetchone()
+        return self._structured_draft(updated)
+
+    def mark_structured_draft_imported(
+        self, file_id: str, draft_id: str, question_id: str
+    ) -> StructuredQuestionDraftView:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM import_structured_question_drafts
+                   WHERE file_id = ? AND draft_id = ?""",
+                (file_id, draft_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(draft_id)
+            if row["status"] not in {"confirmed", "imported"}:
+                raise PdfImportError("结构化草稿必须先由教师确认，才能进入题库审核")
+            existing_id = row["imported_question_id"]
+            if existing_id and existing_id != question_id:
+                raise PdfImportError("结构化草稿已经关联其他题库题目")
+            connection.execute(
+                """UPDATE import_structured_question_drafts
+                   SET status = 'imported', imported_question_id = ?, updated_at = ?
+                   WHERE file_id = ? AND draft_id = ?""",
+                (question_id, self._now(), file_id, draft_id),
+            )
+            updated = connection.execute(
+                "SELECT * FROM import_structured_question_drafts WHERE draft_id = ?",
+                (draft_id,),
+            ).fetchone()
+        return self._structured_draft(updated)
+
     def source_file(self, file_id: str) -> tuple[Path, ImportFileSummary]:
         with self._connect() as connection:
             row = connection.execute(
@@ -654,6 +828,85 @@ class PdfImportStudio:
         )
 
     @staticmethod
+    def _structured_draft(row: sqlite3.Row) -> StructuredQuestionDraftView:
+        return StructuredQuestionDraftView(
+            draft_id=row["draft_id"], file_id=row["file_id"],
+            boundary_candidate_id=row["boundary_candidate_id"], position=row["position"],
+            start_page=row["start_page"], end_page=row["end_page"],
+            source_text=row["source_text"], question_type=row["question_type"],
+            stem_plain=row["stem_plain"], stem_latex=row["stem_latex"],
+            options=[StructuredQuestionOption(**item) for item in json.loads(row["options_json"])],
+            answer_value=row["answer_value"], solution_method=row["solution_method"],
+            solution_steps=json.loads(row["solution_steps_json"]),
+            final_answer=row["final_answer"], difficulty=row["difficulty"],
+            formula_status=row["formula_status"],
+            media_references=[
+                StructuredMediaReference(**item)
+                for item in json.loads(row["media_references_json"])
+            ],
+            status=row["status"], warnings=json.loads(row["warnings_json"]),
+            note=row["note"], editor_id=row["editor_id"],
+            imported_question_id=row["imported_question_id"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    @classmethod
+    def _structure_boundary_text(cls, source_text: str, question_type: str) -> dict:
+        text = source_text.strip()
+        answer_marker = re.search(r"(?mi)^\s*(?:【?(?:答案|解析|分析|详解)】?|Answer)\s*[:：]?", text)
+        question_text = text[:answer_marker.start()].strip() if answer_marker else text
+        option_pattern = re.compile(
+            r"(?ms)(?:^|\s)([A-H])\s*[\.．、)]\s*(.*?)(?=(?:\s+[A-H]\s*[\.．、)]\s)|\Z)"
+        )
+        matches = list(option_pattern.finditer(question_text))
+        options = [
+            {"key": match.group(1), "text": re.sub(r"\s+", " ", match.group(2)).strip()}
+            for match in matches
+        ]
+        if matches:
+            stem_plain = question_text[:matches[0].start()].strip()
+        else:
+            stem_plain = question_text
+        stem_plain = re.sub(r"^\s*(?:例|题)?\s*\d{1,3}\s*[\.．、)]\s*", "", stem_plain).strip()
+        warnings: list[str] = []
+        if answer_marker:
+            warnings.append("已将原答案或解析段隔离；解析需独立编写并核验")
+        if question_type in {"single_choice", "multiple_choice"} and len(options) < 2:
+            warnings.append("未稳定拆出选择题选项，请对照原页手工补充")
+        if not stem_plain:
+            stem_plain = question_text
+            warnings.append("未稳定分离题干，请手工整理")
+        formula_status = "needs_review" if re.search(r"[�□■]|[A-Za-z]\s*[=<>≤≥]|[∑√∞∈∪∩]", question_text) else "pending"
+        if formula_status == "needs_review":
+            warnings.append("检测到公式或异常字形，必须对照原页完成 LaTeX 校正")
+        return {
+            "stem_plain": stem_plain,
+            "options": options,
+            "formula_status": formula_status,
+            "warnings": warnings,
+        }
+
+    @staticmethod
+    def _validate_structured_draft(
+        page_count: int, command: StructuredQuestionDraftUpdate
+    ) -> None:
+        if command.status == "imported":
+            raise PdfImportError("不能通过编辑接口伪造已入库状态")
+        keys = [item.key.strip().upper() for item in command.options]
+        if any(not key for key in keys) or len(keys) != len(set(keys)):
+            raise PdfImportError("选项编号不能为空或重复")
+        if command.question_type in {"single_choice", "multiple_choice"} and len(keys) < 2:
+            raise PdfImportError("选择题至少需要两个选项")
+        if command.status == "confirmed":
+            if command.question_type == "unknown":
+                raise PdfImportError("确认结构化草稿前必须选择题型")
+            if command.formula_status != "confirmed":
+                raise PdfImportError("确认结构化草稿前必须完成公式校对")
+        for item in command.media_references:
+            if item.page_number > page_count:
+                raise PdfImportError(f"图片来源页必须在 1 到 {page_count} 之间")
+
+    @staticmethod
     def _validate_page_range(page_count: int, start_page: int, end_page: int) -> None:
         if start_page > end_page:
             raise PdfImportError("结束页不能早于起始页")
@@ -704,6 +957,26 @@ class PdfImportStudio:
                 );
                 CREATE INDEX IF NOT EXISTS idx_import_boundaries_file
                     ON import_boundary_candidates(file_id, position);
+                CREATE TABLE IF NOT EXISTS import_structured_question_drafts (
+                    draft_id TEXT PRIMARY KEY, file_id TEXT NOT NULL,
+                    boundary_candidate_id TEXT NOT NULL UNIQUE, position INTEGER NOT NULL,
+                    start_page INTEGER NOT NULL, end_page INTEGER NOT NULL,
+                    source_text TEXT NOT NULL, question_type TEXT NOT NULL,
+                    stem_plain TEXT NOT NULL, stem_latex TEXT,
+                    options_json TEXT NOT NULL, answer_value TEXT,
+                    solution_method TEXT NOT NULL, solution_steps_json TEXT NOT NULL,
+                    final_answer TEXT, difficulty INTEGER NOT NULL,
+                    formula_status TEXT NOT NULL, media_references_json TEXT NOT NULL,
+                    status TEXT NOT NULL, warnings_json TEXT NOT NULL,
+                    note TEXT NOT NULL, editor_id TEXT NOT NULL,
+                    imported_question_id TEXT,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    FOREIGN KEY(file_id) REFERENCES import_files(file_id),
+                    FOREIGN KEY(boundary_candidate_id) REFERENCES import_boundary_candidates(candidate_id),
+                    UNIQUE(file_id, position)
+                );
+                CREATE INDEX IF NOT EXISTS idx_import_structured_drafts_file
+                    ON import_structured_question_drafts(file_id, position);
                 """
             )
             self._ensure_column(connection, "import_files", "image_page_count", "INTEGER NOT NULL DEFAULT 0")
