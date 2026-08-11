@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminGuard } from "../../components/admin-guard";
 import { ResizableColumns } from "../../components/resizable-columns";
 
 type ReviewStatus = "pending" | "draft" | "approved" | "changes_requested";
@@ -35,7 +36,7 @@ async function responseError(response: Response) {
   catch { return `请求失败（HTTP ${response.status}）`; }
 }
 
-export default function CurriculumReviewPage() {
+function CurriculumReviewPageContent() {
   const [volume, setVolume] = useState(volumes[0]);
   const [nodeType, setNodeType] = useState("section");
   const [reviewStatus, setReviewStatus] = useState("");
@@ -159,6 +160,10 @@ export default function CurriculumReviewPage() {
       </>}</main>
     </ResizableColumns>
   </div>;
+}
+
+export default function CurriculumReviewPage() {
+  return <AdminGuard><CurriculumReviewPageContent /></AdminGuard>;
 }
 
 function ReviewField({ label, original, changed = false, hint, children }: { label: string; original?: string; changed?: boolean; hint?: string; children: React.ReactNode }) {

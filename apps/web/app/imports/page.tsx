@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AdminGuard } from "../components/admin-guard";
 import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
 import "./imports.css";
@@ -54,7 +55,7 @@ function draftUpdatePayload(target: StructuredDraft, status: DraftStatus = targe
   };
 }
 
-export default function ImportsPage() {
+function ImportsPageContent() {
   const [workspace, setWorkspace] = useState<ImportWorkspace | null>(null);
   const [selectedFileId, setSelectedFileId] = useState("");
   const [selected, setSelected] = useState<ImportFileDetail | null>(null);
@@ -420,4 +421,8 @@ export default function ImportsPage() {
       </>}</main>
     </ResizableColumns>
   </div>;
+}
+
+export default function ImportsPage() {
+  return <AdminGuard><ImportsPageContent /></AdminGuard>;
 }
