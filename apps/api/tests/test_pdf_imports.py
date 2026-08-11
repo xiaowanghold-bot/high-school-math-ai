@@ -6,7 +6,13 @@ from fastapi.testclient import TestClient
 from reportlab.pdfgen.canvas import Canvas
 
 from app.main import app
-from app.modules.pdf_imports import ImportBatchCommand, PdfImportError, PdfImportStudio
+from app.modules.pdf_imports import (
+    BoundaryCandidateCreate,
+    BoundaryCandidateUpdate,
+    ImportBatchCommand,
+    PdfImportError,
+    PdfImportStudio,
+)
 
 
 def pdf_bytes(*pages: list[str]) -> bytes:
@@ -163,3 +169,119 @@ def test_question_marker_supports_exam_source_style() -> None:
     text = "1(2024·浙江绍兴·二模) 已知函数，求其单调区间。\n2（2023·湖北武汉·模拟）证明不等式。"
 
     assert PdfImportStudio._marker_count(text) == 2
+
+
+def test_boundary_proposal_handles_cross_page_content_and_teacher_review(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(),
+        [
+            (
+                "函数边界.pdf",
+                pdf_bytes(
+                    [
+                        "1. Find the derivative and discuss monotonicity (1) calculate (2) prove",
+                        "2. Given a sequence, find its general term",
+                    ],
+                    ["continued conditions and final request without a new marker"],
+                ),
+            )
+        ],
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+
+    proposal = imports.propose_boundary_candidates(file_id)
+
+    assert proposal.created_count == 2
+    assert proposal.candidates.total == 2
+    assert proposal.candidates.items[0].subquestion_count == 2
+    assert proposal.candidates.items[1].start_page == 1
+    assert proposal.candidates.items[1].end_page == 2
+    assert "continued conditions" in proposal.candidates.items[1].stem_text
+    assert imports.propose_boundary_candidates(file_id).created_count == 0
+
+    reviewed = imports.update_boundary_candidate(
+        file_id,
+        proposal.candidates.items[0].candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1,
+            end_page=1,
+            stem_text="1. Teacher corrected stem",
+            question_type="open_response",
+            subquestion_count=2,
+            note="已核对原 PDF",
+            status="confirmed",
+        ),
+    )
+    assert reviewed.status == "confirmed"
+    assert reviewed.editor_id == "owner_teacher"
+    assert imports.boundary_candidates(file_id).confirmed_count == 1
+
+
+def test_boundary_manual_candidate_and_page_validation(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(), [("无稳定题号.pdf", pdf_bytes(["A question without a stable marker"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+
+    manual = imports.create_boundary_candidate(
+        file_id,
+        BoundaryCandidateCreate(
+            start_page=1,
+            end_page=1,
+            stem_text="教师手工补录的题目",
+            question_type="fill_blank",
+            note="自动规则未识别",
+        ),
+    )
+
+    assert manual.position == 1
+    assert manual.status == "draft"
+    with pytest.raises(PdfImportError, match="结束页"):
+        imports.update_boundary_candidate(
+            file_id,
+            manual.candidate_id,
+            BoundaryCandidateUpdate(
+                start_page=2,
+                end_page=1,
+                stem_text=manual.stem_text,
+            ),
+        )
+
+
+def test_boundary_http_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    imports = studio(tmp_path)
+    monkeypatch.setattr("app.routes.imports.get_pdf_import_studio", lambda: imports)
+    created = imports.create_batch(
+        command(), [("HTTP边界.pdf", pdf_bytes(["1. First question", "2. Second question"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    client = TestClient(app)
+
+    proposed = client.post(f"/api/v1/imports/files/{file_id}/boundary-candidates/propose")
+    assert proposed.status_code == 200
+    candidate = proposed.json()["candidates"]["items"][0]
+    assert proposed.json()["created_count"] == 2
+
+    updated = client.patch(
+        f"/api/v1/imports/files/{file_id}/boundary-candidates/{candidate['candidate_id']}",
+        json={
+            "start_page": 1,
+            "end_page": 1,
+            "stem_text": candidate["stem_text"],
+            "question_type": "single_choice",
+            "subquestion_count": 0,
+            "status": "discarded",
+            "note": "重复题",
+            "editor_id": "owner_teacher",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "discarded"
+    listed = client.get(f"/api/v1/imports/files/{file_id}/boundary-candidates")
+    assert listed.status_code == 200
+    assert listed.json()["discarded_count"] == 1

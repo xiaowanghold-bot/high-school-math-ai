@@ -13,6 +13,11 @@ from pypdf import PdfReader
 import pypdfium2 as pdfium
 
 from .schemas import (
+    BoundaryCandidateCreate,
+    BoundaryCandidateList,
+    BoundaryCandidateUpdate,
+    BoundaryCandidateView,
+    BoundaryProposalResult,
     ImportAnalysisResult,
     ImportBatchAnalysisResult,
     ImportBatchCommand,
@@ -294,6 +299,183 @@ class PdfImportStudio:
             message=f"批次分析完成：成功 {analyzed} 份，失败 {failed} 份。",
         )
 
+    def boundary_candidates(self, file_id: str) -> BoundaryCandidateList:
+        file = self.inspect(file_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM import_boundary_candidates
+                WHERE file_id = ? ORDER BY position, created_at
+                """,
+                (file_id,),
+            ).fetchall()
+        items = [self._candidate(row) for row in rows]
+        return BoundaryCandidateList(
+            file_id=file_id,
+            source_analysis_updated_at=file.updated_at,
+            total=len(items),
+            draft_count=sum(item.status == "draft" for item in items),
+            confirmed_count=sum(item.status == "confirmed" for item in items),
+            discarded_count=sum(item.status == "discarded" for item in items),
+            items=items,
+        )
+
+    def propose_boundary_candidates(self, file_id: str) -> BoundaryProposalResult:
+        file = self.inspect(file_id)
+        if file.status != "ready_for_segmentation":
+            raise PdfImportError("请先完成逐页分析，再生成题目边界候选")
+        existing = self.boundary_candidates(file_id)
+        if existing.total:
+            return BoundaryProposalResult(
+                candidates=existing,
+                created_count=0,
+                message="已有题目边界候选，为保护教师修改，本次未覆盖。",
+            )
+
+        records: list[dict] = []
+        for page in file.pages:
+            text = page.extracted_text.strip()
+            if not text:
+                continue
+            spans = self._marker_spans(text)
+            if not spans:
+                if records:
+                    records[-1]["stem_text"] = self._join_text(records[-1]["stem_text"], text)
+                    records[-1]["end_page"] = page.page_number
+                    records[-1]["end_offset"] = len(text)
+                continue
+            first_start = spans[0][0]
+            if records and first_start:
+                records[-1]["stem_text"] = self._join_text(
+                    records[-1]["stem_text"], text[:first_start].strip()
+                )
+                records[-1]["end_page"] = page.page_number
+                records[-1]["end_offset"] = first_start
+            for index, (start, _marker_end) in enumerate(spans):
+                end = spans[index + 1][0] if index + 1 < len(spans) else len(text)
+                stem = text[start:end].strip()
+                if stem:
+                    records.append(
+                        {
+                            "start_page": page.page_number,
+                            "end_page": page.page_number,
+                            "start_offset": start,
+                            "end_offset": end,
+                            "stem_text": stem,
+                        }
+                    )
+
+        now = self._now()
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO import_boundary_candidates
+                (candidate_id, file_id, source_analysis_updated_at, position,
+                 start_page, end_page, start_offset, end_offset, stem_text,
+                 question_type, subquestion_count, status, note, editor_id,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', '',
+                        'system_proposal', ?, ?)
+                """,
+                [
+                    (
+                        f"imp_boundary_{uuid4().hex[:16]}",
+                        file_id,
+                        file.updated_at,
+                        position,
+                        record["start_page"],
+                        record["end_page"],
+                        record["start_offset"],
+                        record["end_offset"],
+                        record["stem_text"],
+                        self._infer_question_type(record["stem_text"]),
+                        self._infer_subquestion_count(record["stem_text"]),
+                        now,
+                        now,
+                    )
+                    for position, record in enumerate(records, start=1)
+                ],
+            )
+        candidates = self.boundary_candidates(file_id)
+        return BoundaryProposalResult(
+            candidates=candidates,
+            created_count=len(records),
+            message=f"已生成 {len(records)} 个题目边界候选，确认前不会进入正式题库。",
+        )
+
+    def create_boundary_candidate(
+        self, file_id: str, command: BoundaryCandidateCreate
+    ) -> BoundaryCandidateView:
+        file = self.inspect(file_id)
+        if file.status != "ready_for_segmentation":
+            raise PdfImportError("请先完成逐页分析，再手动补充题目边界")
+        self._validate_page_range(file.page_count, command.start_page, command.end_page)
+        now = self._now()
+        candidate_id = f"imp_boundary_{uuid4().hex[:16]}"
+        with self._connect() as connection:
+            position = connection.execute(
+                """
+                SELECT COALESCE(MAX(position), 0) + 1
+                FROM import_boundary_candidates WHERE file_id = ?
+                """,
+                (file_id,),
+            ).fetchone()[0]
+            connection.execute(
+                """
+                INSERT INTO import_boundary_candidates
+                (candidate_id, file_id, source_analysis_updated_at, position,
+                 start_page, end_page, start_offset, end_offset, stem_text,
+                 question_type, subquestion_count, status, note, editor_id,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, 'draft', ?, ?, ?, ?)
+                """,
+                (
+                    candidate_id, file_id, file.updated_at, position,
+                    command.start_page, command.end_page, command.stem_text.strip(),
+                    command.question_type, command.subquestion_count,
+                    command.note.strip(), command.editor_id, now, now,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM import_boundary_candidates WHERE candidate_id = ?",
+                (candidate_id,),
+            ).fetchone()
+        return self._candidate(row)
+
+    def update_boundary_candidate(
+        self, file_id: str, candidate_id: str, command: BoundaryCandidateUpdate
+    ) -> BoundaryCandidateView:
+        file = self.inspect(file_id)
+        self._validate_page_range(file.page_count, command.start_page, command.end_page)
+        with self._connect() as connection:
+            existing = connection.execute(
+                """
+                SELECT candidate_id FROM import_boundary_candidates
+                WHERE candidate_id = ? AND file_id = ?
+                """,
+                (candidate_id, file_id),
+            ).fetchone()
+            if existing is None:
+                raise KeyError(candidate_id)
+            connection.execute(
+                """
+                UPDATE import_boundary_candidates
+                SET start_page = ?, end_page = ?, stem_text = ?, question_type = ?,
+                    subquestion_count = ?, status = ?, note = ?, editor_id = ?, updated_at = ?
+                WHERE candidate_id = ? AND file_id = ?
+                """,
+                (
+                    command.start_page, command.end_page, command.stem_text.strip(),
+                    command.question_type, command.subquestion_count, command.status,
+                    command.note.strip(), command.editor_id, self._now(), candidate_id, file_id,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM import_boundary_candidates WHERE candidate_id = ?",
+                (candidate_id,),
+            ).fetchone()
+        return self._candidate(row)
+
     def source_file(self, file_id: str) -> tuple[Path, ImportFileSummary]:
         with self._connect() as connection:
             row = connection.execute(
@@ -419,6 +601,65 @@ class PdfImportStudio:
     def _marker_count(cls, text: str) -> int:
         return max((len(pattern.findall(text)) for pattern in cls._QUESTION_MARKERS), default=0)
 
+    @classmethod
+    def _marker_spans(cls, text: str) -> list[tuple[int, int]]:
+        matches = sorted(
+            (match.start(), match.end())
+            for pattern in cls._QUESTION_MARKERS
+            for match in pattern.finditer(text)
+        )
+        deduplicated: list[tuple[int, int]] = []
+        for start, end in matches:
+            if deduplicated and start <= deduplicated[-1][1]:
+                previous_start, previous_end = deduplicated[-1]
+                deduplicated[-1] = (previous_start, max(previous_end, end))
+            else:
+                deduplicated.append((start, end))
+        return deduplicated
+
+    @staticmethod
+    def _join_text(left: str, right: str) -> str:
+        return "\n".join(part for part in (left.strip(), right.strip()) if part)
+
+    @staticmethod
+    def _infer_question_type(text: str) -> str:
+        option_count = len(set(re.findall(r"(?m)(?:^|\s)([A-D])[\.．、)]", text)))
+        if option_count >= 4:
+            return "single_choice"
+        if re.search(r"填空|横线上|_____", text):
+            return "fill_blank"
+        if re.search(r"证明|求证|解答|求|计算|说明理由", text):
+            return "open_response"
+        return "unknown"
+
+    @staticmethod
+    def _infer_subquestion_count(text: str) -> int:
+        values = {
+            int(value)
+            for value in re.findall(r"(?<!\d)[（(]\s*(\d{1,2})\s*[）)]", text)
+            if 0 < int(value) <= 20
+        }
+        return max(values, default=0)
+
+    @staticmethod
+    def _candidate(row: sqlite3.Row) -> BoundaryCandidateView:
+        return BoundaryCandidateView(
+            candidate_id=row["candidate_id"], file_id=row["file_id"],
+            position=row["position"], start_page=row["start_page"], end_page=row["end_page"],
+            stem_text=row["stem_text"], question_type=row["question_type"],
+            subquestion_count=row["subquestion_count"], status=row["status"],
+            note=row["note"], editor_id=row["editor_id"],
+            source_analysis_updated_at=row["source_analysis_updated_at"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _validate_page_range(page_count: int, start_page: int, end_page: int) -> None:
+        if start_page > end_page:
+            raise PdfImportError("结束页不能早于起始页")
+        if end_page > page_count:
+            raise PdfImportError(f"页码必须在 1 到 {page_count} 之间")
+
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.executescript(
@@ -449,6 +690,20 @@ class PdfImportStudio:
                     FOREIGN KEY(file_id) REFERENCES import_files(file_id), UNIQUE(file_id, page_number)
                 );
                 CREATE INDEX IF NOT EXISTS idx_import_pages_file ON import_pages(file_id, page_number);
+                CREATE TABLE IF NOT EXISTS import_boundary_candidates (
+                    candidate_id TEXT PRIMARY KEY, file_id TEXT NOT NULL,
+                    source_analysis_updated_at TEXT NOT NULL, position INTEGER NOT NULL,
+                    start_page INTEGER NOT NULL, end_page INTEGER NOT NULL,
+                    start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL,
+                    stem_text TEXT NOT NULL, question_type TEXT NOT NULL,
+                    subquestion_count INTEGER NOT NULL, status TEXT NOT NULL,
+                    note TEXT NOT NULL, editor_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    FOREIGN KEY(file_id) REFERENCES import_files(file_id),
+                    UNIQUE(file_id, position)
+                );
+                CREATE INDEX IF NOT EXISTS idx_import_boundaries_file
+                    ON import_boundary_candidates(file_id, position);
                 """
             )
             self._ensure_column(connection, "import_files", "image_page_count", "INTEGER NOT NULL DEFAULT 0")

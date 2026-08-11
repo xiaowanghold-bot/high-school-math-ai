@@ -7,6 +7,11 @@ from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.modules.pdf_imports import (
+    BoundaryCandidateCreate,
+    BoundaryCandidateList,
+    BoundaryCandidateUpdate,
+    BoundaryCandidateView,
+    BoundaryProposalResult,
     ImportAnalysisResult,
     ImportBatchAnalysisResult,
     ImportBatchCommand,
@@ -119,5 +124,59 @@ def import_page_preview(
         return FileResponse(path, media_type="image/png")
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get(
+    "/files/{file_id}/boundary-candidates", response_model=BoundaryCandidateList
+)
+def list_boundary_candidates(file_id: str) -> BoundaryCandidateList:
+    try:
+        return get_pdf_import_studio().boundary_candidates(file_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+
+
+@router.post(
+    "/files/{file_id}/boundary-candidates/propose",
+    response_model=BoundaryProposalResult,
+)
+def propose_boundary_candidates(file_id: str) -> BoundaryProposalResult:
+    try:
+        return get_pdf_import_studio().propose_boundary_candidates(file_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/files/{file_id}/boundary-candidates",
+    response_model=BoundaryCandidateView,
+    status_code=201,
+)
+def create_boundary_candidate(
+    file_id: str, command: BoundaryCandidateCreate
+) -> BoundaryCandidateView:
+    try:
+        return get_pdf_import_studio().create_boundary_candidate(file_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入文件不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/files/{file_id}/boundary-candidates/{candidate_id}",
+    response_model=BoundaryCandidateView,
+)
+def update_boundary_candidate(
+    file_id: str, candidate_id: str, command: BoundaryCandidateUpdate
+) -> BoundaryCandidateView:
+    try:
+        return get_pdf_import_studio().update_boundary_candidate(file_id, candidate_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目边界候选不存在") from exc
     except PdfImportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

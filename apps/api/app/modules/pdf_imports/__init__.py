@@ -1,4 +1,9 @@
 from .schemas import (
+    BoundaryCandidateCreate,
+    BoundaryCandidateList,
+    BoundaryCandidateUpdate,
+    BoundaryCandidateView,
+    BoundaryProposalResult,
     ImportAnalysisResult,
     ImportBatchAnalysisResult,
     ImportBatchCommand,
@@ -13,6 +18,11 @@ from .schemas import (
 from .studio import PdfImportError, PdfImportStudio
 
 __all__ = [
+    "BoundaryCandidateCreate",
+    "BoundaryCandidateList",
+    "BoundaryCandidateUpdate",
+    "BoundaryCandidateView",
+    "BoundaryProposalResult",
     "ImportAnalysisResult",
     "ImportBatchAnalysisResult",
     "ImportBatchCommand",

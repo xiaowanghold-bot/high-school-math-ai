@@ -12,6 +12,14 @@ ImportRightsBasis = Literal[
     "private_research_only",
 ]
 ImportFileStatus = Literal["registered", "analyzing", "ready_for_segmentation", "failed"]
+BoundaryCandidateStatus = Literal["draft", "confirmed", "discarded"]
+BoundaryQuestionType = Literal[
+    "single_choice",
+    "multiple_choice",
+    "fill_blank",
+    "open_response",
+    "unknown",
+]
 
 
 class ImportBatchCommand(BaseModel):
@@ -105,4 +113,51 @@ class ImportBatchAnalysisResult(BaseModel):
     batch: ImportBatchSummary
     analyzed_count: int
     failed_count: int
+    message: str
+
+
+class BoundaryCandidateCreate(BaseModel):
+    start_page: int = Field(ge=1)
+    end_page: int = Field(ge=1)
+    stem_text: str = Field(min_length=1, max_length=100_000)
+    question_type: BoundaryQuestionType = "unknown"
+    subquestion_count: int = Field(default=0, ge=0, le=20)
+    note: str = Field(default="", max_length=2000)
+    editor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class BoundaryCandidateUpdate(BoundaryCandidateCreate):
+    status: BoundaryCandidateStatus = "draft"
+
+
+class BoundaryCandidateView(BaseModel):
+    candidate_id: str
+    file_id: str
+    position: int
+    start_page: int
+    end_page: int
+    stem_text: str
+    question_type: BoundaryQuestionType
+    subquestion_count: int
+    status: BoundaryCandidateStatus
+    note: str
+    editor_id: str
+    source_analysis_updated_at: str
+    created_at: str
+    updated_at: str
+
+
+class BoundaryCandidateList(BaseModel):
+    file_id: str
+    source_analysis_updated_at: str
+    total: int
+    draft_count: int
+    confirmed_count: int
+    discarded_count: int
+    items: list[BoundaryCandidateView] = Field(default_factory=list)
+
+
+class BoundaryProposalResult(BaseModel):
+    candidates: BoundaryCandidateList
+    created_count: int
     message: str
