@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from pypdf import PdfReader
 import pypdfium2 as pdfium
+from PIL import Image
 
 from .schemas import (
     BoundaryCandidateCreate,
@@ -29,6 +30,8 @@ from .schemas import (
     ImportWorkspace,
     ImportWorkspaceStats,
     StructuredDraftProposalResult,
+    StructuredMediaCropCommand,
+    StructuredMediaCropView,
     StructuredMediaReference,
     StructuredQuestionDraftList,
     StructuredQuestionDraftUpdate,
@@ -49,6 +52,8 @@ class PdfImportStudio:
     MAX_BATCH_BYTES = 350 * 1024 * 1024
     MAX_PDF_PAGES = 1200
     MIN_TEXT_LAYER_CHARS = 20
+    MAX_CROPS_PER_DRAFT = 8
+    CROP_RENDER_WIDTH = 1800
 
     _QUESTION_MARKERS = (
         re.compile(r"(?m)^\s*(?:例|题)?\s*\d{1,3}\s*[\.．、)]\s*"),
@@ -492,7 +497,21 @@ class PdfImportStudio:
                 """,
                 (file_id,),
             ).fetchall()
-        items = [self._structured_draft(row) for row in rows]
+            crop_rows = connection.execute(
+                """
+                SELECT * FROM import_structured_media_crops
+                WHERE file_id = ? ORDER BY created_at, crop_id
+                """,
+                (file_id,),
+            ).fetchall()
+        crops_by_draft: dict[str, list[StructuredMediaCropView]] = {}
+        for crop_row in crop_rows:
+            crop = self._media_crop(crop_row)
+            crops_by_draft.setdefault(crop.draft_id, []).append(crop)
+        items = [
+            self._structured_draft(row, crops_by_draft.get(row["draft_id"], []))
+            for row in rows
+        ]
         return StructuredQuestionDraftList(
             file_id=file_id,
             total=len(items),
@@ -649,6 +668,142 @@ class PdfImportStudio:
                 (draft_id,),
             ).fetchone()
         return self._structured_draft(updated)
+
+    def create_media_crop(
+        self, file_id: str, draft_id: str, command: StructuredMediaCropCommand
+    ) -> StructuredMediaCropView:
+        file = self.inspect(file_id)
+        with self._connect() as connection:
+            draft = connection.execute(
+                """SELECT * FROM import_structured_question_drafts
+                   WHERE file_id = ? AND draft_id = ?""",
+                (file_id, draft_id),
+            ).fetchone()
+            if draft is None:
+                raise KeyError(draft_id)
+            if draft["status"] == "imported":
+                raise PdfImportError("已入库草稿不能继续新增裁剪图，请前往题库审核台管理图片")
+            count = connection.execute(
+                "SELECT COUNT(*) FROM import_structured_media_crops WHERE draft_id = ?",
+                (draft_id,),
+            ).fetchone()[0]
+        if count >= self.MAX_CROPS_PER_DRAFT:
+            raise PdfImportError(f"每道题最多保留 {self.MAX_CROPS_PER_DRAFT} 张裁剪图")
+        if command.page_number < draft["start_page"] or command.page_number > draft["end_page"]:
+            raise PdfImportError(
+                f"裁剪页必须位于本题边界第 {draft['start_page']} 到 {draft['end_page']} 页"
+            )
+        self._validate_crop(command)
+        preview = self.preview_page(
+            file.file_id, command.page_number, width=self.CROP_RENDER_WIDTH
+        )
+        crop_id = f"imp_crop_{uuid4().hex[:16]}"
+        crop_root = (self.file_root / "crops" / file_id / draft_id).resolve()
+        if self.file_root not in crop_root.parents:
+            raise PdfImportError("裁剪图存储路径异常")
+        crop_root.mkdir(parents=True, exist_ok=True)
+        output = crop_root / f"{crop_id}.png"
+        try:
+            with Image.open(preview) as image:
+                image.load()
+                left = round(command.x_ratio * image.width)
+                top = round(command.y_ratio * image.height)
+                right = round((command.x_ratio + command.width_ratio) * image.width)
+                bottom = round((command.y_ratio + command.height_ratio) * image.height)
+                left = max(0, min(left, image.width - 1))
+                top = max(0, min(top, image.height - 1))
+                right = max(left + 1, min(right, image.width))
+                bottom = max(top + 1, min(bottom, image.height))
+                cropped = image.crop((left, top, right, bottom)).convert("RGB")
+                cropped.save(output, format="PNG", optimize=True)
+                pixel_width, pixel_height = cropped.size
+        except Exception as exc:
+            output.unlink(missing_ok=True)
+            raise PdfImportError(f"PDF 图片裁剪失败：{exc}") from exc
+        now = self._now()
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO import_structured_media_crops
+                    (crop_id, draft_id, file_id, page_number, placement,
+                     x_ratio, y_ratio, width_ratio, height_ratio, note, editor_id,
+                     stored_name, pixel_width, pixel_height, imported_image_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                    """,
+                    (
+                        crop_id, draft_id, file_id, command.page_number, command.placement,
+                        command.x_ratio, command.y_ratio, command.width_ratio,
+                        command.height_ratio, command.note.strip(), command.editor_id,
+                        str(output.relative_to(self.file_root)), pixel_width, pixel_height, now,
+                    ),
+                )
+                row = connection.execute(
+                    "SELECT * FROM import_structured_media_crops WHERE crop_id = ?", (crop_id,)
+                ).fetchone()
+        except Exception:
+            output.unlink(missing_ok=True)
+            raise
+        return self._media_crop(row)
+
+    def media_crop_file(self, crop_id: str) -> tuple[Path, StructuredMediaCropView]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM import_structured_media_crops WHERE crop_id = ?", (crop_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(crop_id)
+        path = (self.file_root / row["stored_name"]).resolve()
+        crop_root = (self.file_root / "crops").resolve()
+        if crop_root not in path.parents or not path.exists():
+            raise PdfImportError("裁剪图不存在或存储路径异常")
+        return path, self._media_crop(row)
+
+    def delete_media_crop(self, file_id: str, draft_id: str, crop_id: str) -> None:
+        with self._connect() as connection:
+            draft = connection.execute(
+                """SELECT status FROM import_structured_question_drafts
+                   WHERE file_id = ? AND draft_id = ?""",
+                (file_id, draft_id),
+            ).fetchone()
+            if draft is None:
+                raise KeyError(draft_id)
+            if draft["status"] == "imported":
+                raise PdfImportError("已入库草稿的图片只能在题库审核台删除")
+            row = connection.execute(
+                """SELECT * FROM import_structured_media_crops
+                   WHERE file_id = ? AND draft_id = ? AND crop_id = ?""",
+                (file_id, draft_id, crop_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(crop_id)
+            connection.execute(
+                "DELETE FROM import_structured_media_crops WHERE crop_id = ?", (crop_id,)
+            )
+        path = (self.file_root / row["stored_name"]).resolve()
+        crop_root = (self.file_root / "crops").resolve()
+        if crop_root in path.parents:
+            path.unlink(missing_ok=True)
+
+    def mark_media_crop_imported(self, crop_id: str, image_id: str) -> StructuredMediaCropView:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM import_structured_media_crops WHERE crop_id = ?", (crop_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(crop_id)
+            existing = row["imported_image_id"]
+            if existing and existing != image_id:
+                raise PdfImportError("裁剪图已经关联其他题库图片")
+            connection.execute(
+                """UPDATE import_structured_media_crops SET imported_image_id = ?
+                   WHERE crop_id = ?""",
+                (image_id, crop_id),
+            )
+            updated = connection.execute(
+                "SELECT * FROM import_structured_media_crops WHERE crop_id = ?", (crop_id,)
+            ).fetchone()
+        return self._media_crop(updated)
 
     def source_file(self, file_id: str) -> tuple[Path, ImportFileSummary]:
         with self._connect() as connection:
@@ -828,7 +983,9 @@ class PdfImportStudio:
         )
 
     @staticmethod
-    def _structured_draft(row: sqlite3.Row) -> StructuredQuestionDraftView:
+    def _structured_draft(
+        row: sqlite3.Row, media_crops: list[StructuredMediaCropView] | None = None
+    ) -> StructuredQuestionDraftView:
         return StructuredQuestionDraftView(
             draft_id=row["draft_id"], file_id=row["file_id"],
             boundary_candidate_id=row["boundary_candidate_id"], position=row["position"],
@@ -845,9 +1002,22 @@ class PdfImportStudio:
                 for item in json.loads(row["media_references_json"])
             ],
             status=row["status"], warnings=json.loads(row["warnings_json"]),
+            media_crops=media_crops or [],
             note=row["note"], editor_id=row["editor_id"],
             imported_question_id=row["imported_question_id"],
             created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _media_crop(row: sqlite3.Row) -> StructuredMediaCropView:
+        return StructuredMediaCropView(
+            crop_id=row["crop_id"], draft_id=row["draft_id"], file_id=row["file_id"],
+            page_number=row["page_number"], placement=row["placement"],
+            x_ratio=row["x_ratio"], y_ratio=row["y_ratio"],
+            width_ratio=row["width_ratio"], height_ratio=row["height_ratio"],
+            note=row["note"], editor_id=row["editor_id"],
+            pixel_width=row["pixel_width"], pixel_height=row["pixel_height"],
+            imported_image_id=row["imported_image_id"], created_at=row["created_at"],
         )
 
     @classmethod
@@ -905,6 +1075,15 @@ class PdfImportStudio:
         for item in command.media_references:
             if item.page_number > page_count:
                 raise PdfImportError(f"图片来源页必须在 1 到 {page_count} 之间")
+
+    @staticmethod
+    def _validate_crop(command: StructuredMediaCropCommand) -> None:
+        if command.x_ratio + command.width_ratio > 1.000001:
+            raise PdfImportError("裁剪框超出页面右边界")
+        if command.y_ratio + command.height_ratio > 1.000001:
+            raise PdfImportError("裁剪框超出页面下边界")
+        if command.width_ratio < 0.01 or command.height_ratio < 0.01:
+            raise PdfImportError("裁剪区域过小，请重新框选")
 
     @staticmethod
     def _validate_page_range(page_count: int, start_page: int, end_page: int) -> None:
@@ -977,6 +1156,20 @@ class PdfImportStudio:
                 );
                 CREATE INDEX IF NOT EXISTS idx_import_structured_drafts_file
                     ON import_structured_question_drafts(file_id, position);
+                CREATE TABLE IF NOT EXISTS import_structured_media_crops (
+                    crop_id TEXT PRIMARY KEY, draft_id TEXT NOT NULL,
+                    file_id TEXT NOT NULL, page_number INTEGER NOT NULL,
+                    placement TEXT NOT NULL, x_ratio REAL NOT NULL, y_ratio REAL NOT NULL,
+                    width_ratio REAL NOT NULL, height_ratio REAL NOT NULL,
+                    note TEXT NOT NULL, editor_id TEXT NOT NULL,
+                    stored_name TEXT NOT NULL UNIQUE, pixel_width INTEGER NOT NULL,
+                    pixel_height INTEGER NOT NULL, imported_image_id TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(draft_id) REFERENCES import_structured_question_drafts(draft_id),
+                    FOREIGN KEY(file_id) REFERENCES import_files(file_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_import_media_crops_draft
+                    ON import_structured_media_crops(draft_id, created_at);
                 """
             )
             self._ensure_column(connection, "import_files", "image_page_count", "INTEGER NOT NULL DEFAULT 0")

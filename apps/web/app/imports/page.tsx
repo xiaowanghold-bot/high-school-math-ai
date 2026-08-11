@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ResizableColumns } from "../components/resizable-columns";
 import "./imports.css";
 
@@ -18,7 +18,9 @@ type BoundaryCandidate = { candidate_id: string; file_id: string; position: numb
 type BoundaryList = { file_id: string; source_analysis_updated_at: string; total: number; draft_count: number; confirmed_count: number; discarded_count: number; items: BoundaryCandidate[] };
 type StructuredOption = { key: string; text: string };
 type MediaReference = { page_number: number; placement: "stem" | "solution"; note: string };
-type StructuredDraft = { draft_id: string; file_id: string; boundary_candidate_id: string; position: number; start_page: number; end_page: number; source_text: string; question_type: QuestionType; stem_plain: string; stem_latex: string | null; options: StructuredOption[]; answer_value: string | null; solution_method: string; solution_steps: string[]; final_answer: string | null; difficulty: number; formula_status: FormulaStatus; media_references: MediaReference[]; status: DraftStatus; warnings: string[]; note: string; editor_id: string; imported_question_id: string | null; created_at: string; updated_at: string };
+type MediaCrop = { crop_id: string; draft_id: string; file_id: string; page_number: number; placement: "stem" | "solution"; x_ratio: number; y_ratio: number; width_ratio: number; height_ratio: number; note: string; editor_id: string; pixel_width: number; pixel_height: number; imported_image_id: string | null; created_at: string };
+type CropRect = { x_ratio: number; y_ratio: number; width_ratio: number; height_ratio: number };
+type StructuredDraft = { draft_id: string; file_id: string; boundary_candidate_id: string; position: number; start_page: number; end_page: number; source_text: string; question_type: QuestionType; stem_plain: string; stem_latex: string | null; options: StructuredOption[]; answer_value: string | null; solution_method: string; solution_steps: string[]; final_answer: string | null; difficulty: number; formula_status: FormulaStatus; media_references: MediaReference[]; media_crops: MediaCrop[]; status: DraftStatus; warnings: string[]; note: string; editor_id: string; imported_question_id: string | null; created_at: string; updated_at: string };
 type StructuredDraftList = { file_id: string; total: number; draft_count: number; confirmed_count: number; imported_count: number; items: StructuredDraft[] };
 
 const statusLabels: Record<ImportStatus, string> = { registered: "待分析", analyzing: "分析中", ready_for_segmentation: "可进入拆题", failed: "分析失败" };
@@ -46,6 +48,11 @@ export default function ImportsPage() {
   const [candidate, setCandidate] = useState<BoundaryCandidate | null>(null);
   const [drafts, setDrafts] = useState<StructuredDraftList>(emptyDrafts());
   const [draft, setDraft] = useState<StructuredDraft | null>(null);
+  const [cropMode, setCropMode] = useState(false);
+  const [cropRect, setCropRect] = useState<CropRect | null>(null);
+  const [cropPlacement, setCropPlacement] = useState<"stem" | "solution">("stem");
+  const [cropNote, setCropNote] = useState("题目配图");
+  const cropStart = useRef<{ x: number; y: number } | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("三文件结构化试点");
@@ -244,8 +251,81 @@ export default function ImportsPage() {
     finally { setBusy(false); }
   }
 
+  function cropPoint(event: ReactPointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
+    };
+  }
+
+  function beginCrop(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!cropMode || !draft || draft.status === "imported") return;
+    const point = cropPoint(event);
+    cropStart.current = point;
+    setCropRect({ x_ratio: point.x, y_ratio: point.y, width_ratio: 0, height_ratio: 0 });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveCrop(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!cropMode || !cropStart.current) return;
+    const point = cropPoint(event);
+    const start = cropStart.current;
+    setCropRect({
+      x_ratio: Math.min(start.x, point.x), y_ratio: Math.min(start.y, point.y),
+      width_ratio: Math.abs(point.x - start.x), height_ratio: Math.abs(point.y - start.y),
+    });
+  }
+
+  function endCrop(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = cropStart.current;
+    if (!start) return;
+    const point = cropPoint(event);
+    const finalRect = {
+      x_ratio: Math.min(start.x, point.x), y_ratio: Math.min(start.y, point.y),
+      width_ratio: Math.abs(point.x - start.x), height_ratio: Math.abs(point.y - start.y),
+    };
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    cropStart.current = null;
+    if (finalRect.width_ratio < 0.01 || finalRect.height_ratio < 0.01) {
+      setCropRect(null); setMessage("框选区域太小，请重新拖动选择图片范围。");
+    } else setCropRect(finalRect);
+  }
+
+  async function saveCrop() {
+    if (!selected || !draft || !cropRect) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`/api/v1/imports/files/${selected.file_id}/structured-drafts/${draft.draft_id}/media-crops`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_number: previewPage, placement: cropPlacement, ...cropRect, note: cropNote, editor_id: "owner_teacher" }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const created: MediaCrop = await response.json();
+      await loadDrafts(selected.file_id, draft.draft_id);
+      setPreviewPage(created.page_number);
+      setCropRect(null); setCropMode(false);
+      setMessage(`已保存第 ${created.page_number} 页裁剪图（${created.pixel_width} × ${created.pixel_height} px）。`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "保存裁剪图失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteCrop(cropId: string) {
+    if (!selected || !draft) return;
+    const preservedPage = previewPage;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`/api/v1/imports/files/${selected.file_id}/structured-drafts/${draft.draft_id}/media-crops/${cropId}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await errorText(response));
+      await loadDrafts(selected.file_id, draft.draft_id);
+      setPreviewPage(preservedPage);
+      setMessage("裁剪图已从 PDF 加工区移除。");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "删除裁剪图失败"); }
+    finally { setBusy(false); }
+  }
+
   function selectCandidate(item: BoundaryCandidate) { setCandidate(item); setPreviewPage(item.start_page); }
-  function selectDraft(item: StructuredDraft) { setDraft(item); setPreviewPage(item.start_page); }
+  function selectDraft(item: StructuredDraft) { setDraft(item); setPreviewPage(item.start_page); setCropMode(false); setCropRect(null); }
 
   return <div className="page-content import-workspace">
     <section className="page-title import-title"><div><p className="eyebrow">题库生产 · 来源可追溯</p><h1>批量 PDF 加工中心</h1><p className="subtle">先登记来源和权利，再逐页分析与校对题目边界；任何内容都不会自动进入正式题库。</p></div><button className="primary-button" type="button" onClick={() => setUploadOpen((value) => !value)}>{uploadOpen ? "收起登记" : "＋ 新建批次"}</button></section>
@@ -272,7 +352,7 @@ export default function ImportsPage() {
         {selected.error_message && <div className="notice warning">{selected.error_message}</div>}{selected.warnings.map((warning) => <p className="import-warning" key={warning}>{warning}</p>)}
         <nav className="import-stage-tabs"><button type="button" className={viewMode === "pages" ? "active" : ""} onClick={() => setViewMode("pages")}><span>01</span><div><strong>逐页分析</strong><small>文字层、题号与图片</small></div></button><button type="button" className={viewMode === "boundaries" ? "active" : ""} disabled={selected.status !== "ready_for_segmentation"} onClick={() => setViewMode("boundaries")}><span>02</span><div><strong>题目边界</strong><small>{boundaries.total ? `${boundaries.confirmed_count}/${boundaries.total} 已确认` : "生成候选后人工校对"}</small></div></button><button type="button" className={viewMode === "structured" ? "active" : ""} disabled={!boundaries.confirmed_count} onClick={() => setViewMode("structured")}><span>03</span><div><strong>内容结构化</strong><small>{drafts.total ? `${drafts.confirmed_count + drafts.imported_count}/${drafts.total} 已校对` : "题干、选项、公式与配图"}</small></div></button></nav>
         <ResizableColumns className={`import-preview-layout ${viewMode === "boundaries" ? "boundary-mode" : viewMode === "structured" ? "structured-mode" : ""}`} storageKey={`pdf-preview-${viewMode}`} initialLeftPercent={viewMode === "pages" ? 63 : 45} leftMin={viewMode === "pages" ? 340 : 320} rightMin={viewMode === "pages" ? 240 : 360} collapse="wide" label="调整 PDF 原文预览与分析校对区宽度">
-          <section className="import-pdf-preview"><header><strong>原 PDF 预览</strong><span>第 {previewPage} / {selected.page_count} 页</span></header><div className="import-preview-scroll"><img key={`${selected.file_id}-${previewPage}`} alt={`${selected.original_filename} 第 ${previewPage} 页`} src={`/api/v1/imports/files/${selected.file_id}/pages/${previewPage}/preview?width=1200`} /></div></section>
+          <section className="import-pdf-preview"><header><strong>{cropMode ? "拖动框选图片范围" : "原 PDF 预览"}</strong><div className="preview-page-controls"><button type="button" disabled={previewPage <= 1 || cropMode} onClick={() => setPreviewPage((page) => Math.max(1, page - 1))}>‹</button><span>第 {previewPage} / {selected.page_count} 页</span><button type="button" disabled={previewPage >= selected.page_count || cropMode} onClick={() => setPreviewPage((page) => Math.min(selected.page_count, page + 1))}>›</button></div></header><div className="import-preview-scroll"><div className={`import-preview-page ${cropMode ? "crop-active" : ""}`} onPointerDown={beginCrop} onPointerMove={moveCrop} onPointerUp={endCrop} onPointerCancel={() => { cropStart.current = null; setCropRect(null); }}><img draggable={false} key={`${selected.file_id}-${previewPage}`} alt={`${selected.original_filename} 第 ${previewPage} 页`} src={`/api/v1/imports/files/${selected.file_id}/pages/${previewPage}/preview?width=1200`} />{viewMode === "structured" && draft?.media_crops.filter((crop) => crop.page_number === previewPage).map((crop) => <span className="saved-crop-box" key={crop.crop_id} style={{ left: `${crop.x_ratio * 100}%`, top: `${crop.y_ratio * 100}%`, width: `${crop.width_ratio * 100}%`, height: `${crop.height_ratio * 100}%` }} title={crop.note || "已保存裁剪图"} />)}{cropRect && <span className="active-crop-box" style={{ left: `${cropRect.x_ratio * 100}%`, top: `${cropRect.y_ratio * 100}%`, width: `${cropRect.width_ratio * 100}%`, height: `${cropRect.height_ratio * 100}%` }} />}</div></div></section>
           {viewMode === "pages" ? <section className="import-page-analysis"><header><div><strong>逐页分析</strong><small>{selected.pages.length ? `${selected.pages.length} 页已分析` : "分析后生成页面指标"}</small></div><span>题号只是候选</span></header>
             {!selected.pages.length ? <div className="import-page-empty"><strong>尚未分析</strong><p>点击“分析此文件”，系统只提取页面文字和题号标记，不生成题库内容。</p></div> : <div className="import-page-list">{selected.pages.map((page) => <button type="button" className={previewPage === page.page_number ? "active" : ""} key={page.page_id} onClick={() => setPreviewPage(page.page_number)}><span>{String(page.page_number).padStart(3, "0")}</span><div><strong>{page.has_text_layer ? `${page.character_count} 字符` : "文字层不足"}</strong><small>{page.question_marker_count} 个题号 · {page.embedded_image_count} 张图 · {Math.round(page.width_points)} × {Math.round(page.height_points)} pt</small></div><em className={page.has_text_layer ? "text" : "ocr"}>{page.has_text_layer ? "文本" : "OCR"}</em></button>)}</div>}
           </section> : viewMode === "boundaries" ? <section className="boundary-review">
@@ -282,14 +362,15 @@ export default function ImportsPage() {
             </ResizableColumns>}
           </section> : <section className="structured-review">
             <header className="boundary-toolbar"><div><strong>结构化题目校对</strong><small>{drafts.draft_count} 待校对 · {drafts.confirmed_count} 可入题库 · {drafts.imported_count} 已导入</small></div><div><button className="primary" type="button" disabled={busy} onClick={proposeStructuredDrafts}>{busy ? "处理中…" : drafts.total ? "同步新增确认边界" : "生成结构化草稿"}</button></div></header>
-            {!drafts.total ? <div className="boundary-empty"><span>03</span><strong>分离题干、选项与解析</strong><p>只读取已确认的题目边界。自动结果是初稿，必须逐题检查公式与图片归属。</p><button type="button" disabled={busy || !boundaries.confirmed_count} onClick={proposeStructuredDrafts}>生成结构化草稿</button></div> : <ResizableColumns className="structured-body" storageKey="pdf-structured-draft-editor" initialLeftPercent={34} leftMin={210} rightMin={360} collapse="compact" label="调整结构化草稿列表与编辑器宽度"><div className="structured-list">{drafts.items.map((item) => <button type="button" className={`${draft?.draft_id === item.draft_id ? "active" : ""} ${item.status}`} key={item.draft_id} onClick={() => selectDraft(item)}><span>{String(item.position).padStart(3, "0")}</span><div><strong>{item.stem_plain.replace(/\s+/g, " ").slice(0, 58) || "未填写题干"}</strong><small>{questionTypeLabels[item.question_type]} · 公式{formulaStatusLabels[item.formula_status]} · {item.media_references.length} 个图片引用</small></div><em>{draftStatusLabels[item.status]}</em></button>)}</div>
+            {!drafts.total ? <div className="boundary-empty"><span>03</span><strong>分离题干、选项与解析</strong><p>只读取已确认的题目边界。自动结果是初稿，必须逐题检查公式与图片归属。</p><button type="button" disabled={busy || !boundaries.confirmed_count} onClick={proposeStructuredDrafts}>生成结构化草稿</button></div> : <ResizableColumns className="structured-body" storageKey="pdf-structured-draft-editor" initialLeftPercent={34} leftMin={210} rightMin={360} collapse="compact" label="调整结构化草稿列表与编辑器宽度"><div className="structured-list">{drafts.items.map((item) => <button type="button" className={`${draft?.draft_id === item.draft_id ? "active" : ""} ${item.status}`} key={item.draft_id} onClick={() => selectDraft(item)}><span>{String(item.position).padStart(3, "0")}</span><div><strong>{item.stem_plain.replace(/\s+/g, " ").slice(0, 58) || "未填写题干"}</strong><small>{questionTypeLabels[item.question_type]} · 公式{formulaStatusLabels[item.formula_status]} · {item.media_crops.length} 张裁剪图</small></div><em>{draftStatusLabels[item.status]}</em></button>)}</div>
               {draft ? <form className="structured-editor" onSubmit={(event) => { event.preventDefault(); saveDraft(); }}><header><div><span>草稿 {String(draft.position).padStart(3, "0")}</span><strong>{draftStatusLabels[draft.status]}</strong></div><small>来源第 {draft.start_page}{draft.end_page === draft.start_page ? "" : `—${draft.end_page}`} 页</small></header>
                 {!!draft.warnings.length && <div className="structured-warnings">{draft.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
                 <div className="structured-fields"><label><span>题型</span><select disabled={draft.status === "imported"} value={draft.question_type} onChange={(event) => setDraft({ ...draft, question_type: event.target.value as QuestionType })}>{Object.entries(questionTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>难度</span><select disabled={draft.status === "imported"} value={draft.difficulty} onChange={(event) => setDraft({ ...draft, difficulty: Number(event.target.value) })}>{[1, 2, 3, 4, 5].map((value) => <option value={value} key={value}>{value} 级</option>)}</select></label><label><span>公式校对</span><select disabled={draft.status === "imported"} value={draft.formula_status} onChange={(event) => setDraft({ ...draft, formula_status: event.target.value as FormulaStatus })}>{Object.entries(formulaStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
                 <label><span>题干正文</span><textarea disabled={draft.status === "imported"} value={draft.stem_plain} onChange={(event) => setDraft({ ...draft, stem_plain: event.target.value })} /></label><label><span>LaTeX 题干（可选）</span><textarea className="compact" disabled={draft.status === "imported"} value={draft.stem_latex ?? ""} placeholder="对照原页重建公式，例如：已知 $f(x)=x^2$" onChange={(event) => setDraft({ ...draft, stem_latex: event.target.value || null })} /></label>
                 <section className="structured-options"><header><strong>选项</strong><button type="button" disabled={draft.status === "imported"} onClick={() => setDraft({ ...draft, options: [...draft.options, { key: String.fromCharCode(65 + draft.options.length), text: "" }] })}>＋ 添加选项</button></header>{draft.options.map((option, index) => <div key={`${option.key}-${index}`}><input disabled={draft.status === "imported"} aria-label={`选项 ${index + 1} 编号`} value={option.key} onChange={(event) => setDraft({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, key: event.target.value.toUpperCase() } : item) })} /><textarea disabled={draft.status === "imported"} value={option.text} onChange={(event) => setDraft({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, text: event.target.value } : item) })} /><button type="button" disabled={draft.status === "imported"} onClick={() => setDraft({ ...draft, options: draft.options.filter((_, itemIndex) => itemIndex !== index) })}>×</button></div>)}</section>
                 <div className="structured-fields"><label><span>参考答案</span><input disabled={draft.status === "imported"} value={draft.answer_value ?? ""} onChange={(event) => setDraft({ ...draft, answer_value: event.target.value || null })} /></label><label><span>解析方法</span><input disabled={draft.status === "imported"} value={draft.solution_method} onChange={(event) => setDraft({ ...draft, solution_method: event.target.value })} /></label><label><span>最终答案</span><input disabled={draft.status === "imported"} value={draft.final_answer ?? ""} onChange={(event) => setDraft({ ...draft, final_answer: event.target.value || null })} /></label></div><label><span>自有解析步骤（每行一步）</span><textarea className="compact" disabled={draft.status === "imported"} value={draft.solution_steps.join("\n")} placeholder="不要复制原解析；在后续数学核验时独立编写" onChange={(event) => setDraft({ ...draft, solution_steps: event.target.value.split("\n") })} /></label>
-                <section className="structured-media"><header><strong>图片归属</strong><button type="button" disabled={draft.status === "imported"} onClick={() => setDraft({ ...draft, media_references: [...draft.media_references, { page_number: previewPage, placement: "stem", note: "待裁剪或替换" }] })}>＋ 引用当前页图片</button></header>{draft.media_references.length ? draft.media_references.map((media, index) => <div key={`${media.page_number}-${index}`}><input type="number" min={1} max={selected.page_count} disabled={draft.status === "imported"} value={media.page_number} onChange={(event) => setDraft({ ...draft, media_references: draft.media_references.map((item, itemIndex) => itemIndex === index ? { ...item, page_number: Number(event.target.value) } : item) })} /><select disabled={draft.status === "imported"} value={media.placement} onChange={(event) => setDraft({ ...draft, media_references: draft.media_references.map((item, itemIndex) => itemIndex === index ? { ...item, placement: event.target.value as "stem" | "solution" } : item) })}><option value="stem">题干图</option><option value="solution">解析图</option></select><input disabled={draft.status === "imported"} value={media.note} onChange={(event) => setDraft({ ...draft, media_references: draft.media_references.map((item, itemIndex) => itemIndex === index ? { ...item, note: event.target.value } : item) })} /><button type="button" disabled={draft.status === "imported"} onClick={() => setDraft({ ...draft, media_references: draft.media_references.filter((_, itemIndex) => itemIndex !== index) })}>×</button></div>) : <p>本题尚未登记图片。若原页有几何图、函数图像或表格，请引用对应页；进入题库后再裁剪或替换。</p>}</section>
+                <section className="structured-media crop-manager"><header><div><strong>PDF 配图裁剪</strong><small>{draft.media_crops.length}/8 张 · 只允许框选本题第 {draft.start_page}{draft.end_page === draft.start_page ? "" : `—${draft.end_page}`} 页</small></div><button type="button" disabled={draft.status === "imported" || draft.media_crops.length >= 8 || previewPage < draft.start_page || previewPage > draft.end_page} onClick={() => { setCropMode(true); setCropRect(null); }}>＋ 框选当前页</button></header>{cropMode && <div className="crop-actions"><select value={cropPlacement} onChange={(event) => setCropPlacement(event.target.value as "stem" | "solution")}><option value="stem">题干图</option><option value="solution">解析图</option></select><input value={cropNote} placeholder="图片说明，例如：圆与切线示意图" onChange={(event) => setCropNote(event.target.value)} /><button type="button" disabled={!cropRect || busy} onClick={saveCrop}>保存框选</button><button type="button" onClick={() => { setCropMode(false); setCropRect(null); }}>取消</button></div>}{draft.media_crops.length ? <div className="crop-gallery">{draft.media_crops.map((crop) => <article key={crop.crop_id}><button className="crop-preview" type="button" onClick={() => setPreviewPage(crop.page_number)}><img src={`/api/v1/imports/media-crops/${crop.crop_id}/file`} alt={crop.note || `第 ${crop.page_number} 页裁剪图`} /></button><div><strong>{crop.placement === "stem" ? "题干图" : "解析图"} · 第 {crop.page_number} 页</strong><small>{crop.pixel_width} × {crop.pixel_height} px · {crop.note || "未填写说明"}</small></div><button className="crop-delete" type="button" disabled={draft.status === "imported" || busy} onClick={() => deleteCrop(crop.crop_id)}>删除</button></article>)}</div> : <p>切换到题目所在页，点击“框选当前页”，再在左侧 PDF 上拖动选择图形、表格或坐标系。</p>}</section>
+                <section className="structured-media"><header><strong>未裁剪图片备注</strong><button type="button" disabled={draft.status === "imported"} onClick={() => setDraft({ ...draft, media_references: [...draft.media_references, { page_number: previewPage, placement: "stem", note: "待裁剪或替换" }] })}>＋ 添加来源页</button></header>{draft.media_references.length ? draft.media_references.map((media, index) => <div key={`${media.page_number}-${index}`}><input type="number" min={1} max={selected.page_count} disabled={draft.status === "imported"} value={media.page_number} onChange={(event) => setDraft({ ...draft, media_references: draft.media_references.map((item, itemIndex) => itemIndex === index ? { ...item, page_number: Number(event.target.value) } : item) })} /><select disabled={draft.status === "imported"} value={media.placement} onChange={(event) => setDraft({ ...draft, media_references: draft.media_references.map((item, itemIndex) => itemIndex === index ? { ...item, placement: event.target.value as "stem" | "solution" } : item) })}><option value="stem">题干图</option><option value="solution">解析图</option></select><input disabled={draft.status === "imported"} value={media.note} onChange={(event) => setDraft({ ...draft, media_references: draft.media_references.map((item, itemIndex) => itemIndex === index ? { ...item, note: event.target.value } : item) })} /><button type="button" disabled={draft.status === "imported"} onClick={() => setDraft({ ...draft, media_references: draft.media_references.filter((_, itemIndex) => itemIndex !== index) })}>×</button></div>) : <p>仅在暂时无法裁剪、需要重绘或图片跨页时保留备注。</p>}</section>
                 <label><span>校对备注</span><input disabled={draft.status === "imported"} value={draft.note} placeholder="例如：分式已重建，原页图形需重绘" onChange={(event) => setDraft({ ...draft, note: event.target.value })} /></label><footer>{draft.status === "imported" ? <a href={`/search?q=${encodeURIComponent(draft.imported_question_id ?? "")}`}>前往题库审核</a> : <><button type="submit" disabled={busy || !draft.stem_plain.trim()}>保存草稿</button><button className="confirm" type="button" disabled={busy || !draft.stem_plain.trim() || draft.formula_status !== "confirmed" || draft.question_type === "unknown"} onClick={() => saveDraft("confirmed")}>确认结构</button><button className="import" type="button" disabled={busy || draft.status !== "confirmed"} onClick={importDraft}>送入题库审核</button></>}</footer>
               </form> : <div className="structured-editor" />}
             </ResizableColumns>}

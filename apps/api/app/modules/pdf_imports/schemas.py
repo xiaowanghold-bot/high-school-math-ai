@@ -176,6 +176,27 @@ class StructuredMediaReference(BaseModel):
     note: str = Field(default="", max_length=1000)
 
 
+class StructuredMediaCropCommand(BaseModel):
+    page_number: int = Field(ge=1)
+    placement: Literal["stem", "solution"] = "stem"
+    x_ratio: float = Field(ge=0, lt=1)
+    y_ratio: float = Field(ge=0, lt=1)
+    width_ratio: float = Field(gt=0, le=1)
+    height_ratio: float = Field(gt=0, le=1)
+    note: str = Field(default="", max_length=1000)
+    editor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class StructuredMediaCropView(StructuredMediaCropCommand):
+    crop_id: str
+    draft_id: str
+    file_id: str
+    pixel_width: int
+    pixel_height: int
+    imported_image_id: str | None = None
+    created_at: str
+
+
 class StructuredQuestionDraftUpdate(BaseModel):
     question_type: BoundaryQuestionType
     stem_plain: str = Field(min_length=1, max_length=40_000)
@@ -202,6 +223,7 @@ class StructuredQuestionDraftView(StructuredQuestionDraftUpdate):
     end_page: int
     source_text: str
     warnings: list[str] = Field(default_factory=list)
+    media_crops: list[StructuredMediaCropView] = Field(default_factory=list)
     imported_question_id: str | None = None
     created_at: str
     updated_at: str

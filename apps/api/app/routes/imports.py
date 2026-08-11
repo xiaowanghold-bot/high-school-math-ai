@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
@@ -23,6 +23,8 @@ from app.modules.pdf_imports import (
     PdfImportStudio,
     StructuredDraftImportResult,
     StructuredDraftProposalResult,
+    StructuredMediaCropCommand,
+    StructuredMediaCropView,
     StructuredQuestionDraftList,
     StructuredQuestionDraftUpdate,
     StructuredQuestionDraftView,
@@ -235,6 +237,51 @@ def update_structured_draft(
 
 
 @router.post(
+    "/files/{file_id}/structured-drafts/{draft_id}/media-crops",
+    response_model=StructuredMediaCropView,
+    status_code=201,
+)
+def create_structured_media_crop(
+    file_id: str, draft_id: str, command: StructuredMediaCropCommand
+) -> StructuredMediaCropView:
+    try:
+        return get_pdf_import_studio().create_media_crop(file_id, draft_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="文件或结构化草稿不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/media-crops/{crop_id}/file")
+def structured_media_crop_file(crop_id: str) -> FileResponse:
+    try:
+        path, crop = get_pdf_import_studio().media_crop_file(crop_id)
+        return FileResponse(
+            path,
+            media_type="image/png",
+            filename=f"第{crop.page_number}页-{crop.placement}-{crop.crop_id}.png",
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="裁剪图不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/files/{file_id}/structured-drafts/{draft_id}/media-crops/{crop_id}",
+    status_code=204,
+)
+def delete_structured_media_crop(file_id: str, draft_id: str, crop_id: str) -> Response:
+    try:
+        get_pdf_import_studio().delete_media_crop(file_id, draft_id, crop_id)
+        return Response(status_code=204)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="草稿或裁剪图不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
     "/files/{file_id}/structured-drafts/{draft_id}/import",
     response_model=StructuredDraftImportResult,
 )
@@ -275,6 +322,20 @@ def import_structured_draft(file_id: str, draft_id: str) -> StructuredDraftImpor
         question = get_import_question_bank().create_private_resource_question(
             candidate, resource=resource
         )
+        for crop in draft.media_crops:
+            if crop.imported_image_id:
+                continue
+            crop_path, _ = studio.media_crop_file(crop.crop_id)
+            image = get_import_question_bank().add_image(
+                question.question_id,
+                crop_path.read_bytes(),
+                f"{file.original_filename}-第{crop.page_number}页-{crop.crop_id}.png",
+                crop.placement,
+                crop.note or f"来源 PDF 第 {crop.page_number} 页裁剪图",
+                f"从《{file.original_filename}》第 {crop.page_number} 页框选；保留来源坐标证据。",
+                "pdf_import_structured_pipeline",
+            )
+            studio.mark_media_crop_imported(crop.crop_id, image.image_id)
         marked = studio.mark_structured_draft_imported(file_id, draft_id, question.question_id)
         return StructuredDraftImportResult(draft=marked, question_id=question.question_id)
     except (KeyError, StopIteration) as exc:

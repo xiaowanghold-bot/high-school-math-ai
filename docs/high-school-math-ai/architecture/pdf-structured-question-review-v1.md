@@ -44,13 +44,26 @@
 - 图片页引用、教师备注和自动警告；
 - `draft / confirmed / imported` 状态与关联题库题号。
 
-## 当前图片能力
+## 图片裁剪能力
 
-当前版本完成“图片归属”：教师可以把来源页登记为题干图或解析图，并记录裁剪、重绘或替换说明。下一版本增加矩形框选、原图证据裁剪和自有重绘图上传；真实图片文件仍由题库媒体模块统一管理，避免加工区与正式题库产生两套文件事实。
+当前版本已完成题目级矩形框选与裁剪：
+
+- 浏览器基于实际显示页面记录 `x / y / width / height` 相对坐标，调整窗口或预览宽度不会导致裁剪漂移；
+- 后端按 1800 像素页宽重新渲染来源 PDF，再依据相对坐标生成高清 PNG；
+- 裁剪页必须位于该题已确认的起止页内，区域不能越界或小于页面宽高的 1%；
+- 每题最多保存 8 张裁剪图，可分别标记为题干图或解析图；
+- 加工区保留裁剪坐标、来源页、像素尺寸和教师说明；
+- 草稿进入题库时，裁剪图逐张复制到题库媒体目录并建立图片审计记录；失败重试只复制尚未关联的图片，不会重复入库；
+- 已入库草稿的裁剪图在加工区锁定，后续替换、排序和删除统一由题库媒体模块处理。
+
+无法立即裁剪、需要重绘或跨页的图片仍可保留“来源页备注”，但备注本身不会生成题库图片。
 
 ## 接口
 
 - `GET /api/v1/imports/files/{file_id}/structured-drafts`
 - `POST /api/v1/imports/files/{file_id}/structured-drafts/propose`
 - `PATCH /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}`
+- `POST /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}/media-crops`
+- `GET /api/v1/imports/media-crops/{crop_id}/file`
+- `DELETE /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}/media-crops/{crop_id}`
 - `POST /api/v1/imports/files/{file_id}/structured-drafts/{draft_id}/import`

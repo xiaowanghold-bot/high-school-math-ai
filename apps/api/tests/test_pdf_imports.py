@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 from reportlab.pdfgen.canvas import Canvas
 
 from app.main import app
@@ -13,6 +14,7 @@ from app.modules.pdf_imports import (
     PdfImportError,
     PdfImportStudio,
     StructuredMediaReference,
+    StructuredMediaCropCommand,
     StructuredQuestionDraftUpdate,
 )
 from app.modules.question_bank import QuestionBank
@@ -397,6 +399,28 @@ def test_structured_draft_http_import_is_private_and_idempotent(
     )
     assert updated.status_code == 200
 
+    cropped = client.post(
+        f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}/media-crops",
+        json={
+            "page_number": 1,
+            "placement": "stem",
+            "x_ratio": 0.1,
+            "y_ratio": 0.2,
+            "width_ratio": 0.4,
+            "height_ratio": 0.25,
+            "note": "题干示意图",
+            "editor_id": "owner_teacher",
+        },
+    )
+    assert cropped.status_code == 201
+    crop = cropped.json()
+    assert crop["pixel_width"] == 720
+    assert crop["pixel_height"] > 500
+    crop_file = client.get(f"/api/v1/imports/media-crops/{crop['crop_id']}/file")
+    assert crop_file.status_code == 200
+    with Image.open(BytesIO(crop_file.content)) as crop_image:
+        assert crop_image.size == (crop["pixel_width"], crop["pixel_height"])
+
     imported = client.post(
         f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}/import"
     )
@@ -406,8 +430,66 @@ def test_structured_draft_http_import_is_private_and_idempotent(
     assert imported.status_code == 200
     assert repeated.status_code == 200
     assert repeated.json()["already_imported"]
+    locked_delete = client.delete(
+        f"/api/v1/imports/files/{file_id}/structured-drafts/{draft['draft_id']}/media-crops/{crop['crop_id']}"
+    )
+    assert locked_delete.status_code == 409
     question = bank.get_question(imported.json()["question_id"])
     assert question.visibility == "private"
     assert question.review_status == "pending"
     assert question.verification_status == "needs_math_review"
     assert question.source_page_start == 1
+    assert len(question.images) == 1
+    assert question.images[0].placement == "stem"
+    assert question.images[0].width == crop["pixel_width"]
+
+
+def test_structured_media_crop_gates_and_delete(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(), [("跨页配图.pdf", pdf_bytes(["1. Geometry question"], ["continued figure"]))]
+    )
+    file_id = created.batch.files[0].file_id
+    imports.analyze(file_id)
+    boundary = imports.propose_boundary_candidates(file_id).candidates.items[0]
+    imports.update_boundary_candidate(
+        file_id,
+        boundary.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=1, end_page=2, stem_text=boundary.stem_text,
+            question_type="open_response", status="confirmed",
+        ),
+    )
+    draft = imports.propose_structured_question_drafts(file_id).drafts.items[0]
+    with pytest.raises(PdfImportError, match="右边界"):
+        imports.create_media_crop(
+            file_id,
+            draft.draft_id,
+            StructuredMediaCropCommand(
+                page_number=1, x_ratio=0.8, y_ratio=0.1,
+                width_ratio=0.3, height_ratio=0.2,
+            ),
+        )
+    with pytest.raises(PdfImportError, match="裁剪页"):
+        imports.create_media_crop(
+            file_id,
+            draft.draft_id,
+            StructuredMediaCropCommand(
+                page_number=3, x_ratio=0.1, y_ratio=0.1,
+                width_ratio=0.2, height_ratio=0.2,
+            ),
+        )
+    crop = imports.create_media_crop(
+        file_id,
+        draft.draft_id,
+        StructuredMediaCropCommand(
+            page_number=2, x_ratio=0.1, y_ratio=0.1,
+            width_ratio=0.2, height_ratio=0.2,
+        ),
+    )
+    path, _ = imports.media_crop_file(crop.crop_id)
+    assert path.exists()
+    assert imports.structured_question_drafts(file_id).items[0].media_crops[0].crop_id == crop.crop_id
+    imports.delete_media_crop(file_id, draft.draft_id, crop.crop_id)
+    assert not path.exists()
+    assert imports.structured_question_drafts(file_id).items[0].media_crops == []
