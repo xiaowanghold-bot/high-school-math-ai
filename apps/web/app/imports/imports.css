@@ -43,9 +43,12 @@
 
 .import-preview-layout.structured-mode { grid-template-columns: minmax(390px,.82fr) minmax(520px,1.18fr); min-height: 720px; }
 .structured-mode .import-preview-scroll { height: 720px; }
-.structured-review { min-width: 0; background: white; }
-.structured-body { height: 720px; }
-.structured-list { min-width: 0; overflow-y: auto; }
+.structured-review { min-width: 0; overflow: hidden; background: white; }
+.structured-body { height: 720px; overflow: hidden; }
+.structured-body.resizable-columns { align-items: stretch; }
+/* Constrained resizable columns stack vertically; fixed rows keep both scroll panes inside the review workspace. */
+.structured-body.resizable-columns[data-constrained] { grid-template-rows: 240px minmax(0,1fr); gap: 0 !important; }
+.structured-list { min-width: 0; min-height: 0; max-height: 100%; overflow-y: auto; }
 .structured-list > button { width: 100%; display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: 8px; align-items: start; border: 0; border-bottom: 1px solid #edf0f4; background: white; color: inherit; padding: 11px; text-align: left; cursor: pointer; }
 .structured-list > button:hover, .structured-list > button.active { background: #f1f4ff; }
 .structured-list > button.active { box-shadow: inset 3px 0 #4964bd; }
@@ -56,7 +59,7 @@
 .structured-list em { border-radius: 999px; background: #eef0f4; color: #677184; padding: 4px 6px; font-size: var(--module-text-xs); font-style: normal; white-space: nowrap; }
 .structured-list .confirmed em { background: #e5f5ef; color: #19705c; }
 .structured-list .imported em { background: #e8edff; color: #405bb6; }
-.structured-editor { min-width: 0; overflow-y: auto; padding: 14px; }
+.structured-editor { min-width: 0; min-height: 0; max-height: 100%; overflow-y: auto; padding: 14px; }
 .structured-editor > header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .structured-editor > header div { display: flex; align-items: center; gap: 8px; }
 .structured-editor > header span { color: #6679b8; font-size: var(--module-text-xs); font-weight: 700; }
@@ -138,7 +141,7 @@
 .structured-editor > footer button.import { border-color: #4964bd; background: #4964bd; color: white; }
 .structured-editor > footer button:disabled { opacity: .42; cursor: not-allowed; }
 @media (max-width: 1300px) { .import-preview-layout.structured-mode { grid-template-columns: 1fr; }.structured-mode .import-pdf-preview { border-right: 0; border-bottom: 1px solid var(--line); }.structured-mode .import-preview-scroll { height: 520px; }.structured-body { height: 680px; } }
-@media (max-width: 850px) { .structured-body.resizable-columns { height: auto; }.structured-body.resizable-columns .structured-list { max-height: 330px; border-bottom: 1px solid var(--line); }.structured-fields { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 850px) { .structured-review { overflow: visible; }.structured-body.resizable-columns, .structured-body.resizable-columns[data-constrained] { height: auto; overflow: visible; grid-template-rows: none; }.structured-body.resizable-columns .structured-list { max-height: 330px; border-bottom: 1px solid var(--line); }.structured-body.resizable-columns .structured-editor { max-height: none; overflow: visible; }.structured-fields { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 700px) { .structured-fields { grid-template-columns: 1fr; }.formula-review-panel > header, .formula-result > div:first-child { align-items: flex-start; flex-direction: column; }.formula-review-panel > header > div:last-child { width: 100%; }.formula-review-panel button { flex: 1; }.formula-preview > div, .formula-result li { grid-template-columns: 1fr; }.structured-media > div:not(.crop-actions):not(.crop-gallery) { grid-template-columns: 62px 82px minmax(0,1fr) 28px; }.structured-media > .crop-actions { grid-template-columns: 1fr 1fr; }.crop-actions input { grid-column: 1 / -1; }.structured-editor > footer { flex-direction: column; }.structured-editor > footer button, .structured-editor > footer a { width: 100%; } }
 
 /* Durable queue progress and resume states. */
