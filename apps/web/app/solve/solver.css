@@ -1,8 +1,8 @@
 .solver-workspace { max-width: 1520px; }
 .solver-title { align-items: center; }
 .solver-title > div:first-child { flex: 1; min-width: 0; }
-.solver-title h1 { font-size: clamp(28px, 3vw, 38px); }
-.solver-safety-badge { min-width: 250px; border: 1px solid #cdd7ee; border-radius: 13px; background: #f5f7ff; padding: 14px 16px; }
+.solver-title h1 { font-size: clamp(24px,2.2vw,31px); }
+.solver-safety-badge { min-width: 232px; border: 1px solid #cdd7ee; border-radius: 12px; background: #f5f7ff; padding: 8px 12px; }
 .solver-safety-badge strong, .solver-safety-badge span { display: block; }
 .solver-safety-badge strong { color: #3f56a2; font-size: 11px; }
 .solver-safety-badge span { margin-top: 5px; color: #758098; font-size: 9px; }
