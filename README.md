@@ -2,6 +2,9 @@
 
 教师优先的人教 A 版高中数学备课、搜题、解题、组卷与导出工具。
 
+当前开发边界、后续阶段与商业 V1 完成标准见
+[`docs/high-school-math-ai/DEVELOPMENT-BOUNDARY-AND-ROADMAP-v2.md`](docs/high-school-math-ai/DEVELOPMENT-BOUNDARY-AND-ROADMAP-v2.md)。
+
 ## 当前可运行切片
 
 - Next.js 教师工作台和教材目录页。

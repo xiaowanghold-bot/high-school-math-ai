@@ -12,9 +12,10 @@ type AdminMetrics = {
   importFiles: number;
   importPages: number;
   pendingLibrary: number;
+  duplicateCandidates: number;
 };
 
-const emptyMetrics: AdminMetrics = { questionTotal: 0, pendingQuestions: 0, pendingMath: 0, pendingCurriculum: 0, importFiles: 0, importPages: 0, pendingLibrary: 0 };
+const emptyMetrics: AdminMetrics = { questionTotal: 0, pendingQuestions: 0, pendingMath: 0, pendingCurriculum: 0, importFiles: 0, importPages: 0, pendingLibrary: 0, duplicateCandidates: 0 };
 
 async function readJson(url: string) {
   const response = await fetch(url);
@@ -33,7 +34,8 @@ function AdminDashboard() {
       readJson("/api/v1/curriculum/reviews?limit=1"),
       readJson("/api/v1/imports"),
       readJson("/api/v1/library/stats"),
-    ]).then(([questions, curriculum, imports, library]) => {
+      readJson("/api/v1/question-similarity?limit=1"),
+    ]).then(([questions, curriculum, imports, library, similarity]) => {
       const byReview = questions.by_review_status ?? {};
       const byVerification = questions.by_verification_status ?? {};
       const pendingMath = Object.entries(byVerification).reduce((total, [status, count]) => status === "passed" ? total : total + Number(count), 0);
@@ -45,6 +47,7 @@ function AdminDashboard() {
         importFiles: Number(imports.stats?.files ?? 0),
         importPages: Number(imports.stats?.pages ?? 0),
         pendingLibrary: Number(library.pending_review ?? 0),
+        duplicateCandidates: Number(similarity.stats?.proposed ?? 0),
       });
     }).catch(() => setError("管理数据暂时无法读取，请确认 API 已启动。"))
       .finally(() => setLoading(false));
@@ -62,6 +65,7 @@ function AdminDashboard() {
     </section>
     <section className="admin-work-grid">
       <Link href="/search" className="admin-work-card blue"><span>题</span><div><p>内容质量</p><h2>题库审核与数学核验</h2><small>处理题干、公式、答案、教材映射、来源和发布门禁。</small><strong>{metrics.pendingQuestions + metrics.pendingMath} 项待处理 →</strong></div></Link>
+      <Link href="/admin/duplicates" className="admin-work-card blue"><span>比</span><div><p>题库治理</p><h2>重复题与变式关系校对</h2><small>识别完全重复、同题不同来源、同题异解和真正变式，由教师确认关系。</small><strong>{metrics.duplicateCandidates} 组待确认 →</strong></div></Link>
       <Link href="/curriculum/review" className="admin-work-card green"><span>册</span><div><p>教材治理</p><h2>人教 A 版目录审核</h2><small>维护章节、知识点、核心素养、典型题型与高考优先级。</small><strong>{metrics.pendingCurriculum} 项待处理 →</strong></div></Link>
       <Link href="/imports" className="admin-work-card amber"><span>导</span><div><p>内容生产</p><h2>批量 PDF 加工中心</h2><small>从来源登记、逐页分析、题目边界一直处理到公式与图片校对。</small><strong>{metrics.importFiles} 份 · {metrics.importPages} 页 →</strong></div></Link>
       <Link href="/library" className="admin-work-card slate"><span>资</span><div><p>资料治理</p><h2>私人资料与权利记录</h2><small>查看上传资料、OCR 状态、拆题候选和来源声明。</small><strong>{metrics.pendingLibrary} 项待处理 →</strong></div></Link>

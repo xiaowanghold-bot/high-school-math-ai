@@ -11,6 +11,7 @@ from app.routes.lesson_plans import router as lesson_plans_router
 from app.routes.library import router as library_router
 from app.routes.model_operations import router as model_operations_router
 from app.routes.questions import router as questions_router
+from app.routes.question_similarity import router as question_similarity_router
 from app.routes.solutions import router as solutions_router
 
 
@@ -33,6 +34,7 @@ def health() -> dict[str, str]:
 app.include_router(curriculum_router, prefix="/api/v1")
 app.include_router(imports_router, prefix="/api/v1")
 app.include_router(questions_router, prefix="/api/v1")
+app.include_router(question_similarity_router, prefix="/api/v1")
 app.include_router(lesson_plans_router, prefix="/api/v1")
 app.include_router(exam_papers_router, prefix="/api/v1")
 app.include_router(solutions_router, prefix="/api/v1")

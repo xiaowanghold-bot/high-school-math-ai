@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     question_media_dir: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "question-media"
     )
+    question_similarity_db: Path = Field(
+        default=PROJECT_ROOT / "data" / "runtime" / "question-similarity.sqlite3"
+    )
     private_library_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "private-library.sqlite3"
     )
