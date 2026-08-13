@@ -57,3 +57,48 @@ class QualityActionResult(BaseModel):
     workspace: QuestionQualityWorkspace
     status: str
     message: str
+
+
+CurriculumRecommendationStatus = Literal[
+    "already_mapped", "high_confidence", "review_required", "no_suggestion"
+]
+
+
+class BatchCurriculumQuestion(BaseModel):
+    question_id: str
+    stem_plain: str
+    source_document: str
+    source_page_start: int | None = None
+    source_page_end: int | None = None
+    current_curriculum: CurrentCurriculumMapping
+    suggestions: list[CurriculumSuggestion] = Field(default_factory=list)
+    recommendation_status: CurriculumRecommendationStatus
+
+
+class BatchCurriculumWorkspace(BaseModel):
+    total: int
+    mapped_count: int
+    high_confidence_count: int
+    review_required_count: int
+    no_suggestion_count: int
+    items: list[BatchCurriculumQuestion] = Field(default_factory=list)
+
+
+class BatchCurriculumInspectCommand(BaseModel):
+    question_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class BatchCurriculumMappingItem(BaseModel):
+    question_id: str = Field(min_length=1, max_length=160)
+    node_id: str = Field(min_length=1, max_length=160)
+
+
+class BatchCurriculumMappingCommand(BaseModel):
+    mappings: list[BatchCurriculumMappingItem] = Field(min_length=1, max_length=100)
+    teacher_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class BatchCurriculumActionResult(BaseModel):
+    applied_count: int
+    question_ids: list[str]
+    message: str

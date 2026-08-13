@@ -146,6 +146,65 @@
 @media (max-width: 850px) { .structured-review { overflow: visible; }.structured-body.resizable-columns, .structured-body.resizable-columns[data-constrained] { height: auto; overflow: visible; grid-template-rows: none; }.structured-body.resizable-columns .structured-list { max-height: 330px; border-bottom: 1px solid var(--line); }.structured-body.resizable-columns .structured-editor { max-height: none; overflow: visible; }.structured-fields { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 700px) { .structured-fields { grid-template-columns: 1fr; }.formula-review-panel > header, .formula-result > div:first-child { align-items: flex-start; flex-direction: column; }.formula-review-panel > header > div:last-child { width: 100%; }.formula-review-panel button { flex: 1; }.formula-preview > div, .formula-result li { grid-template-columns: 1fr; }.structured-media > div:not(.crop-actions):not(.crop-gallery) { grid-template-columns: 62px 82px minmax(0,1fr) 28px; }.structured-media > .crop-actions { grid-template-columns: 1fr 1fr; }.crop-actions input { grid-column: 1 / -1; }.structured-editor > footer { flex-direction: column; }.structured-editor > footer button, .structured-editor > footer a { width: 100%; } }
 
+/* Stage 04 · teacher-confirmed PEP A curriculum mapping */
+.import-stage-tabs { overflow-x: auto; }
+.import-stage-tabs button { flex: 1 1 150px; min-width: 135px; }
+.curriculum-mode { grid-template-columns: minmax(370px,.76fr) minmax(560px,1.24fr); min-height: 720px; }
+.curriculum-mode .import-preview-scroll { height: 720px; }
+.curriculum-review { min-width: 0; overflow: hidden; background: white; }
+.curriculum-toolbar { min-height: 50px; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); padding: 9px 13px; }
+.curriculum-toolbar strong, .curriculum-toolbar small { display: block; }
+.curriculum-toolbar strong { font-size: var(--module-text-sm); }
+.curriculum-toolbar small { margin-top: 3px; color: var(--muted); font-size: var(--module-text-xs); }
+.curriculum-toolbar > div:last-child { display: flex; gap: 7px; }
+.curriculum-toolbar button, .curriculum-apply-one { min-height: var(--module-control-height); border: 1px solid #cad3e5; border-radius: 7px; background: white; color: #536078; padding: 8px 11px; font-size: var(--module-text-sm); font-weight: 700; cursor: pointer; }
+.curriculum-toolbar button.primary, .curriculum-apply-one { border-color: #2a7b66; background: #2a7b66; color: white; }
+.curriculum-toolbar button:disabled, .curriculum-apply-one:disabled { opacity: .4; cursor: not-allowed; }
+.curriculum-safety-note { margin: 0; border-bottom: 1px solid var(--line); background: #f3f8f6; color: #49665e; padding: 8px 13px; font-size: var(--module-text-xs); line-height: 1.55; }
+.curriculum-body { height: 640px; overflow: hidden; }
+.curriculum-list { min-width: 0; min-height: 0; overflow-y: auto; border-right: 1px solid var(--line); }
+.curriculum-list article { display: grid; grid-template-columns: 24px minmax(0,1fr) auto; align-items: start; gap: 7px; border-bottom: 1px solid #edf0f4; padding: 11px 10px; }
+.curriculum-list article.active { background: #f1f4ff; box-shadow: inset 3px 0 #4964bd; }
+.curriculum-list article.already_mapped { background: #f4faf7; }
+.curriculum-list label { display: grid; place-items: center; padding-top: 2px; }
+.curriculum-list input { width: 16px; height: 16px; accent-color: #2a7b66; }
+.curriculum-list button { min-width: 0; border: 0; background: transparent; color: inherit; padding: 0; text-align: left; cursor: pointer; }
+.curriculum-list button strong, .curriculum-list button small { display: block; }
+.curriculum-list button strong { color: #303c51; font-size: var(--module-text-sm); line-height: 1.5; }
+.curriculum-list button small { margin-top: 4px; color: var(--muted); font-size: var(--module-text-xs); line-height: 1.4; }
+.curriculum-list article > em { border-radius: 999px; background: #fff2e2; color: #9a6721; padding: 4px 7px; font-size: var(--module-text-xs); font-style: normal; white-space: nowrap; }
+.curriculum-list article.high_confidence > em { background: #e8f5ef; color: #19705c; }
+.curriculum-list article.already_mapped > em { background: #e4efe9; color: #28705d; }
+.curriculum-editor { min-width: 0; min-height: 0; overflow-y: auto; padding: 14px; }
+.curriculum-editor > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.curriculum-editor > header span, .curriculum-editor > header strong { display: block; }
+.curriculum-editor > header span { color: #6679b8; font-size: var(--module-text-xs); font-weight: 700; }
+.curriculum-editor > header strong { margin-top: 3px; font-size: var(--module-text-sm); }
+.curriculum-editor > header a, .curriculum-no-match a { color: #4964bd; font-size: var(--module-text-xs); font-weight: 700; text-decoration: none; }
+.curriculum-question, .curriculum-current, .curriculum-no-match { margin-top: 12px; border: 1px solid #dfe5ef; border-radius: 9px; background: #fafbfd; padding: 11px 12px; }
+.curriculum-question > span, .curriculum-current > span { color: #68758d; font-size: var(--module-text-xs); font-weight: 700; }
+.curriculum-question p { margin: 7px 0 0; color: #26354b; font: var(--module-control-text)/1.75 "Songti SC", "Noto Serif SC", serif; }
+.curriculum-current { border-color: #cfe4dc; background: #f3fbf8; }
+.curriculum-current strong { display: block; margin-top: 7px; color: #20715d; font-size: var(--module-text-base); }
+.curriculum-current p, .curriculum-no-match p { margin: 5px 0 0; color: var(--muted); font-size: var(--module-text-xs); line-height: 1.55; }
+.curriculum-candidates { margin-top: 12px; }
+.curriculum-candidates > header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.curriculum-candidates > header strong { font-size: var(--module-text-sm); }
+.curriculum-candidates > header small { color: var(--muted); font-size: var(--module-text-xs); }
+.curriculum-candidates > label { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: 8px; align-items: start; margin-top: 7px; border: 1px solid #dfe5ef; border-radius: 9px; background: white; padding: 10px; cursor: pointer; }
+.curriculum-candidates > label.selected { border-color: #7990d6; background: #f3f6ff; box-shadow: 0 0 0 2px rgba(73,100,189,.07); }
+.curriculum-candidates input { margin-top: 2px; accent-color: #4964bd; }
+.curriculum-candidates label strong, .curriculum-candidates label span, .curriculum-candidates label small { display: block; }
+.curriculum-candidates label strong { color: #2e3c52; font-size: var(--module-text-sm); }
+.curriculum-candidates label span { margin-top: 3px; color: #596780; font-size: var(--module-text-xs); }
+.curriculum-candidates label small { margin-top: 5px; color: var(--muted); font-size: var(--module-text-xs); line-height: 1.45; }
+.curriculum-candidates label em { border-radius: 999px; background: #e7edff; color: #4964bd; padding: 4px 7px; font-size: var(--module-text-xs); font-style: normal; }
+.curriculum-apply-one { width: 100%; margin-top: 10px; }
+.curriculum-no-match strong { color: #8a5c24; font-size: var(--module-text-sm); }
+.curriculum-no-match a { display: inline-block; margin-top: 9px; }
+@media (max-width: 1300px) { .curriculum-mode { grid-template-columns: 1fr; }.curriculum-mode .import-pdf-preview { border-right: 0; border-bottom: 1px solid var(--line); }.curriculum-mode .import-preview-scroll { height: 500px; }.curriculum-body { height: 650px; } }
+@media (max-width: 760px) { .curriculum-toolbar { align-items: flex-start; flex-direction: column; }.curriculum-toolbar > div:last-child { width: 100%; }.curriculum-toolbar button { flex: 1; }.curriculum-body.resizable-columns, .curriculum-body.resizable-columns[data-constrained] { height: auto; overflow: visible; grid-template-rows: none; }.curriculum-list { max-height: 340px; border-right: 0; border-bottom: 1px solid var(--line); }.curriculum-editor { overflow: visible; }.curriculum-candidates > label { grid-template-columns: 20px minmax(0,1fr); }.curriculum-candidates label em { grid-column: 2; justify-self: start; } }
+
 /* Durable queue progress and resume states. */
 .import-file-status.queued, .import-file-status.analyzing { background: #e8edff; color: #425cb3; }
 .import-file-status.paused { background: #fff2df; color: #93631d; }

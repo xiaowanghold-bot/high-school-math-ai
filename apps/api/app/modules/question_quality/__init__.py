@@ -1,4 +1,8 @@
 from .schemas import (
+    BatchCurriculumActionResult,
+    BatchCurriculumInspectCommand,
+    BatchCurriculumMappingCommand,
+    BatchCurriculumWorkspace,
     CurriculumMappingCommand,
     CurriculumSuggestion,
     ManualVerificationCommand,
@@ -8,6 +12,10 @@ from .schemas import (
 from .workflow import QuestionQualityError, QuestionQualityWorkflow
 
 __all__ = [
+    "BatchCurriculumActionResult",
+    "BatchCurriculumInspectCommand",
+    "BatchCurriculumMappingCommand",
+    "BatchCurriculumWorkspace",
     "CurriculumMappingCommand",
     "CurriculumSuggestion",
     "ManualVerificationCommand",

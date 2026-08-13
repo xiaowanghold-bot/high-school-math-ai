@@ -7,6 +7,10 @@ from app.modules.curriculum import CurriculumTreeNode
 from app.modules.question_bank import QuestionBank, QuestionBankError
 
 from .schemas import (
+    BatchCurriculumActionResult,
+    BatchCurriculumMappingCommand,
+    BatchCurriculumQuestion,
+    BatchCurriculumWorkspace,
     CurrentCurriculumMapping,
     CurriculumMappingCommand,
     CurriculumSuggestion,
@@ -24,25 +28,37 @@ class QuestionQualityError(ValueError):
 class QuestionQualityWorkflow:
     """Deep module for curriculum recommendation and verification evidence."""
 
-    SYMBOL_CUES = {
-        "∈": "元素集合关系",
-        "\\in": "元素集合关系",
-        "⊂": "子集真子集",
+    # These aliases are deliberately narrow. Generic symbols such as ``a∈R`` and
+    # ``f(x)`` occur across the whole curriculum and must never create a confident
+    # recommendation on their own.
+    TOPIC_ALIASES = {
+        "∪": "并集",
+        "\\cup": "并集",
+        "∩": "交集",
+        "\\cap": "交集",
+        "⊂": "真子集",
         "⊆": "子集",
-        "∪": "并集集合运算",
-        "∩": "交集集合运算",
-        "∁": "补集集合运算",
-        "\\cup": "并集集合运算",
-        "\\cap": "交集集合运算",
-        "f(": "函数",
-        "sin": "正弦三角函数",
-        "cos": "余弦三角函数",
-        "tan": "正切三角函数",
-        "log": "对数函数",
-        "ln": "对数函数",
-        "最大值": "最值",
-        "最小值": "最值",
+        "贝叶斯": "贝叶斯公式",
+        "全概率": "全概率公式",
+        "条件概率": "条件概率",
+        "分布列": "分布列",
+        "数学期望": "离散型随机变量均值",
+        "单调性": "函数单调性",
+        "增函数": "函数单调性",
+        "减函数": "函数单调性",
+        "切线方程": "切线方程",
+        "极值点": "函数极值",
+        "导函数": "导数",
+        "f'": "导数",
+        "f′": "导数",
+        "椭圆": "椭圆",
+        "双曲线": "双曲线",
+        "抛物线": "抛物线",
+        "二面角": "二面角",
+        "线面角": "线面角",
     }
+    HIGH_CONFIDENCE_THRESHOLD = 0.9
+    HIGH_CONFIDENCE_MARGIN = 0.08
 
     def __init__(self, *, question_bank: QuestionBank, curriculum_catalog) -> None:
         self.question_bank = question_bank
@@ -113,6 +129,80 @@ class QuestionQualityWorkflow:
             message=f"已应用知识点“{node.name}”；题目仍保持原有私人和验证状态。",
         )
 
+    def inspect_curriculum_batch(self, question_ids: list[str]) -> BatchCurriculumWorkspace:
+        unique_ids = list(dict.fromkeys(question_ids))
+        if not unique_ids:
+            raise QuestionQualityError("至少选择一道已进入题库的题目")
+        items: list[BatchCurriculumQuestion] = []
+        for question_id in unique_ids:
+            workspace = self.inspect(question_id)
+            question = self.question_bank.get_question(question_id)
+            if workspace.current_curriculum.knowledge_point_ids:
+                status = "already_mapped"
+            elif not workspace.curriculum_suggestions:
+                status = "no_suggestion"
+            elif self._is_high_confidence(workspace.curriculum_suggestions):
+                status = "high_confidence"
+            else:
+                status = "review_required"
+            items.append(
+                BatchCurriculumQuestion(
+                    question_id=question_id,
+                    stem_plain=question.stem_plain,
+                    source_document=question.source_document,
+                    source_page_start=question.source_page_start,
+                    source_page_end=question.source_page_end,
+                    current_curriculum=workspace.current_curriculum,
+                    suggestions=workspace.curriculum_suggestions,
+                    recommendation_status=status,
+                )
+            )
+        return BatchCurriculumWorkspace(
+            total=len(items),
+            mapped_count=sum(item.recommendation_status == "already_mapped" for item in items),
+            high_confidence_count=sum(item.recommendation_status == "high_confidence" for item in items),
+            review_required_count=sum(item.recommendation_status == "review_required" for item in items),
+            no_suggestion_count=sum(item.recommendation_status == "no_suggestion" for item in items),
+            items=items,
+        )
+
+    def _is_high_confidence(self, suggestions: list[CurriculumSuggestion]) -> bool:
+        if not suggestions or suggestions[0].confidence < self.HIGH_CONFIDENCE_THRESHOLD:
+            return False
+        runner_up = suggestions[1].confidence if len(suggestions) > 1 else 0
+        return suggestions[0].confidence - runner_up >= self.HIGH_CONFIDENCE_MARGIN
+
+    def apply_curriculum_batch(
+        self, command: BatchCurriculumMappingCommand
+    ) -> BatchCurriculumActionResult:
+        unique: dict[str, str] = {}
+        for mapping in command.mappings:
+            if mapping.question_id in unique:
+                raise QuestionQualityError("同一道题不能在一次操作中映射多个知识点")
+            unique[mapping.question_id] = mapping.node_id
+
+        # Validate the complete command before writing, so a bad node never leaves
+        # a teacher's batch half-applied.
+        for question_id, node_id in unique.items():
+            self.question_bank.get_question(question_id)
+            try:
+                node = self.curriculum_catalog.get_node(node_id)
+            except KeyError as exc:
+                raise QuestionQualityError(f"教材知识点不存在：{node_id}") from exc
+            if node.node_type != "knowledge_point":
+                raise QuestionQualityError("批量映射必须选择具体知识点")
+
+        for question_id, node_id in unique.items():
+            self.apply_curriculum(
+                question_id,
+                CurriculumMappingCommand(node_id=node_id, teacher_id=command.teacher_id),
+            )
+        return BatchCurriculumActionResult(
+            applied_count=len(unique),
+            question_ids=list(unique),
+            message=f"已由教师确认 {len(unique)} 道题的人教 A 版知识点；题目仍需独立数学核验和内容审核。",
+        )
+
     def record_verification(
         self, question_id: str, command: ManualVerificationCommand
     ) -> QualityActionResult:
@@ -149,11 +239,10 @@ class QuestionQualityWorkflow:
             for solution in raw.get("solutions") or []
         )
         source_text = f"{stem} {solution_text}"
-        expanded = source_text
-        for cue, words in self.SYMBOL_CUES.items():
-            if cue in source_text:
-                expanded += f" {words}"
-        question_text = self._normalize(expanded)
+        question_text = self._normalize(source_text)
+        aliases = {
+            alias for cue, alias in self.TOPIC_ALIASES.items() if cue.lower() in source_text.lower()
+        }
         paths = self._node_paths()
         suggestions: list[CurriculumSuggestion] = []
         for node in self._knowledge_points(self.curriculum_catalog.get_tree()):
@@ -170,15 +259,29 @@ class QuestionQualityWorkflow:
                 gram for gram in self._ngrams(question_text, lengths=(2, 3))
                 if gram in corpus
             ]
-            exact = bool(normalized_name and normalized_name in question_text)
-            if not exact and not matched and not corpus_matches:
+            exact = bool(len(normalized_name) >= 3 and normalized_name in question_text)
+            alias_match = any(
+                self._normalize(alias) in normalized_name or normalized_name in self._normalize(alias)
+                for alias in aliases
+            )
+            useful_matches = [gram for gram in matched if len(gram) >= 3]
+            if not exact and not alias_match and not useful_matches and not corpus_matches:
                 continue
-            score = min(0.98, 0.18 + (0.55 if exact else 0) + 0.09 * len(matched[:4]) + 0.03 * len(corpus_matches[:3]))
+            score = min(
+                0.98,
+                0.16
+                + (0.66 if exact else 0)
+                + (0.68 if alias_match else 0)
+                + 0.06 * len(useful_matches[:3])
+                + 0.025 * len(corpus_matches[:3]),
+            )
             reasons = []
             if exact:
                 reasons.append(f"题干或解析直接出现“{node.name}”")
-            if matched:
-                reasons.append(f"匹配关键词：{'、'.join(matched[:3])}")
+            if alias_match:
+                reasons.append("匹配到该知识点的专用数学术语")
+            if useful_matches:
+                reasons.append(f"匹配关键词：{'、'.join(useful_matches[:3])}")
             if corpus_matches:
                 reasons.append("与该知识点的典型题型或易错描述相符")
             path = paths[node.node_id]

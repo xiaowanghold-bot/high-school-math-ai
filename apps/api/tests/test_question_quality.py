@@ -5,8 +5,9 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.curriculum import CurriculumNode, InMemoryCurriculumCatalog
-from app.modules.question_bank import QuestionBank
+from app.modules.question_bank import QuestionBank, QuestionRevisionCommand
 from app.modules.question_quality import (
+    BatchCurriculumMappingCommand,
     CurriculumMappingCommand,
     ManualVerificationCommand,
     QuestionQualityError,
@@ -112,6 +113,65 @@ def test_quality_workflow_recommends_and_applies_curriculum(tmp_path: Path) -> N
     assert result.workspace.current_curriculum.knowledge_point_names == ["函数的单调性"]
 
 
+def test_batch_curriculum_workspace_and_teacher_confirmed_apply(tmp_path: Path) -> None:
+    workflow, bank, question_id = make_workflow(tmp_path)
+
+    workspace = workflow.inspect_curriculum_batch([question_id, question_id])
+
+    assert workspace.total == 1
+    assert workspace.high_confidence_count == 1
+    assert workspace.items[0].suggestions[0].node_id == "kp_monotonic"
+    result = workflow.apply_curriculum_batch(
+        BatchCurriculumMappingCommand(
+            mappings=[{"question_id": question_id, "node_id": "kp_monotonic"}],
+            teacher_id="teacher_1",
+        )
+    )
+
+    assert result.applied_count == 1
+    assert bank.get_question(question_id).knowledge_point_ids == ["kp_monotonic"]
+
+
+def test_generic_real_parameter_symbol_does_not_trigger_set_mapping(tmp_path: Path) -> None:
+    workflow, bank, question_id = make_workflow(tmp_path)
+    question = bank.get_question(question_id)
+    bank.revise(
+        question_id,
+        QuestionRevisionCommand(
+            stem_plain="已知 a∈R，函数 f(x)=e^x-ax^3，求函数的极值点。",
+            stem_latex=None,
+            options=[],
+            answer_value=question.answer_value,
+            solution_method="教师修订",
+            solution_steps=[],
+            final_answer=question.answer_value,
+        ),
+    )
+
+    suggestions = workflow.inspect(question_id).curriculum_suggestions
+
+    assert all(
+        item.name != "元素与集合的关系" or item.confidence < workflow.HIGH_CONFIDENCE_THRESHOLD
+        for item in suggestions
+    )
+
+
+def test_close_competing_suggestions_require_teacher_review(tmp_path: Path) -> None:
+    workflow, _, question_id = make_workflow(tmp_path)
+    original_recommend = workflow._recommend
+    workflow._recommend = lambda stem, raw: [
+        *original_recommend(stem, raw)[:1],
+        original_recommend(stem, raw)[0].model_copy(
+            update={"node_id": "kp_parity", "name": "函数的奇偶性", "confidence": 0.9}
+        ),
+    ]
+
+    workspace = workflow.inspect_curriculum_batch([question_id])
+
+    assert workspace.high_confidence_count == 0
+    assert workspace.review_required_count == 1
+
+
 def test_manual_verification_requires_declaration_and_evidence(tmp_path: Path) -> None:
     workflow, _, question_id = make_workflow(tmp_path)
 
@@ -176,6 +236,17 @@ def test_question_quality_http_endpoints(tmp_path: Path, monkeypatch: pytest.Mon
     client = TestClient(app)
 
     workspace = client.get(f"/api/v1/questions/{question_id}/quality")
+    batch_workspace = client.post(
+        "/api/v1/questions/quality/curriculum/batch/inspect",
+        json={"question_ids": [question_id]},
+    )
+    batch_applied = client.post(
+        "/api/v1/questions/quality/curriculum/batch/apply",
+        json={
+            "mappings": [{"question_id": question_id, "node_id": "kp_monotonic"}],
+            "teacher_id": "teacher_1",
+        },
+    )
     applied = client.post(
         f"/api/v1/questions/{question_id}/quality/curriculum",
         json={"node_id": "kp_monotonic", "teacher_id": "teacher_1"},
@@ -192,6 +263,10 @@ def test_question_quality_http_endpoints(tmp_path: Path, monkeypatch: pytest.Mon
     )
 
     assert workspace.status_code == 200
+    assert batch_workspace.status_code == 200
+    assert batch_workspace.json()["high_confidence_count"] == 1
+    assert batch_applied.status_code == 200
+    assert batch_applied.json()["applied_count"] == 1
     assert workspace.json()["curriculum_suggestions"][0]["node_id"] == "kp_monotonic"
     assert applied.status_code == 200
     assert verified.status_code == 200

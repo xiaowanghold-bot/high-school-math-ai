@@ -37,6 +37,10 @@ from app.modules.question_variants import (
     QuestionVariantServiceError,
 )
 from app.modules.question_quality import (
+    BatchCurriculumActionResult,
+    BatchCurriculumInspectCommand,
+    BatchCurriculumMappingCommand,
+    BatchCurriculumWorkspace,
     CurriculumMappingCommand,
     ManualVerificationCommand,
     QualityActionResult,
@@ -246,6 +250,38 @@ def question_quality_workspace(question_id: str) -> QuestionQualityWorkspace:
         return get_question_quality_workflow().inspect(question_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="题目不存在") from exc
+
+
+@router.post(
+    "/questions/quality/curriculum/batch/inspect",
+    response_model=BatchCurriculumWorkspace,
+)
+def inspect_question_curriculum_batch(
+    command: BatchCurriculumInspectCommand,
+) -> BatchCurriculumWorkspace:
+    try:
+        return get_question_quality_workflow().inspect_curriculum_batch(command.question_ids)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"题目不存在：{exc.args[0]}") from exc
+    except QuestionQualityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/questions/quality/curriculum/batch/apply",
+    response_model=BatchCurriculumActionResult,
+)
+def apply_question_curriculum_batch(
+    command: BatchCurriculumMappingCommand,
+) -> BatchCurriculumActionResult:
+    try:
+        return get_question_quality_workflow().apply_curriculum_batch(command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"题目不存在：{exc.args[0]}") from exc
+    except QuestionQualityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post(
