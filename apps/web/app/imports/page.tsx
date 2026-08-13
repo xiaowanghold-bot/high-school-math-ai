@@ -21,6 +21,8 @@ type SourceRole = "question_only" | "solution_reference" | "combined" | "unknown
 type SourcePairStatus = "proposed" | "confirmed" | "rejected";
 type SourcePair = { pair_id: string; question_file: ImportFile; solution_file: ImportFile; confidence: number; status: SourcePairStatus; strategy: string; signals: string[]; note: string; reviewer_id: string | null; created_at: string; updated_at: string };
 type SourcePairing = { file_id: string; inferred_role: SourceRole; coverage_status: "self_contained" | "paired" | "candidates" | "unpaired"; role_signals: string[]; candidates: SourcePair[] };
+type SourceItemMatch = { item_match_id: string; pair_id: string; question_candidate: BoundaryCandidate; solution_candidate: BoundaryCandidate; confidence: number; status: SourcePairStatus; stale: boolean; strategy: string; signals: string[]; note: string; reviewer_id: string | null; created_at: string; updated_at: string };
+type SourceItemMatches = { pair_id: string; question_file_id: string; solution_file_id: string; total_question_count: number; matched_count: number; proposed_count: number; confirmed_count: number; rejected_count: number; stale_count: number; unmatched_question_count: number; items: SourceItemMatch[] };
 type BoundaryCandidate = { candidate_id: string; file_id: string; position: number; start_page: number; end_page: number; stem_text: string; question_type: QuestionType; subquestion_count: number; status: CandidateStatus; note: string; editor_id: string; source_analysis_updated_at: string; created_at: string; updated_at: string };
 type BoundaryList = { file_id: string; source_analysis_updated_at: string; total: number; draft_count: number; confirmed_count: number; discarded_count: number; items: BoundaryCandidate[] };
 type StructuredOption = { key: string; text: string };
@@ -68,6 +70,7 @@ function ImportsPageContent() {
   const [selectedFileId, setSelectedFileId] = useState("");
   const [selected, setSelected] = useState<ImportFileDetail | null>(null);
   const [sourcePairing, setSourcePairing] = useState<SourcePairing | null>(null);
+  const [sourceItemMatches, setSourceItemMatches] = useState<SourceItemMatches | null>(null);
   const [previewPage, setPreviewPage] = useState(1);
   const [viewMode, setViewMode] = useState<"pages" | "boundaries" | "structured">("pages");
   const [boundaries, setBoundaries] = useState<BoundaryList>(emptyBoundaries());
@@ -116,7 +119,17 @@ function ImportsPageContent() {
   async function loadSourcePairing(fileId: string) {
     const response = await fetch(`/api/v1/imports/files/${fileId}/source-pairing`);
     if (!response.ok) throw new Error(await errorText(response));
-    setSourcePairing(await response.json());
+    const payload: SourcePairing = await response.json();
+    setSourcePairing(payload);
+    const confirmed = payload.candidates.find((item) => item.status === "confirmed");
+    if (confirmed) await loadSourceItemMatches(confirmed.pair_id);
+    else setSourceItemMatches(null);
+  }
+
+  async function loadSourceItemMatches(pairId: string) {
+    const response = await fetch(`/api/v1/imports/source-pairs/${pairId}/item-matches`);
+    if (!response.ok) throw new Error(await errorText(response));
+    setSourceItemMatches(await response.json());
   }
 
   async function openFile(fileId: string) {
@@ -136,7 +149,7 @@ function ImportsPageContent() {
     setWorkspace(payload);
     const target = preferredFileId || selectedFileId || payload.batches[0]?.files[0]?.file_id;
     if (target) await openFile(target);
-    else { setSelected(null); setSelectedFileId(""); setSourcePairing(null); setBoundaries(emptyBoundaries()); setDrafts(emptyDrafts()); }
+    else { setSelected(null); setSelectedFileId(""); setSourcePairing(null); setSourceItemMatches(null); setBoundaries(emptyBoundaries()); setDrafts(emptyDrafts()); }
   }
 
   useEffect(() => { refresh().catch((error: Error) => setMessage(error.message)); }, []);
@@ -191,6 +204,42 @@ function ImportsPageContent() {
       await loadSourcePairing(selected.file_id);
       setMessage(status === "confirmed" ? "已确认原题与解析来源配对。" : "已排除该配对候选。");
     } catch (error) { setMessage(error instanceof Error ? error.message : "来源配对审核失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function proposeSourceItemMatches(pairId: string) {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/v1/imports/source-pairs/${pairId}/item-matches/propose`, { method: "POST" });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      setSourceItemMatches(result.matches);
+      setMessage(result.message);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "逐题关联生成失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function reviewSourceItemMatch(pairId: string, itemMatchId: string, status: "confirmed" | "rejected") {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/v1/imports/source-pairs/${pairId}/item-matches/${itemMatchId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, reviewer_id: "owner_teacher", note: status === "confirmed" ? "教师确认题干与题目顺序一致" : "教师排除错误逐题匹配" }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      await loadSourceItemMatches(pairId);
+      setMessage(status === "confirmed" ? "已确认当前逐题匹配。" : "已排除当前逐题匹配。");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "逐题匹配审核失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmHighConfidenceSourceItems(pairId: string) {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/v1/imports/source-pairs/${pairId}/item-matches/confirm-high-confidence`, { method: "POST" });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json(); setSourceItemMatches(result.matches); setMessage(result.message);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "批量确认失败"); }
     finally { setBusy(false); }
   }
 
@@ -491,6 +540,7 @@ function ImportsPageContent() {
           <div className="source-pair-body"><div className="source-pair-explanation"><strong>{sourcePairing.coverage_status === "self_contained" ? "当前文件已同时包含题目和解析" : sourcePairing.coverage_status === "paired" ? "文件关系已经教师确认" : sourcePairing.coverage_status === "candidates" ? `发现 ${visibleSourcePairs.length} 个可审核候选` : "暂未找到标题和题量足够接近的文件"}</strong><p>{sourcePairing.coverage_status === "self_contained" ? "系统将直接从本文件提取题干与答案种子，不会重复计入另一套题库。" : "系统不会依靠固定页码差；确认后仍只把答案作为核验种子，原解析不会直接发布。"}</p><small>{sourcePairing.role_signals.join(" · ")}</small></div>
             {!!visibleSourcePairs.length && <div className="source-pair-candidates">{visibleSourcePairs.map((pair) => { const counterpart = pair.question_file.file_id === selected.file_id ? pair.solution_file : pair.question_file; return <article key={pair.pair_id} className={pair.status}><div><span>{pair.question_file.file_id === selected.file_id ? "推荐解析来源" : "对应原题来源"}</span><strong title={counterpart.original_filename}>{counterpart.original_filename}</strong><small>{pair.signals.join(" · ")}</small></div><em>{Math.round(pair.confidence * 100)}%</em>{pair.status === "proposed" ? <div className="source-pair-actions"><button type="button" disabled={busy} onClick={() => reviewSourcePair(pair.pair_id, "rejected")}>排除</button><button className="confirm" type="button" disabled={busy} onClick={() => reviewSourcePair(pair.pair_id, "confirmed")}>确认配对</button></div> : <b>教师已确认</b>}</article>; })}</div>}
           </div>
+          {sourcePairing.coverage_status === "paired" && (() => { const pair = sourcePairing.candidates.find((item) => item.status === "confirmed"); if (!pair) return null; const activeItems = sourceItemMatches?.items.filter((item) => item.status !== "rejected") ?? []; return <section className="source-item-panel"><header><div><strong>逐题关联</strong><small>{sourceItemMatches ? `${sourceItemMatches.confirmed_count} 已确认 · ${sourceItemMatches.proposed_count} 待审核 · ${sourceItemMatches.unmatched_question_count} 未匹配${sourceItemMatches.stale_count ? ` · ${sourceItemMatches.stale_count} 已过期` : ""}` : "匹配原题边界与解析边界"}</small></div><div>{!!sourceItemMatches?.proposed_count && <button type="button" disabled={busy} onClick={() => confirmHighConfidenceSourceItems(pair.pair_id)}>确认 ≥92%</button>}<button className="primary" type="button" disabled={busy} onClick={() => proposeSourceItemMatches(pair.pair_id)}>{sourceItemMatches?.items.length ? "重新匹配" : "生成逐题匹配"}</button></div></header>{sourceItemMatches && <div className="source-item-progress"><span style={{ width: `${sourceItemMatches.total_question_count ? sourceItemMatches.matched_count / sourceItemMatches.total_question_count * 100 : 0}%` }} /></div>}{activeItems.length ? <div className="source-item-list">{activeItems.slice(0, 12).map((item) => <article key={item.item_match_id} className={`${item.status} ${item.stale ? "stale" : ""}`}><div className="source-item-number"><span>{String(item.question_candidate.position).padStart(3, "0")}</span><i>→</i><span>{String(item.solution_candidate.position).padStart(3, "0")}</span></div><div className="source-item-text"><strong>{item.question_candidate.stem_text.replace(/\s+/g, " ").slice(0, 70)}</strong><small>{item.signals.join(" · ")}</small></div><em>{item.stale ? "已过期" : `${Math.round(item.confidence * 100)}%`}</em>{item.status === "proposed" && !item.stale ? <div className="source-item-actions"><button type="button" disabled={busy} onClick={() => reviewSourceItemMatch(pair.pair_id, item.item_match_id, "rejected")}>排除</button><button className="confirm" type="button" disabled={busy} onClick={() => reviewSourceItemMatch(pair.pair_id, item.item_match_id, "confirmed")}>确认</button></div> : <b>{item.status === "confirmed" && !item.stale ? "已确认" : "需重匹配"}</b>}</article>)}</div> : <div className="source-item-empty"><span>题</span><div><strong>尚未生成逐题匹配</strong><p>先分别确认两份文件的题目边界，再按题干核心文本和相对顺序建立关联。</p></div></div>}</section>; })()}
         </section>}
         <nav className="import-stage-tabs"><button type="button" className={viewMode === "pages" ? "active" : ""} onClick={() => setViewMode("pages")}><span>01</span><div><strong>逐页分析</strong><small>文字层、题号与图片</small></div></button><button type="button" className={viewMode === "boundaries" ? "active" : ""} disabled={selected.status !== "ready_for_segmentation"} onClick={() => setViewMode("boundaries")}><span>02</span><div><strong>题目边界</strong><small>{boundaries.total ? `${boundaries.confirmed_count}/${boundaries.total} 已确认` : "生成候选后人工校对"}</small></div></button><button type="button" className={viewMode === "structured" ? "active" : ""} disabled={!boundaries.confirmed_count} onClick={() => setViewMode("structured")}><span>03</span><div><strong>内容结构化</strong><small>{drafts.total ? `${drafts.confirmed_count + drafts.imported_count}/${drafts.total} 已校对` : "题干、选项、公式与配图"}</small></div></button></nav>
         <ResizableColumns className={`import-preview-layout ${viewMode === "boundaries" ? "boundary-mode" : viewMode === "structured" ? "structured-mode" : ""}`} storageKey={`pdf-preview-${viewMode}`} initialLeftPercent={viewMode === "pages" ? 63 : 45} leftMin={viewMode === "pages" ? 340 : 320} rightMin={viewMode === "pages" ? 240 : 360} collapse="wide" label="调整 PDF 原文预览与分析校对区宽度">

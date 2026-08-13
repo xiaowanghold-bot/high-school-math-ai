@@ -38,6 +38,11 @@ from .schemas import (
     SourcePairReviewCommand,
     SourcePairingFileView,
     SourcePairView,
+    SourceItemBulkConfirmResult,
+    SourceItemMatchList,
+    SourceItemMatchProposalResult,
+    SourceItemMatchReviewCommand,
+    SourceItemMatchView,
     StructuredDraftProposalResult,
     StructuredDraftRepairResult,
     StructuredFormulaCheck,
@@ -69,6 +74,8 @@ class PdfImportStudio:
     MAX_CROPS_PER_DRAFT = 8
     CROP_RENDER_WIDTH = 1800
     SOURCE_PAIR_MIN_CONFIDENCE = 0.72
+    SOURCE_ITEM_MIN_CONFIDENCE = 0.45
+    SOURCE_ITEM_AUTO_CONFIRM_CONFIDENCE = 0.92
 
     _QUESTION_MARKERS = (
         re.compile(r"(?m)^\s*(?:例|题)?\s*\d{1,3}\s*[\.．、)]\s*"),
@@ -342,6 +349,244 @@ class PdfImportStudio:
                 "SELECT * FROM import_source_pairs WHERE pair_id = ?", (pair_id,)
             ).fetchone()
             return self._source_pair(connection, updated)
+
+    def source_item_matches(self, pair_id: str) -> SourceItemMatchList:
+        with self._connect() as connection:
+            pair = connection.execute(
+                "SELECT * FROM import_source_pairs WHERE pair_id = ?", (pair_id,)
+            ).fetchone()
+            if pair is None:
+                raise KeyError(pair_id)
+            question_rows = connection.execute(
+                """
+                SELECT * FROM import_boundary_candidates
+                WHERE file_id = ? AND status = 'confirmed' ORDER BY position
+                """,
+                (pair["question_file_id"],),
+            ).fetchall()
+            match_rows = connection.execute(
+                """
+                SELECT * FROM import_source_item_matches
+                WHERE pair_id = ? ORDER BY question_position, confidence DESC, created_at
+                """,
+                (pair_id,),
+            ).fetchall()
+            items = [self._source_item_match(connection, row) for row in match_rows]
+        active = [item for item in items if not item.stale and item.status != "rejected"]
+        active_question_ids = {item.question_candidate.candidate_id for item in active}
+        return SourceItemMatchList(
+            pair_id=pair_id,
+            question_file_id=pair["question_file_id"],
+            solution_file_id=pair["solution_file_id"],
+            total_question_count=len(question_rows),
+            matched_count=len(active_question_ids),
+            proposed_count=sum(item.status == "proposed" and not item.stale for item in items),
+            confirmed_count=sum(item.status == "confirmed" and not item.stale for item in items),
+            rejected_count=sum(item.status == "rejected" for item in items),
+            stale_count=sum(item.stale for item in items),
+            unmatched_question_count=max(0, len(question_rows) - len(active_question_ids)),
+            items=items,
+        )
+
+    def propose_source_item_matches(self, pair_id: str) -> SourceItemMatchProposalResult:
+        with self._connect() as connection:
+            pair = connection.execute(
+                "SELECT * FROM import_source_pairs WHERE pair_id = ?", (pair_id,)
+            ).fetchone()
+            if pair is None:
+                raise KeyError(pair_id)
+            if pair["status"] != "confirmed":
+                raise PdfImportError("请先由教师确认文件级原题与解析配对")
+            question_rows = connection.execute(
+                """SELECT * FROM import_boundary_candidates
+                   WHERE file_id = ? AND status = 'confirmed' ORDER BY position""",
+                (pair["question_file_id"],),
+            ).fetchall()
+            solution_rows = connection.execute(
+                """SELECT * FROM import_boundary_candidates
+                   WHERE file_id = ? AND status = 'confirmed' ORDER BY position""",
+                (pair["solution_file_id"],),
+            ).fetchall()
+            if not question_rows or not solution_rows:
+                raise PdfImportError("原题和解析文件都必须先确认题目边界，才能逐题关联")
+
+            existing_rows = connection.execute(
+                "SELECT * FROM import_source_item_matches WHERE pair_id = ?", (pair_id,)
+            ).fetchall()
+            locked_question_ids: set[str] = set()
+            locked_solution_ids: set[str] = set()
+            for existing in existing_rows:
+                stale = self._source_item_row_stale(connection, existing)
+                if existing["status"] == "confirmed" and not stale:
+                    locked_question_ids.add(existing["question_candidate_id"])
+                    locked_solution_ids.add(existing["solution_candidate_id"])
+
+            scored: list[tuple[float, sqlite3.Row, sqlite3.Row, list[str]]] = []
+            for question in question_rows:
+                if question["candidate_id"] in locked_question_ids:
+                    continue
+                for solution in solution_rows:
+                    if solution["candidate_id"] in locked_solution_ids:
+                        continue
+                    rejected = connection.execute(
+                        """
+                        SELECT 1 FROM import_source_item_matches
+                        WHERE pair_id = ? AND question_candidate_id = ?
+                          AND solution_candidate_id = ? AND status = 'rejected'
+                          AND question_version = ? AND solution_version = ?
+                        """,
+                        (
+                            pair_id, question["candidate_id"], solution["candidate_id"],
+                            question["updated_at"], solution["updated_at"],
+                        ),
+                    ).fetchone()
+                    if rejected:
+                        continue
+                    confidence, signals = self._item_match_confidence(
+                        question, solution, len(question_rows), len(solution_rows)
+                    )
+                    if confidence >= self.SOURCE_ITEM_MIN_CONFIDENCE:
+                        scored.append((confidence, question, solution, signals))
+
+            selected: list[tuple[float, sqlite3.Row, sqlite3.Row, list[str]]] = []
+            used_questions = set(locked_question_ids)
+            used_solutions = set(locked_solution_ids)
+            for item in sorted(scored, key=lambda value: value[0], reverse=True):
+                _, question, solution, _ = item
+                if question["candidate_id"] in used_questions or solution["candidate_id"] in used_solutions:
+                    continue
+                selected.append(item)
+                used_questions.add(question["candidate_id"])
+                used_solutions.add(solution["candidate_id"])
+
+            created_count = 0
+            refreshed_count = 0
+            now = self._now()
+            for confidence, question, solution, signals in selected:
+                existing = connection.execute(
+                    """
+                    SELECT * FROM import_source_item_matches
+                    WHERE pair_id = ? AND question_candidate_id = ?
+                      AND solution_candidate_id = ?
+                    """,
+                    (pair_id, question["candidate_id"], solution["candidate_id"]),
+                ).fetchone()
+                values = (
+                    solution["candidate_id"], solution["position"], confidence,
+                    json.dumps(signals, ensure_ascii=False), question["updated_at"],
+                    solution["updated_at"], now,
+                )
+                if existing is None:
+                    connection.execute(
+                        """
+                        INSERT INTO import_source_item_matches
+                        (item_match_id, pair_id, question_candidate_id, solution_candidate_id,
+                         question_position, solution_position, confidence, status, strategy,
+                         signals_json, question_version, solution_version, note, reviewer_id,
+                         created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'proposed', 'stem_order_v1', ?, ?, ?, '', NULL, ?, ?)
+                        """,
+                        (
+                            f"src_item_{uuid4().hex[:16]}", pair_id,
+                            question["candidate_id"], solution["candidate_id"],
+                            question["position"], solution["position"], confidence,
+                            json.dumps(signals, ensure_ascii=False), question["updated_at"],
+                            solution["updated_at"], now, now,
+                        ),
+                    )
+                    created_count += 1
+                elif existing["status"] != "confirmed" or self._source_item_row_stale(connection, existing):
+                    connection.execute(
+                        """
+                        UPDATE import_source_item_matches
+                        SET solution_candidate_id = ?, solution_position = ?, confidence = ?,
+                            status = 'proposed', signals_json = ?, question_version = ?,
+                            solution_version = ?, note = '', reviewer_id = NULL, updated_at = ?
+                        WHERE item_match_id = ?
+                        """,
+                        (*values, existing["item_match_id"]),
+                    )
+                    refreshed_count += 1
+
+        matches = self.source_item_matches(pair_id)
+        return SourceItemMatchProposalResult(
+            matches=matches,
+            created_count=created_count,
+            refreshed_count=refreshed_count,
+            message=(
+                f"已新增 {created_count} 组逐题候选、刷新 {refreshed_count} 组；"
+                f"仍有 {matches.unmatched_question_count} 道原题未匹配。"
+            ),
+        )
+
+    def review_source_item_match(
+        self, pair_id: str, item_match_id: str, command: SourceItemMatchReviewCommand
+    ) -> SourceItemMatchView:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM import_source_item_matches
+                   WHERE item_match_id = ? AND pair_id = ?""",
+                (item_match_id, pair_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(item_match_id)
+            pair = connection.execute(
+                "SELECT status FROM import_source_pairs WHERE pair_id = ?", (pair_id,)
+            ).fetchone()
+            if pair is None or pair["status"] != "confirmed":
+                raise PdfImportError("文件级来源配对已失效，请先重新确认")
+            if self._source_item_row_stale(connection, row):
+                raise PdfImportError("题目边界已修改，请重新生成逐题匹配后再确认")
+            now = self._now()
+            connection.execute(
+                """UPDATE import_source_item_matches
+                   SET status = ?, note = ?, reviewer_id = ?, updated_at = ?
+                   WHERE item_match_id = ?""",
+                (command.status, command.note.strip(), command.reviewer_id, now, item_match_id),
+            )
+            if command.status == "confirmed":
+                connection.execute(
+                    """
+                    UPDATE import_source_item_matches
+                    SET status = 'rejected',
+                        note = CASE WHEN note = '' THEN '与教师已确认的逐题匹配冲突' ELSE note END,
+                        reviewer_id = ?, updated_at = ?
+                    WHERE pair_id = ? AND item_match_id != ? AND status = 'proposed'
+                      AND (question_candidate_id = ? OR solution_candidate_id = ?)
+                    """,
+                    (
+                        command.reviewer_id, now, pair_id, item_match_id,
+                        row["question_candidate_id"], row["solution_candidate_id"],
+                    ),
+                )
+            updated = connection.execute(
+                "SELECT * FROM import_source_item_matches WHERE item_match_id = ?",
+                (item_match_id,),
+            ).fetchone()
+            return self._source_item_match(connection, updated)
+
+    def confirm_high_confidence_source_items(
+        self, pair_id: str, reviewer_id: str = "owner_teacher"
+    ) -> SourceItemBulkConfirmResult:
+        current = self.source_item_matches(pair_id)
+        eligible = [
+            item for item in current.items
+            if item.status == "proposed" and not item.stale
+            and item.confidence >= self.SOURCE_ITEM_AUTO_CONFIRM_CONFIDENCE
+        ]
+        for item in eligible:
+            self.review_source_item_match(
+                pair_id, item.item_match_id,
+                SourceItemMatchReviewCommand(
+                    status="confirmed", note="教师批量确认高置信度匹配", reviewer_id=reviewer_id
+                ),
+            )
+        matches = self.source_item_matches(pair_id)
+        return SourceItemBulkConfirmResult(
+            matches=matches,
+            confirmed_count=len(eligible),
+            message=f"已批量确认 {len(eligible)} 组置信度不低于 92% 的逐题匹配。",
+        )
 
     def inspect(self, file_id: str) -> ImportFileDetail:
         with self._connect() as connection:
@@ -1603,6 +1848,87 @@ class PdfImportStudio:
         )
 
     @classmethod
+    def _normalize_item_text(cls, text: str) -> str:
+        value = re.split(r"【\s*(?:答案|解析|详解|分析)\s*】|\bAnswer\s*:", text, maxsplit=1, flags=re.I)[0]
+        value = re.sub(r"(?m)^\s*(?:例|题)?\s*\d{1,3}\s*[\.．、)]\s*", "", value)
+        value = re.sub(r"(?<!\d)\d{1,3}\s*[（(]\s*20\d{2}\s*[·•]", "", value)
+        value = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "", value).lower()
+        return value[:1200]
+
+    @classmethod
+    def _item_match_confidence(
+        cls,
+        question: sqlite3.Row,
+        solution: sqlite3.Row,
+        question_count: int,
+        solution_count: int,
+    ) -> tuple[float, list[str]]:
+        question_text = cls._normalize_item_text(question["stem_text"])
+        solution_text = cls._normalize_item_text(solution["stem_text"])
+        text_similarity = (
+            SequenceMatcher(None, question_text, solution_text).ratio()
+            if question_text and solution_text else 0.0
+        )
+        question_ratio = question["position"] / max(1, question_count)
+        solution_ratio = solution["position"] / max(1, solution_count)
+        order_similarity = max(0.0, 1.0 - abs(question_ratio - solution_ratio))
+        type_similarity = (
+            1.0 if question["question_type"] == solution["question_type"]
+            and question["question_type"] != "unknown" else 0.5
+        )
+        confidence = round(
+            min(1.0, 0.76 * text_similarity + 0.19 * order_similarity + 0.05 * type_similarity),
+            3,
+        )
+        return confidence, [
+            f"题干核心文本相似度 {round(text_similarity * 100)}%",
+            f"题集相对顺序一致度 {round(order_similarity * 100)}%",
+            f"原题第 {question['position']} 题 / 解析第 {solution['position']} 题",
+        ]
+
+    @staticmethod
+    def _source_item_row_stale(
+        connection: sqlite3.Connection, row: sqlite3.Row
+    ) -> bool:
+        question = connection.execute(
+            "SELECT updated_at, status FROM import_boundary_candidates WHERE candidate_id = ?",
+            (row["question_candidate_id"],),
+        ).fetchone()
+        solution = connection.execute(
+            "SELECT updated_at, status FROM import_boundary_candidates WHERE candidate_id = ?",
+            (row["solution_candidate_id"],),
+        ).fetchone()
+        return (
+            question is None or solution is None
+            or question["status"] != "confirmed" or solution["status"] != "confirmed"
+            or question["updated_at"] != row["question_version"]
+            or solution["updated_at"] != row["solution_version"]
+        )
+
+    @classmethod
+    def _source_item_match(
+        cls, connection: sqlite3.Connection, row: sqlite3.Row
+    ) -> SourceItemMatchView:
+        question = connection.execute(
+            "SELECT * FROM import_boundary_candidates WHERE candidate_id = ?",
+            (row["question_candidate_id"],),
+        ).fetchone()
+        solution = connection.execute(
+            "SELECT * FROM import_boundary_candidates WHERE candidate_id = ?",
+            (row["solution_candidate_id"],),
+        ).fetchone()
+        return SourceItemMatchView(
+            item_match_id=row["item_match_id"], pair_id=row["pair_id"],
+            question_candidate=cls._candidate(question),
+            solution_candidate=cls._candidate(solution),
+            confidence=row["confidence"], status=row["status"],
+            stale=cls._source_item_row_stale(connection, row),
+            strategy=row["strategy"], signals=json.loads(row["signals_json"]),
+            note=row["note"], reviewer_id=row["reviewer_id"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    @classmethod
     def _marker_count(cls, text: str) -> int:
         return max((len(pattern.findall(text)) for pattern in cls._QUESTION_MARKERS), default=0)
 
@@ -1927,6 +2253,30 @@ class PdfImportStudio:
                 );
                 CREATE INDEX IF NOT EXISTS idx_import_boundaries_file
                     ON import_boundary_candidates(file_id, position);
+                CREATE TABLE IF NOT EXISTS import_source_item_matches (
+                    item_match_id TEXT PRIMARY KEY,
+                    pair_id TEXT NOT NULL,
+                    question_candidate_id TEXT NOT NULL,
+                    solution_candidate_id TEXT NOT NULL,
+                    question_position INTEGER NOT NULL,
+                    solution_position INTEGER NOT NULL,
+                    confidence REAL NOT NULL,
+                    status TEXT NOT NULL,
+                    strategy TEXT NOT NULL,
+                    signals_json TEXT NOT NULL,
+                    question_version TEXT NOT NULL,
+                    solution_version TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    reviewer_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(pair_id) REFERENCES import_source_pairs(pair_id),
+                    FOREIGN KEY(question_candidate_id) REFERENCES import_boundary_candidates(candidate_id),
+                    FOREIGN KEY(solution_candidate_id) REFERENCES import_boundary_candidates(candidate_id),
+                    UNIQUE(pair_id, question_candidate_id, solution_candidate_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_import_source_item_matches_pair
+                    ON import_source_item_matches(pair_id, status, question_position);
                 CREATE TABLE IF NOT EXISTS import_structured_question_drafts (
                     draft_id TEXT PRIMARY KEY, file_id TEXT NOT NULL,
                     boundary_candidate_id TEXT NOT NULL UNIQUE, position INTEGER NOT NULL,
@@ -1965,6 +2315,7 @@ class PdfImportStudio:
                     ON import_structured_media_crops(draft_id, created_at);
                 """
             )
+            self._migrate_source_item_match_schema(connection)
             self._ensure_column(connection, "import_files", "image_page_count", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_files", "embedded_image_count", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_files", "analysis_attempts", "INTEGER NOT NULL DEFAULT 0")
@@ -1990,6 +2341,51 @@ class PdfImportStudio:
                   AND status != 'imported'
                 """
             )
+
+    @staticmethod
+    def _migrate_source_item_match_schema(connection: sqlite3.Connection) -> None:
+        """Upgrade the unreleased one-candidate constraint without losing review history."""
+        schema_row = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'import_source_item_matches'"
+        ).fetchone()
+        schema = schema_row["sql"] if schema_row else ""
+        old_constraint = "UNIQUE(pair_id, question_candidate_id)"
+        new_constraint = "UNIQUE(pair_id, question_candidate_id, solution_candidate_id)"
+        if old_constraint not in schema or new_constraint in schema:
+            return
+        connection.executescript(
+            """
+            DROP INDEX IF EXISTS idx_import_source_item_matches_pair;
+            ALTER TABLE import_source_item_matches RENAME TO import_source_item_matches_legacy;
+            CREATE TABLE import_source_item_matches (
+                item_match_id TEXT PRIMARY KEY,
+                pair_id TEXT NOT NULL,
+                question_candidate_id TEXT NOT NULL,
+                solution_candidate_id TEXT NOT NULL,
+                question_position INTEGER NOT NULL,
+                solution_position INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                status TEXT NOT NULL,
+                strategy TEXT NOT NULL,
+                signals_json TEXT NOT NULL,
+                question_version TEXT NOT NULL,
+                solution_version TEXT NOT NULL,
+                note TEXT NOT NULL,
+                reviewer_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(pair_id) REFERENCES import_source_pairs(pair_id),
+                FOREIGN KEY(question_candidate_id) REFERENCES import_boundary_candidates(candidate_id),
+                FOREIGN KEY(solution_candidate_id) REFERENCES import_boundary_candidates(candidate_id),
+                UNIQUE(pair_id, question_candidate_id, solution_candidate_id)
+            );
+            INSERT INTO import_source_item_matches
+            SELECT * FROM import_source_item_matches_legacy;
+            DROP TABLE import_source_item_matches_legacy;
+            CREATE INDEX idx_import_source_item_matches_pair
+                ON import_source_item_matches(pair_id, status, question_position);
+            """
+        )
 
     @staticmethod
     def _ensure_column(

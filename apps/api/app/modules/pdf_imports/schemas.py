@@ -27,6 +27,7 @@ SourceDocumentRole = Literal[
 ]
 SourcePairStatus = Literal["proposed", "confirmed", "rejected"]
 SourceCoverageStatus = Literal["self_contained", "paired", "candidates", "unpaired"]
+SourceItemMatchStatus = Literal["proposed", "confirmed", "rejected"]
 BoundaryCandidateStatus = Literal["draft", "confirmed", "discarded"]
 StructuredDraftStatus = Literal["draft", "confirmed", "imported"]
 FormulaReviewStatus = Literal["pending", "needs_review", "confirmed"]
@@ -163,6 +164,55 @@ class SourcePairProposalResult(BaseModel):
     created_count: int
     candidate_count: int
     self_contained_count: int
+    message: str
+
+
+class SourceItemMatchReviewCommand(BaseModel):
+    status: Literal["confirmed", "rejected"]
+    note: str = Field(default="", max_length=2000)
+    reviewer_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class SourceItemMatchView(BaseModel):
+    item_match_id: str
+    pair_id: str
+    question_candidate: "BoundaryCandidateView"
+    solution_candidate: "BoundaryCandidateView"
+    confidence: float = Field(ge=0, le=1)
+    status: SourceItemMatchStatus
+    stale: bool = False
+    strategy: str
+    signals: list[str] = Field(default_factory=list)
+    note: str
+    reviewer_id: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class SourceItemMatchList(BaseModel):
+    pair_id: str
+    question_file_id: str
+    solution_file_id: str
+    total_question_count: int
+    matched_count: int
+    proposed_count: int
+    confirmed_count: int
+    rejected_count: int
+    stale_count: int
+    unmatched_question_count: int
+    items: list[SourceItemMatchView] = Field(default_factory=list)
+
+
+class SourceItemMatchProposalResult(BaseModel):
+    matches: SourceItemMatchList
+    created_count: int
+    refreshed_count: int
+    message: str
+
+
+class SourceItemBulkConfirmResult(BaseModel):
+    matches: SourceItemMatchList
+    confirmed_count: int
     message: str
 
 

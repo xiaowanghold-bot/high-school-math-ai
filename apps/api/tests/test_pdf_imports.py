@@ -14,6 +14,7 @@ from app.modules.pdf_imports import (
     PdfImportError,
     PdfImportStudio,
     SourcePairReviewCommand,
+    SourceItemMatchReviewCommand,
     StructuredMediaReference,
     StructuredMediaCropCommand,
     StructuredFormulaReviewCommand,
@@ -287,6 +288,130 @@ def test_source_pairing_does_not_match_empty_normalized_titles(tmp_path: Path) -
         imports.analyze(item.file_id)
 
     assert imports.propose_source_pairs().created_count == 0
+
+
+def test_source_item_matching_requires_confirmed_pair_and_tracks_stale_boundaries(
+    tmp_path: Path,
+) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(
+        command(),
+        [
+            (
+                "函数专题（原卷版）.pdf",
+                pdf_bytes([
+                    "1. Given function f(x)=x squared, find its minimum value",
+                    "2. Given sequence an=n, calculate its first five terms",
+                ]),
+            ),
+            (
+                "函数专题（解析版）.pdf",
+                pdf_bytes([
+                    "1. Given function f(x)=x squared, find its minimum value Answer: zero",
+                    "2. Given sequence an=n, calculate its first five terms Answer: 1 to 5",
+                ]),
+            ),
+        ],
+    )
+    question_id = next(item.file_id for item in created.batch.files if "原卷" in item.original_filename)
+    solution_id = next(item.file_id for item in created.batch.files if "解析" in item.original_filename)
+    for file_id in (question_id, solution_id):
+        imports.analyze(file_id)
+        for candidate in imports.propose_boundary_candidates(file_id).candidates.items:
+            imports.update_boundary_candidate(
+                file_id,
+                candidate.candidate_id,
+                BoundaryCandidateUpdate(
+                    start_page=candidate.start_page, end_page=candidate.end_page,
+                    stem_text=candidate.stem_text, question_type="open_response",
+                    status="confirmed",
+                ),
+            )
+    pair = imports.source_pairing(question_id)
+    if not pair.candidates:
+        imports.propose_source_pairs()
+        pair = imports.source_pairing(question_id)
+    pair_id = pair.candidates[0].pair_id
+
+    with pytest.raises(PdfImportError, match="确认文件级"):
+        imports.propose_source_item_matches(pair_id)
+    imports.review_source_pair(pair_id, SourcePairReviewCommand(status="confirmed"))
+    proposed = imports.propose_source_item_matches(pair_id)
+
+    assert proposed.created_count == 2
+    assert proposed.matches.matched_count == 2
+    assert proposed.matches.unmatched_question_count == 0
+    assert all(item.confidence >= 0.9 for item in proposed.matches.items)
+    first = proposed.matches.items[0]
+    second = proposed.matches.items[1]
+    rejected = imports.review_source_item_match(
+        pair_id, second.item_match_id,
+        SourceItemMatchReviewCommand(status="rejected", note="教师排除"),
+    )
+    assert rejected.status == "rejected"
+    repeated = imports.propose_source_item_matches(pair_id)
+    assert repeated.created_count == 0
+    assert repeated.matches.rejected_count == 1
+    confirmed = imports.review_source_item_match(
+        pair_id, first.item_match_id,
+        SourceItemMatchReviewCommand(status="confirmed", note="题干一致"),
+    )
+    assert confirmed.status == "confirmed"
+
+    changed = first.question_candidate
+    imports.update_boundary_candidate(
+        question_id, changed.candidate_id,
+        BoundaryCandidateUpdate(
+            start_page=changed.start_page, end_page=changed.end_page,
+            stem_text=changed.stem_text + " corrected", question_type=changed.question_type,
+            status="confirmed",
+        ),
+    )
+    assert imports.source_item_matches(pair_id).stale_count == 1
+    with pytest.raises(PdfImportError, match="重新生成"):
+        imports.review_source_item_match(
+            pair_id, first.item_match_id,
+            SourceItemMatchReviewCommand(status="confirmed"),
+        )
+
+
+def test_source_item_matching_http_and_bulk_confirm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    imports = studio(tmp_path)
+    monkeypatch.setattr("app.routes.imports.get_pdf_import_studio", lambda: imports)
+    created = imports.create_batch(
+        command(),
+        [
+            ("数列专题（原卷版）.pdf", pdf_bytes(["1. Sequence an equals n find first term"])),
+            ("数列专题（解析版）.pdf", pdf_bytes(["1. Sequence an equals n find first term Answer: one"])),
+        ],
+    )
+    for file in created.batch.files:
+        imports.analyze(file.file_id)
+        candidate = imports.propose_boundary_candidates(file.file_id).candidates.items[0]
+        imports.update_boundary_candidate(
+            file.file_id, candidate.candidate_id,
+            BoundaryCandidateUpdate(
+                start_page=1, end_page=1, stem_text=candidate.stem_text,
+                question_type="open_response", status="confirmed",
+            ),
+        )
+    imports.propose_source_pairs()
+    question_id = next(item.file_id for item in created.batch.files if "原卷" in item.original_filename)
+    pair = imports.source_pairing(question_id).candidates[0]
+    imports.review_source_pair(pair.pair_id, SourcePairReviewCommand(status="confirmed"))
+    client = TestClient(app)
+
+    proposed = client.post(f"/api/v1/imports/source-pairs/{pair.pair_id}/item-matches/propose")
+    bulk = client.post(f"/api/v1/imports/source-pairs/{pair.pair_id}/item-matches/confirm-high-confidence")
+    listed = client.get(f"/api/v1/imports/source-pairs/{pair.pair_id}/item-matches")
+
+    assert proposed.status_code == 200
+    assert bulk.status_code == 200
+    assert bulk.json()["confirmed_count"] == 1
+    assert listed.status_code == 200
+    assert listed.json()["confirmed_count"] == 1
 
 
 def test_duplicate_invalid_and_rights_gates(tmp_path: Path) -> None:

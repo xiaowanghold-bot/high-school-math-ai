@@ -27,6 +27,11 @@ from app.modules.pdf_imports import (
     SourcePairReviewCommand,
     SourcePairingFileView,
     SourcePairView,
+    SourceItemBulkConfirmResult,
+    SourceItemMatchList,
+    SourceItemMatchProposalResult,
+    SourceItemMatchReviewCommand,
+    SourceItemMatchView,
     StructuredDraftImportResult,
     StructuredDraftProposalResult,
     StructuredDraftRepairResult,
@@ -77,6 +82,55 @@ def review_source_pair(
         return get_pdf_import_studio().review_source_pair(pair_id, command)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="来源配对候选不存在") from exc
+
+
+@router.get("/source-pairs/{pair_id}/item-matches", response_model=SourceItemMatchList)
+def list_source_item_matches(pair_id: str) -> SourceItemMatchList:
+    try:
+        return get_pdf_import_studio().source_item_matches(pair_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="来源文件配对不存在") from exc
+
+
+@router.post(
+    "/source-pairs/{pair_id}/item-matches/propose",
+    response_model=SourceItemMatchProposalResult,
+)
+def propose_source_item_matches(pair_id: str) -> SourceItemMatchProposalResult:
+    try:
+        return get_pdf_import_studio().propose_source_item_matches(pair_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="来源文件配对不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/source-pairs/{pair_id}/item-matches/{item_match_id}",
+    response_model=SourceItemMatchView,
+)
+def review_source_item_match(
+    pair_id: str, item_match_id: str, command: SourceItemMatchReviewCommand
+) -> SourceItemMatchView:
+    try:
+        return get_pdf_import_studio().review_source_item_match(
+            pair_id, item_match_id, command
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="逐题匹配候选不存在") from exc
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/source-pairs/{pair_id}/item-matches/confirm-high-confidence",
+    response_model=SourceItemBulkConfirmResult,
+)
+def confirm_high_confidence_source_items(pair_id: str) -> SourceItemBulkConfirmResult:
+    try:
+        return get_pdf_import_studio().confirm_high_confidence_source_items(pair_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="来源文件配对不存在") from exc
 
 
 @router.post("/batches", response_model=ImportBatchResult, status_code=201)

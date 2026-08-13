@@ -188,6 +188,37 @@
 .source-pair-actions { display: flex; gap: 5px; }
 .source-pair-actions button { min-height: 32px; border: 1px solid #d2d9e6; border-radius: 7px; background: white; color: #667187; padding: 6px 8px; font-size: var(--module-text-xs); cursor: pointer; white-space: nowrap; }
 .source-pair-actions button.confirm { border-color: #4a66bd; background: #4a66bd; color: white; }
+.source-item-panel { border-top: 1px solid #e4e9f2; background: white; }
+.source-item-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; }
+.source-item-panel > header strong, .source-item-panel > header small { display: block; }
+.source-item-panel > header strong { color: #29374c; font-size: var(--module-text-sm); }
+.source-item-panel > header small { margin-top: 3px; color: #7b8699; font-size: var(--module-text-xs); }
+.source-item-panel > header > div:last-child { display: flex; gap: 6px; }
+.source-item-panel > header button, .source-item-actions button { min-height: 32px; border: 1px solid #ccd4e3; border-radius: 7px; background: white; color: #5f6b80; padding: 6px 9px; font-size: var(--module-text-xs); cursor: pointer; }
+.source-item-panel > header button.primary, .source-item-actions button.confirm { border-color: #4a66bd; background: #4a66bd; color: white; }
+.source-item-panel button:disabled { opacity: .48; cursor: not-allowed; }
+.source-item-progress { height: 3px; overflow: hidden; background: #edf0f5; }
+.source-item-progress span { display: block; height: 100%; background: linear-gradient(90deg,#4e69c1,#2f8d76); }
+.source-item-list { max-height: 260px; overflow-y: auto; border-top: 1px solid #eef1f5; }
+.source-item-list article { display: grid; grid-template-columns: 82px minmax(0,1fr) auto auto; align-items: center; gap: 10px; padding: 9px 18px; border-bottom: 1px solid #eef1f5; }
+.source-item-list article.confirmed { background: #f7fcfa; }
+.source-item-list article.stale { background: #fff8ee; opacity: .82; }
+.source-item-number { display: flex; align-items: center; gap: 5px; }
+.source-item-number span { min-width: 27px; border-radius: 6px; background: #edf1f8; color: #60708a; padding: 4px 5px; text-align: center; font-size: var(--module-text-xs); font-weight: 700; }
+.source-item-number i { color: #9aa3b3; font-size: var(--module-text-xs); font-style: normal; }
+.source-item-text { min-width: 0; }
+.source-item-text strong, .source-item-text small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-item-text strong { color: #2d3a50; font-size: var(--module-text-sm); }
+.source-item-text small { margin-top: 3px; color: #8791a2; font-size: var(--module-text-xs); }
+.source-item-list article > em { min-width: 45px; border-radius: 999px; background: #e9edfa; color: #4861b1; padding: 5px 7px; text-align: center; font-size: var(--module-text-xs); font-style: normal; font-weight: 700; }
+.source-item-list article.stale > em { background: #fff0d8; color: #9a6419; }
+.source-item-list article > b { color: #26745f; font-size: var(--module-text-xs); white-space: nowrap; }
+.source-item-actions { display: flex; gap: 5px; }
+.source-item-empty { display: flex; align-items: center; gap: 10px; border-top: 1px solid #eef1f5; padding: 12px 18px; }
+.source-item-empty > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #edf1fa; color: #5066af; font-size: var(--module-text-sm); font-weight: 700; }
+.source-item-empty strong, .source-item-empty p { display: block; margin: 0; }
+.source-item-empty strong { color: #334158; font-size: var(--module-text-sm); }
+.source-item-empty p { margin-top: 3px; color: #7d8798; font-size: var(--module-text-xs); }
 
 @media (max-width: 920px) {
   .source-pair-body { grid-template-columns: 1fr; }
@@ -198,4 +229,7 @@
   .source-pair-panel > header > div { flex-wrap: wrap; }
   .source-pair-candidates article { grid-template-columns: minmax(0,1fr) auto; }
   .source-pair-actions { grid-column: 1 / -1; }
+  .source-item-panel > header { align-items: flex-start; flex-direction: column; }
+  .source-item-list article { grid-template-columns: 76px minmax(0,1fr) auto; padding-inline: 12px; }
+  .source-item-actions { grid-column: 2 / -1; }
 }
