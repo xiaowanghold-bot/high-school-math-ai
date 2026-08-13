@@ -1,6 +1,8 @@
 from .registry import QuestionSimilarityError, QuestionSimilarityRegistry
 from .schemas import (
     DuplicateCandidate,
+    DuplicateLibraryStateCommand,
+    DuplicateLibraryStateResult,
     DuplicateReviewCommand,
     DuplicateReviewResult,
     DuplicateScanResult,
@@ -10,6 +12,8 @@ from .schemas import (
 
 __all__ = [
     "DuplicateCandidate",
+    "DuplicateLibraryStateCommand",
+    "DuplicateLibraryStateResult",
     "DuplicateReviewCommand",
     "DuplicateReviewResult",
     "DuplicateScanResult",

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.modules.question_bank import QuestionBank, QuestionRevisionCommand
 from app.modules.question_similarity import (
+    DuplicateLibraryStateCommand,
     DuplicateReviewCommand,
     QuestionSimilarityError,
     QuestionSimilarityRegistry,
@@ -190,3 +191,74 @@ def test_scan_uses_recorded_parent_variant_relationship(tmp_path: Path) -> None:
     assert result.workspace.items[0].suggested_relation == "variant"
     assert result.workspace.items[0].confidence == 0.99
     assert "母题与派生题" in result.workspace.items[0].signals[0]
+
+
+def test_soft_remove_excludes_question_from_default_search_and_restore_returns_it(tmp_path: Path) -> None:
+    bank, registry = make_registry(tmp_path)
+    left = create_question(bank, candidate_id="remove_left", stem="解方程 x+1=3。")
+    right = create_question(bank, candidate_id="remove_right", stem="解方程 x+1=3。", source="来源乙")
+    candidate = registry.scan().workspace.items[0]
+    registry.review(candidate.candidate_id, DuplicateReviewCommand(relation="same_problem_different_source"))
+
+    removed = registry.change_library_state(
+        candidate.candidate_id,
+        DuplicateLibraryStateCommand(
+            question_ids=[right.question_id],
+            action="remove",
+            reason="保留来源甲版本",
+        ),
+    )
+
+    assert removed.library.changed_question_ids == [right.question_id]
+    assert bank.search(page_size=20).total == 1
+    assert bank.search(page_size=20, library_state="removed").items[0].question_id == right.question_id
+    assert bank.get_question(right.question_id).library_state == "removed"
+    assert bank.get_question(left.question_id).library_state == "active"
+    assert bank.stats().removed == 1
+
+    restored = registry.change_library_state(
+        candidate.candidate_id,
+        DuplicateLibraryStateCommand(question_ids=[right.question_id], action="restore"),
+    )
+
+    assert restored.library.changed_question_ids == [right.question_id]
+    assert bank.search(page_size=20).total == 2
+    assert bank.get_question(right.question_id).library_state == "active"
+    assert bank.stats().removed == 0
+
+
+def test_soft_remove_is_idempotent_audited_and_rejects_question_outside_group(tmp_path: Path) -> None:
+    import sqlite3
+    bank, registry = make_registry(tmp_path)
+    left = create_question(bank, candidate_id="audit_left", stem="解方程 x+1=3。")
+    create_question(bank, candidate_id="audit_right", stem="解方程 x+1=3。", source="来源乙")
+    outsider = create_question(bank, candidate_id="outsider", stem="求 1+1。")
+    candidate = registry.scan().workspace.items[0]
+    registry.review(candidate.candidate_id, DuplicateReviewCommand(relation="same_problem_different_source"))
+    command = DuplicateLibraryStateCommand(question_ids=[left.question_id], action="remove")
+
+    first = registry.change_library_state(candidate.candidate_id, command)
+    second = registry.change_library_state(candidate.candidate_id, command)
+
+    assert first.library.changed_question_ids == [left.question_id]
+    assert second.library.unchanged_question_ids == [left.question_id]
+    with sqlite3.connect(bank.database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM question_library_events").fetchone()[0] == 1
+    with pytest.raises(QuestionSimilarityError, match="当前关系组"):
+        registry.change_library_state(
+            candidate.candidate_id,
+            DuplicateLibraryStateCommand(question_ids=[outsider.question_id], action="remove"),
+        )
+
+
+def test_soft_remove_requires_teacher_confirmed_relationship(tmp_path: Path) -> None:
+    bank, registry = make_registry(tmp_path)
+    left = create_question(bank, candidate_id="pending_left", stem="解方程 x+1=3。")
+    create_question(bank, candidate_id="pending_right", stem="解方程 x+1=3。", source="来源乙")
+    candidate = registry.scan().workspace.items[0]
+
+    with pytest.raises(QuestionSimilarityError, match="请先由教师确认"):
+        registry.change_library_state(
+            candidate.candidate_id,
+            DuplicateLibraryStateCommand(question_ids=[left.question_id], action="remove"),
+        )

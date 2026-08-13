@@ -18,6 +18,9 @@ type Question = {
   source_document: string;
   source_page_start: number | null;
   source_page_end: number | null;
+  library_state: "active" | "removed";
+  removed_at: string | null;
+  removal_reason: string | null;
 };
 
 type Relation = "exact_duplicate" | "same_problem_different_source" | "same_problem_different_solution" | "variant" | "not_duplicate";
@@ -27,6 +30,7 @@ type Candidate = {
   candidate_id: string;
   left: Question;
   right: Question;
+  members: Question[];
   suggested_relation: Relation;
   teacher_relation: Relation | null;
   confidence: number;
@@ -59,6 +63,7 @@ const relationLabels: Record<Relation, string> = {
   not_duplicate: "非重复",
 };
 const statusLabels: Record<Status, string> = { proposed: "待确认", confirmed: "已确认", rejected: "已排除", stale: "已过期" };
+type PendingLibraryAction = { action: "remove" | "restore"; questionIds: string[] } | null;
 
 async function readError(response: Response) {
   try {
@@ -75,14 +80,15 @@ function sourcePages(question: Question) {
 }
 
 function QuestionSide({ label, question }: { label: string; question: Question }) {
-  return <article className="duplicate-question-side">
-    <header><span>{label}</span><a href={`/search?q=${encodeURIComponent(question.question_id)}`}>完整审核 ↗</a></header>
+  return <article className={`duplicate-question-side ${question.library_state}`}>
+    <header><span>{label}{question.library_state === "removed" && <em>已移出</em>}</span><a href={`/search?q=${encodeURIComponent(question.question_id)}`}>完整审核 ↗</a></header>
     <div className="duplicate-question-meta"><b>{question.question_id}</b><span>{question.chapter || "知识点待映射"}</span><span>难度 {question.difficulty}</span></div>
     <div className="duplicate-stem"><MathText text={question.stem_plain} /></div>
     <dl>
       <div><dt>当前答案</dt><dd>{question.answer_value ? <MathText text={question.answer_value} /> : "未录入"}</dd></div>
       <div><dt>来源</dt><dd>{question.source_document}</dd></div>
       <div><dt>定位</dt><dd>{sourcePages(question)}</dd></div>
+      {question.library_state === "removed" && <div><dt>移出原因</dt><dd>{question.removal_reason || "重复题校对"}</dd></div>}
     </dl>
   </article>;
 }
@@ -95,6 +101,8 @@ function DuplicateDashboard() {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [pendingLibraryAction, setPendingLibraryAction] = useState<PendingLibraryAction>(null);
 
   const load = useCallback(async (nextFilter: "all" | Status) => {
     setLoading(true);
@@ -105,6 +113,7 @@ function DuplicateDashboard() {
       const next: Workspace = await response.json();
       setWorkspace(next);
       setSelectedId((current) => next.items.some((item) => item.candidate_id === current) ? current : next.items[0]?.candidate_id || "");
+      setSelectedQuestionIds([]);
     } catch (error) {
       toast(error instanceof Error ? `候选关系读取失败：${error.message}` : "候选关系读取失败");
     } finally {
@@ -153,13 +162,49 @@ function DuplicateDashboard() {
     }
   }
 
+  function toggleQuestion(questionId: string) {
+    setSelectedQuestionIds((current) => current.includes(questionId) ? current.filter((value) => value !== questionId) : [...current, questionId]);
+  }
+
+  function prepareLibraryAction(action: "remove" | "restore") {
+    if (!selected) return;
+    const eligible = selected.members.filter((question) => selectedQuestionIds.includes(question.question_id) && (action === "remove" ? question.library_state === "active" : question.library_state === "removed"));
+    if (!eligible.length) {
+      toast(action === "remove" ? "请至少勾选一道当前在库的题目" : "请至少勾选一道已移出的题目");
+      return;
+    }
+    setPendingLibraryAction({ action, questionIds: eligible.map((question) => question.question_id) });
+  }
+
+  async function confirmLibraryAction() {
+    if (!selected || !pendingLibraryAction) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/v1/question-similarity/${selected.candidate_id}/library-state`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_ids: pendingLibraryAction.questionIds, action: pendingLibraryAction.action, actor_id: "owner_teacher", reason: note.trim() || "重复题校对" }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const result = await response.json();
+      toast(result.library.message);
+      setPendingLibraryAction(null);
+      setSelectedQuestionIds([]);
+      await load(filter);
+    } catch (error) {
+      toast(error instanceof Error ? `题库状态修改失败：${error.message}` : "题库状态修改失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function chooseFilter(next: "all" | Status) {
     setFilter(next);
   }
 
   return <div className="page-content duplicate-page">
     <section className="page-title duplicate-title">
-      <div><p className="eyebrow">题库治理 · 重复与变式识别</p><h1>题目关系校对台</h1><p className="subtle">系统只提出候选，教师确认关系；当前阶段不会删除、合并或覆盖任何原题。</p></div>
+      <div><p className="eyebrow">题库治理 · 重复与变式识别</p><h1>题目关系校对台</h1><p className="subtle">教师确认关系后可将任意题目软移出正常题库；原题、图片、来源和审核历史仍可恢复。</p></div>
       <button className="primary-button" type="button" disabled={busy} onClick={scan}>{busy ? "处理中…" : "扫描题库"}</button>
     </section>
 
@@ -189,6 +234,15 @@ function DuplicateDashboard() {
         <header><div><p>候选 {selected.candidate_id.slice(-8)}</p><h2>{relationLabels[selected.teacher_relation || selected.suggested_relation]}</h2></div><div className="duplicate-confidence"><span>系统置信度</span><strong>{Math.round(selected.confidence * 100)}%</strong><em className={selected.status}>{statusLabels[selected.status]}</em></div></header>
         <section className="duplicate-signals"><strong>判定依据</strong>{selected.signals.map((signal) => <span key={signal}>✓ {signal}</span>)}</section>
         <div className="duplicate-comparison"><QuestionSide label="题目 A" question={selected.left} /><QuestionSide label="题目 B" question={selected.right} /></div>
+        <section className="duplicate-library-manager">
+          <header><div><strong>题库保留与移出</strong><p>勾选一道或多道题后操作。软移出后不再参与搜题、组卷、教案和推荐，但可以在这里恢复。</p></div><span>{selected.members.filter((question) => question.library_state === "active").length}/{selected.members.length} 道在库</span></header>
+          <div className="duplicate-member-list">{selected.members.map((question) => <label className={`${question.library_state} ${selectedQuestionIds.includes(question.question_id) ? "selected" : ""}`} key={question.question_id}>
+            <input type="checkbox" checked={selectedQuestionIds.includes(question.question_id)} onChange={() => toggleQuestion(question.question_id)} />
+            <span /><div><strong>{question.question_id}</strong><p>{question.stem_plain.replace(/\s+/g, " ").slice(0, 90)}</p><small>{question.source_document}</small></div><em>{question.library_state === "active" ? "正常在库" : "已软移出"}</em>
+          </label>)}</div>
+          {selected.status !== "confirmed" && <p className="duplicate-library-lock">请先在下方确认重复、同题或变式关系，再调整题目的在库状态。</p>}
+          <footer><button type="button" className="restore" disabled={busy || selected.status !== "confirmed"} onClick={() => prepareLibraryAction("restore")}>恢复所选</button><button type="button" className="remove" disabled={busy || selected.status !== "confirmed"} onClick={() => prepareLibraryAction("remove")}>移出所选</button></footer>
+        </section>
         {selected.status === "stale" ? <section className="duplicate-stale-note"><strong>这组判断已经过期</strong><p>其中至少一道题的内容已改变。请先重新扫描，再基于新版本确认关系。</p></section> : <section className="duplicate-decision">
           <header><div><strong>教师确认关系</strong><p>只保存关系记录，不改变两道题的正文、解析和发布状态。</p></div>{selected.teacher_relation && <span>当前：{relationLabels[selected.teacher_relation]}</span>}</header>
           <div className="duplicate-decision-buttons">
@@ -198,6 +252,12 @@ function DuplicateDashboard() {
         </section>}
       </main> : <div />}
     </ResizableColumns>}
+    {pendingLibraryAction && <div className="duplicate-confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setPendingLibraryAction(null); }}><section className="duplicate-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-confirm-title">
+      <span>{pendingLibraryAction.action === "remove" ? "移" : "恢"}</span><h2 id="duplicate-confirm-title">{pendingLibraryAction.action === "remove" ? `确认软移出 ${pendingLibraryAction.questionIds.length} 道题？` : `确认恢复 ${pendingLibraryAction.questionIds.length} 道题？`}</h2>
+      <p>{pendingLibraryAction.action === "remove" ? "这些题将立即停止参与搜题、组卷、教案和推荐。正文、解析、图片、来源与审核记录不会删除。" : "这些题将重新进入正常题库，并再次参与搜题、组卷、教案和推荐。"}</p>
+      <ul>{pendingLibraryAction.questionIds.map((questionId) => <li key={questionId}>{questionId}</li>)}</ul>
+      <footer><button type="button" disabled={busy} onClick={() => setPendingLibraryAction(null)}>取消</button><button type="button" className={pendingLibraryAction.action} disabled={busy} onClick={() => void confirmLibraryAction()}>{busy ? "处理中…" : pendingLibraryAction.action === "remove" ? "确认软移出" : "确认恢复"}</button></footer>
+    </section></div>}
   </div>;
 }
 

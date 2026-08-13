@@ -10,6 +10,8 @@ from app.modules.question_similarity import (
     DuplicateReviewResult,
     DuplicateScanResult,
     DuplicateWorkspace,
+    DuplicateLibraryStateCommand,
+    DuplicateLibraryStateResult,
     QuestionSimilarityError,
     QuestionSimilarityRegistry,
 )
@@ -57,6 +59,20 @@ def review_question_similarity(
 ) -> DuplicateReviewResult:
     try:
         return registry.review(candidate_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="重复候选不存在") from exc
+    except QuestionSimilarityError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.patch("/{candidate_id}/library-state", response_model=DuplicateLibraryStateResult)
+def change_duplicate_library_state(
+    candidate_id: str,
+    command: DuplicateLibraryStateCommand,
+    registry: QuestionSimilarityRegistry = Depends(get_question_similarity_registry),
+) -> DuplicateLibraryStateResult:
+    try:
+        return registry.change_library_state(candidate_id, command)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="重复候选不存在") from exc
     except QuestionSimilarityError as exc:

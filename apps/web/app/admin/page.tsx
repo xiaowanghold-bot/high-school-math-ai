@@ -6,6 +6,7 @@ import { AdminGuard } from "../components/admin-guard";
 
 type AdminMetrics = {
   questionTotal: number;
+  removedQuestions: number;
   pendingQuestions: number;
   pendingMath: number;
   pendingCurriculum: number;
@@ -15,7 +16,7 @@ type AdminMetrics = {
   duplicateCandidates: number;
 };
 
-const emptyMetrics: AdminMetrics = { questionTotal: 0, pendingQuestions: 0, pendingMath: 0, pendingCurriculum: 0, importFiles: 0, importPages: 0, pendingLibrary: 0, duplicateCandidates: 0 };
+const emptyMetrics: AdminMetrics = { questionTotal: 0, removedQuestions: 0, pendingQuestions: 0, pendingMath: 0, pendingCurriculum: 0, importFiles: 0, importPages: 0, pendingLibrary: 0, duplicateCandidates: 0 };
 
 async function readJson(url: string) {
   const response = await fetch(url);
@@ -40,7 +41,8 @@ function AdminDashboard() {
       const byVerification = questions.by_verification_status ?? {};
       const pendingMath = Object.entries(byVerification).reduce((total, [status, count]) => status === "passed" ? total : total + Number(count), 0);
       setMetrics({
-        questionTotal: Number(questions.total ?? 0),
+        questionTotal: Number(questions.active ?? questions.total ?? 0),
+        removedQuestions: Number(questions.removed ?? 0),
         pendingQuestions: Number(byReview.pending ?? 0) + Number(byReview.changes_requested ?? 0),
         pendingMath,
         pendingCurriculum: Number(curriculum.counts?.pending ?? 0) + Number(curriculum.counts?.changes_requested ?? 0),
@@ -58,7 +60,7 @@ function AdminDashboard() {
     <div className="admin-prototype-note"><strong>当前权限阶段</strong><span>工作模式与页面门禁已经启用；正式账号登录、服务端鉴权、套餐和用户管理将在商业上线阶段接入。</span></div>
     {error && <div className="notice warning">{error}</div>}
     <section className="admin-metric-grid" aria-label="管理指标">
-      <div><span>题库总量</span><strong>{loading ? "—" : metrics.questionTotal}</strong><small>{metrics.pendingQuestions} 道待内容审核</small></div>
+      <div><span>正常题库</span><strong>{loading ? "—" : metrics.questionTotal}</strong><small>{metrics.removedQuestions} 道已软移出</small></div>
       <div><span>数学核验</span><strong>{loading ? "—" : metrics.pendingMath}</strong><small>未通过独立验证</small></div>
       <div><span>教材目录</span><strong>{loading ? "—" : metrics.pendingCurriculum}</strong><small>待审核或需修改</small></div>
       <div><span>PDF 加工</span><strong>{loading ? "—" : metrics.importFiles}</strong><small>{metrics.importPages} 页已登记</small></div>

@@ -13,9 +13,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.modules.question_bank import QuestionBank
+from app.modules.question_bank import QuestionLibraryStateCommand
 from app.modules.question_bank.schemas import QuestionDetail
 from app.modules.question_similarity.schemas import (
     DuplicateCandidate,
+    DuplicateLibraryStateCommand,
+    DuplicateLibraryStateResult,
     DuplicateRelation,
     DuplicateReviewCommand,
     DuplicateReviewResult,
@@ -159,7 +162,7 @@ class QuestionSimilarityRegistry:
         return datetime.now(UTC).isoformat()
 
     def scan(self) -> DuplicateScanResult:
-        page = self.question_bank.search(page=1, page_size=100_000)
+        page = self.question_bank.search(page=1, page_size=100_000, library_state="all")
         questions = [
             self.question_bank.get_question(item.question_id)
             for item in page.items
@@ -317,11 +320,45 @@ class QuestionSimilarityRegistry:
         label = "已排除重复关系" if status == "rejected" else "已保存教师确认关系"
         return DuplicateReviewResult(candidate=self._view(updated), message=label)
 
+    def change_library_state(
+        self, candidate_id: str, command: DuplicateLibraryStateCommand
+    ) -> DuplicateLibraryStateResult:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT left_question_id, right_question_id, status,
+                       COALESCE(teacher_relation, suggested_relation) AS relation
+                FROM duplicate_candidates WHERE candidate_id = ?
+                """,
+                (candidate_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(candidate_id)
+        if row["status"] != "confirmed" or row["relation"] == "not_duplicate":
+            raise QuestionSimilarityError("请先由教师确认重复、同题或变式关系，再调整题库保留状态")
+        allowed = set(self._cluster_question_ids(row))
+        requested = list(dict.fromkeys(command.question_ids))
+        outside = [question_id for question_id in requested if question_id not in allowed]
+        if outside:
+            raise QuestionSimilarityError("只能处理当前关系组内的题目")
+        result = self.question_bank.change_library_state(
+            QuestionLibraryStateCommand(
+                question_ids=requested,
+                action=command.action,
+                actor_id=command.actor_id,
+                reason=command.reason,
+                relation_candidate_id=candidate_id,
+            )
+        )
+        return DuplicateLibraryStateResult(library=result, workspace=self.workspace())
+
     def _view(self, row: sqlite3.Row) -> DuplicateCandidate:
+        member_ids = self._cluster_question_ids(row)
         return DuplicateCandidate(
             candidate_id=row["candidate_id"],
             left=self.question_bank.get_question(row["left_question_id"]),
             right=self.question_bank.get_question(row["right_question_id"]),
+            members=[self.question_bank.get_question(question_id) for question_id in member_ids],
             suggested_relation=row["suggested_relation"],
             teacher_relation=row["teacher_relation"],
             confidence=row["confidence"],
@@ -332,6 +369,33 @@ class QuestionSimilarityRegistry:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    def _cluster_question_ids(self, seed: sqlite3.Row) -> list[str]:
+        """Return the connected question group behind a pair candidate."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT left_question_id, right_question_id
+                FROM duplicate_candidates
+                WHERE status = 'confirmed'
+                  AND COALESCE(teacher_relation, suggested_relation) != 'not_duplicate'
+                """
+            ).fetchall()
+        graph: dict[str, set[str]] = defaultdict(set)
+        for row in rows:
+            left_id = str(row["left_question_id"])
+            right_id = str(row["right_question_id"])
+            graph[left_id].add(right_id)
+            graph[right_id].add(left_id)
+        pending = [str(seed["left_question_id"]), str(seed["right_question_id"])]
+        visited: set[str] = set()
+        while pending:
+            question_id = pending.pop()
+            if question_id in visited:
+                continue
+            visited.add(question_id)
+            pending.extend(graph.get(question_id, set()) - visited)
+        return sorted(visited)
 
     @staticmethod
     def _stats(rows: Iterable[sqlite3.Row]) -> DuplicateWorkspaceStats:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import sqlite3
+from collections import Counter
 from io import BytesIO
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,8 @@ from app.modules.question_bank.schemas import (
     QuestionDetail,
     QuestionImage,
     QuestionImageMetadataCommand,
+    QuestionLibraryStateCommand,
+    QuestionLibraryStateResult,
     QuestionRevisionCommand,
     QuestionRevisionResult,
     QuestionSearchPage,
@@ -199,6 +202,27 @@ class QuestionBank:
                 CREATE INDEX IF NOT EXISTS idx_questions_verification ON questions(verification_status);
                 CREATE INDEX IF NOT EXISTS idx_question_images_question ON question_images(question_id, placement, sort_order);
                 CREATE INDEX IF NOT EXISTS idx_question_generation_source ON question_generation_runs(source_question_id, created_at DESC);
+                CREATE TABLE IF NOT EXISTS question_library_state (
+                    question_id TEXT PRIMARY KEY REFERENCES questions(question_id),
+                    state TEXT NOT NULL CHECK (state IN ('active', 'removed')),
+                    reason TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    relation_candidate_id TEXT,
+                    removed_at TEXT,
+                    restored_at TEXT,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS question_library_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    question_id TEXT NOT NULL REFERENCES questions(question_id),
+                    action TEXT NOT NULL CHECK (action IN ('remove', 'restore')),
+                    actor_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    relation_candidate_id TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_question_library_state
+                    ON question_library_state(state, updated_at DESC);
                 """
             )
             # Older prototypes allowed an approval before verification. Preserve
@@ -377,9 +401,22 @@ class QuestionBank:
         work_queue: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        library_state: str = "active",
     ) -> QuestionSearchPage:
         clauses: list[str] = []
         values: list[Any] = []
+        if library_state not in {"active", "removed", "all"}:
+            raise QuestionBankError("未知的题库状态")
+        if library_state == "active":
+            clauses.append(
+                "NOT EXISTS (SELECT 1 FROM question_library_state qls "
+                "WHERE qls.question_id = questions.question_id AND qls.state = 'removed')"
+            )
+        elif library_state == "removed":
+            clauses.append(
+                "EXISTS (SELECT 1 FROM question_library_state qls "
+                "WHERE qls.question_id = questions.question_id AND qls.state = 'removed')"
+            )
         if query.strip():
             pattern = f"%{query.strip()}%"
             clauses.append(
@@ -436,7 +473,14 @@ class QuestionBank:
             ).fetchone()[0]
             rows = connection.execute(
                 f"""
-                SELECT * FROM questions {where}
+                SELECT questions.*,
+                    COALESCE((SELECT state FROM question_library_state qls
+                              WHERE qls.question_id = questions.question_id), 'active') AS library_state,
+                    (SELECT removed_at FROM question_library_state qls
+                     WHERE qls.question_id = questions.question_id) AS removed_at,
+                    (SELECT reason FROM question_library_state qls
+                     WHERE qls.question_id = questions.question_id) AS removal_reason
+                FROM questions {where}
                 ORDER BY updated_at DESC, question_id ASC
                 LIMIT ? OFFSET ?
                 """,
@@ -462,7 +506,15 @@ class QuestionBank:
     def get_question(self, question_id: str) -> QuestionDetail:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+                """
+                SELECT questions.*,
+                    COALESCE(qls.state, 'active') AS library_state,
+                    qls.removed_at, qls.reason AS removal_reason
+                FROM questions LEFT JOIN question_library_state qls
+                  ON qls.question_id = questions.question_id
+                WHERE questions.question_id = ?
+                """,
+                (question_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(question_id)
@@ -488,6 +540,90 @@ class QuestionBank:
             reviews=reviews,
             images=images,
             revision_count=revision_count,
+        )
+
+    def change_library_state(
+        self, command: QuestionLibraryStateCommand
+    ) -> QuestionLibraryStateResult:
+        """Soft-remove or restore questions while preserving all question evidence."""
+        question_ids = list(dict.fromkeys(command.question_ids))
+        target_state = "removed" if command.action == "remove" else "active"
+        now = self._now()
+        changed: list[str] = []
+        unchanged: list[str] = []
+        with self._connect() as connection:
+            placeholders = ",".join("?" for _ in question_ids)
+            existing = {
+                row["question_id"]
+                for row in connection.execute(
+                    f"SELECT question_id FROM questions WHERE question_id IN ({placeholders})",
+                    question_ids,
+                ).fetchall()
+            }
+            missing = [question_id for question_id in question_ids if question_id not in existing]
+            if missing:
+                raise QuestionBankError(f"题目不存在：{', '.join(missing)}")
+            states = {
+                row["question_id"]: row["state"]
+                for row in connection.execute(
+                    f"SELECT question_id, state FROM question_library_state WHERE question_id IN ({placeholders})",
+                    question_ids,
+                ).fetchall()
+            }
+            for question_id in question_ids:
+                current_state = states.get(question_id, "active")
+                if current_state == target_state:
+                    unchanged.append(question_id)
+                    continue
+                changed.append(question_id)
+                removed_at = now if target_state == "removed" else None
+                restored_at = now if target_state == "active" else None
+                connection.execute(
+                    """
+                    INSERT INTO question_library_state
+                    (question_id, state, reason, actor_id, relation_candidate_id,
+                     removed_at, restored_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(question_id) DO UPDATE SET
+                        state = excluded.state, reason = excluded.reason,
+                        actor_id = excluded.actor_id,
+                        relation_candidate_id = excluded.relation_candidate_id,
+                        removed_at = excluded.removed_at,
+                        restored_at = excluded.restored_at,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        question_id,
+                        target_state,
+                        command.reason,
+                        command.actor_id,
+                        command.relation_candidate_id,
+                        removed_at,
+                        restored_at,
+                        now,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO question_library_events
+                    (question_id, action, actor_id, reason, relation_candidate_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        question_id,
+                        command.action,
+                        command.actor_id,
+                        command.reason,
+                        command.relation_candidate_id,
+                        now,
+                    ),
+                )
+        verb = "移出正常题库" if command.action == "remove" else "恢复到正常题库"
+        return QuestionLibraryStateResult(
+            action=command.action,
+            changed_question_ids=changed,
+            unchanged_question_ids=unchanged,
+            message=f"已将 {len(changed)} 道题{verb}",
         )
 
     def revise(self, question_id: str, command: QuestionRevisionCommand) -> QuestionRevisionResult:
@@ -1361,7 +1497,13 @@ class QuestionBank:
     def publish(self, question_id: str) -> PublishDecision:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT * FROM questions WHERE question_id = ?", (question_id,)
+                """
+                SELECT questions.*, COALESCE(qls.state, 'active') AS library_state
+                FROM questions LEFT JOIN question_library_state qls
+                  ON qls.question_id = questions.question_id
+                WHERE questions.question_id = ?
+                """,
+                (question_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(question_id)
@@ -1388,13 +1530,20 @@ class QuestionBank:
     def stats(self) -> QuestionBankStats:
         with self._connect() as connection:
             total = connection.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
-            review = self._group_counts(connection, "review_status")
-            verification = self._group_counts(connection, "verification_status")
-            chapters = self._group_counts(connection, "chapter")
-            rows = connection.execute("SELECT * FROM questions").fetchall()
-        publishable = sum(not self._publication_blockers(row) for row in rows)
+            rows = connection.execute(
+                """
+                SELECT questions.*, COALESCE(qls.state, 'active') AS library_state
+                FROM questions LEFT JOIN question_library_state qls
+                  ON qls.question_id = questions.question_id
+                """
+            ).fetchall()
+        active_rows = [row for row in rows if row["library_state"] == "active"]
+        review = dict(Counter(str(row["review_status"]) for row in active_rows))
+        verification = dict(Counter(str(row["verification_status"]) for row in active_rows))
+        chapters = dict(Counter(str(row["chapter"] or "未映射") for row in active_rows))
+        publishable = sum(not self._publication_blockers(row) for row in active_rows)
         by_module = {key: 0 for key in MODULE_RULES}
-        for row in rows:
+        for row in active_rows:
             chapter = str(row["chapter"] or "")
             for key, (includes, excludes) in MODULE_RULES.items():
                 if any(keyword in chapter for keyword in includes) and not any(
@@ -1403,29 +1552,31 @@ class QuestionBank:
                     by_module[key] += 1
                     break
         by_work_queue = {
-            "teacher_review": sum(row["review_status"] == "pending" for row in rows),
+            "teacher_review": sum(row["review_status"] == "pending" for row in active_rows),
             "verified_pending_teacher": sum(
                 row["review_status"] == "pending"
                 and row["verification_status"] == "passed"
-                for row in rows
+                for row in active_rows
             ),
             "formula_review": sum(
-                row["verification_status"] == "needs_formula_review" for row in rows
+                row["verification_status"] == "needs_formula_review" for row in active_rows
             ),
             "math_review": sum(
-                row["verification_status"] == "needs_math_review" for row in rows
+                row["verification_status"] == "needs_math_review" for row in active_rows
             ),
             "source_conflict": sum(
                 row["verification_status"] == "source_inconsistency_detected"
-                for row in rows
+                for row in active_rows
             ),
             "changes_requested": sum(
-                row["review_status"] == "changes_requested" for row in rows
+                row["review_status"] == "changes_requested" for row in active_rows
             ),
             "publishable": publishable,
         }
         return QuestionBankStats(
             total=total,
+            active=len(active_rows),
+            removed=total - len(active_rows),
             by_review_status=review,
             by_verification_status=verification,
             by_chapter=chapters,
@@ -1489,6 +1640,10 @@ class QuestionBank:
         )
 
     def _summary(self, row: sqlite3.Row) -> QuestionSummary:
+        keys = set(row.keys())
+        library_state = row["library_state"] if "library_state" in keys else "active"
+        removed_at = row["removed_at"] if "removed_at" in keys else None
+        removal_reason = row["removal_reason"] if "removal_reason" in keys else None
         return QuestionSummary(
             question_id=row["question_id"], status=row["status"],
             review_status=row["review_status"], visibility=row["visibility"],
@@ -1499,6 +1654,8 @@ class QuestionBank:
             source_document=row["source_document"], source_page_start=row["source_page_start"],
             source_page_end=row["source_page_end"], license_status=row["license_status"],
             publication_blockers=self._publication_blockers(row),
+            library_state=library_state, removed_at=removed_at,
+            removal_reason=removal_reason,
         )
 
     @staticmethod
@@ -1616,6 +1773,8 @@ class QuestionBank:
     @staticmethod
     def _publication_blockers(row: sqlite3.Row) -> list[str]:
         blockers: list[str] = []
+        if "library_state" in row.keys() and row["library_state"] == "removed":
+            blockers.append("题目已移出正常题库")
         if row["review_status"] != "approved":
             blockers.append("teacher_review_required")
         if row["verification_status"] != "passed":

@@ -53,6 +53,9 @@ class QuestionSummary(BaseModel):
     source_page_end: int | None
     license_status: str
     publication_blockers: list[str]
+    library_state: Literal["active", "removed"] = "active"
+    removed_at: str | None = None
+    removal_reason: str | None = None
 
 
 class QuestionDetail(QuestionSummary):
@@ -142,9 +145,26 @@ class PublishDecision(BaseModel):
 
 class QuestionBankStats(BaseModel):
     total: int
+    active: int = 0
+    removed: int = 0
     by_review_status: dict[str, int]
     by_verification_status: dict[str, int]
     by_chapter: dict[str, int]
     by_work_queue: dict[str, int]
     by_module: dict[str, int]
     publishable: int
+
+
+class QuestionLibraryStateCommand(BaseModel):
+    question_ids: list[str] = Field(min_length=1, max_length=200)
+    action: Literal["remove", "restore"]
+    actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+    reason: str = Field(default="重复题校对", max_length=2000)
+    relation_candidate_id: str | None = Field(default=None, max_length=160)
+
+
+class QuestionLibraryStateResult(BaseModel):
+    action: Literal["remove", "restore"]
+    changed_question_ids: list[str]
+    unchanged_question_ids: list[str]
+    message: str

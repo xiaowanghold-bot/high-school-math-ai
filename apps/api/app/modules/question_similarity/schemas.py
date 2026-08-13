@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.modules.question_bank.schemas import QuestionSummary
+from app.modules.question_bank.schemas import QuestionLibraryStateCommand, QuestionLibraryStateResult
 
 
 DuplicateRelation = Literal[
@@ -21,6 +22,7 @@ class DuplicateCandidate(BaseModel):
     candidate_id: str
     left: QuestionSummary
     right: QuestionSummary
+    members: list[QuestionSummary] = Field(default_factory=list)
     suggested_relation: DuplicateRelation
     teacher_relation: DuplicateRelation | None = None
     confidence: float = Field(ge=0, le=1)
@@ -66,3 +68,15 @@ class DuplicateReviewCommand(BaseModel):
 class DuplicateReviewResult(BaseModel):
     candidate: DuplicateCandidate
     message: str
+
+
+class DuplicateLibraryStateCommand(BaseModel):
+    question_ids: list[str] = Field(min_length=1, max_length=200)
+    action: Literal["remove", "restore"]
+    actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+    reason: str = Field(default="重复题校对", max_length=2000)
+
+
+class DuplicateLibraryStateResult(BaseModel):
+    library: QuestionLibraryStateResult
+    workspace: DuplicateWorkspace
