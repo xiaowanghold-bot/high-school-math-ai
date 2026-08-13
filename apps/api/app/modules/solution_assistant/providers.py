@@ -7,6 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.modules.model_operations import ModelRunRecorder, NullModelRunRecorder
+from app.modules.deepseek import DeepSeekClientError, DeepSeekJsonClient
 from app.modules.solution_assistant.schemas import GeneratedSolution, SolutionRequest
 
 
@@ -84,14 +85,7 @@ class OpenAISolutionProvider:
             prompt_version="solution-assistant-v1",
             actor_id=request_data.teacher_id,
         ) as run:
-            try:
-                with urlopen(request, timeout=self.timeout_seconds) as response:
-                    raw = json.loads(response.read().decode("utf-8"))
-            except HTTPError as exc:
-                details = exc.read().decode("utf-8", errors="replace")[:500]
-                raise SolutionProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
-            except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-                raise SolutionProviderError(f"OpenAI 解题失败：{exc}") from exc
+            raw = self._request(payload, request)
             run.capture_response(raw)
             if raw.get("status") == "incomplete":
                 raise SolutionProviderError("OpenAI 返回未完成结果，请缩短题目或要求后重试")
@@ -101,6 +95,16 @@ class OpenAISolutionProvider:
                 )
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 raise SolutionProviderError(f"OpenAI 返回内容不符合解题结构：{exc}") from exc
+
+    def _request(self, payload: dict, request: Request) -> dict:
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")[:500]
+            raise SolutionProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
+        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise SolutionProviderError(f"OpenAI 解题失败：{exc}") from exc
 
     @staticmethod
     def _extract_output_text(payload: dict) -> str:
@@ -141,3 +145,28 @@ class OpenAISolutionProvider:
                 "required": list(properties),
             },
         }
+
+
+class DeepSeekSolutionProvider(OpenAISolutionProvider):
+    name = "deepseek"
+
+    def __init__(
+        self, *, api_key: str, model: str, base_url: str,
+        timeout_seconds: int = 90, recorder=None, **_kwargs,
+    ) -> None:
+        self.model = model
+        self.recorder = recorder or NullModelRunRecorder()
+        self.client = DeepSeekJsonClient(
+            api_key=api_key, model=model, base_url=base_url,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def _request(self, payload: dict, request: Request) -> dict:
+        try:
+            return self.client.request(
+                instructions=payload["instructions"],
+                input_text=str(payload["input"]), action="解题",
+                output_schema=payload.get("text", {}).get("format"),
+            )
+        except DeepSeekClientError as exc:
+            raise SolutionProviderError(str(exc)) from exc

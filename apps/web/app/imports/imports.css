@@ -292,3 +292,6 @@
   .source-item-list article { grid-template-columns: 76px minmax(0,1fr) auto; padding-inline: 12px; }
   .source-item-actions { grid-column: 2 / -1; }
 }
+.import-file-row { position: relative; }
+.import-file-row > button:first-child { width: 100%; }
+.import-file-row .import-file-lifecycle { position: absolute; right: 8px; bottom: 7px; z-index: 2; border: 0; background: transparent; color: #8a6570; font-size: var(--module-text-xs); cursor: pointer; }

@@ -10,11 +10,13 @@ from app.core.config import get_settings
 from app.modules.lesson_exports import LessonPlanDocumentRenderer, LessonPlanExportError
 from app.modules.lesson_plans import (
     LessonPlanBlock,
+    DeepSeekLessonPlanProvider,
     LessonPlanBlockLockCommand,
     LessonPlanBlockRewriteCommand,
     LessonPlanBlockRewriteResult,
     LessonPlanGenerationRequest,
     LessonPlanList,
+    LessonPlanLifecycleCommand,
     LessonPlanProviderError,
     LessonPlanStudio,
     LessonPlanStudioError,
@@ -23,7 +25,7 @@ from app.modules.lesson_plans import (
     OpenAIResponsesLessonPlanProvider,
     TemplateLessonPlanProvider,
 )
-from app.routes.curriculum import _governance_for_paths
+from app.modules.curriculum import CsvCurriculumCatalog, CurriculumBaseline
 from app.routes.model_operations import get_model_operations_registry
 from app.routes.questions import get_question_bank
 
@@ -34,10 +36,24 @@ router = APIRouter(prefix="/lesson-plans", tags=["lesson-plans"])
 @lru_cache
 def get_lesson_plan_studio() -> LessonPlanStudio:
     settings = get_settings()
-    use_openai = settings.lesson_plan_provider == "openai" or (
-        settings.lesson_plan_provider == "auto" and bool(settings.openai_api_key)
+    baseline = CurriculumBaseline.load(
+        settings.curriculum_baseline_manifest, settings.curriculum_csv
     )
-    provider = (
+    use_deepseek = settings.lesson_plan_provider == "deepseek" or (
+        settings.lesson_plan_provider == "auto" and bool(settings.deepseek_api_key)
+    )
+    use_openai = not use_deepseek and (
+        settings.lesson_plan_provider == "openai" or (
+            settings.lesson_plan_provider == "auto" and bool(settings.openai_api_key)
+        )
+    )
+    provider = DeepSeekLessonPlanProvider(
+        api_key=settings.deepseek_api_key,
+        model=settings.deepseek_model,
+        base_url=settings.deepseek_base_url,
+        timeout_seconds=settings.deepseek_timeout_seconds,
+        recorder=get_model_operations_registry(),
+    ) if use_deepseek else (
         OpenAIResponsesLessonPlanProvider(
             api_key=settings.openai_api_key,
             model=settings.openai_model,
@@ -50,10 +66,8 @@ def get_lesson_plan_studio() -> LessonPlanStudio:
     )
     return LessonPlanStudio(
         database_path=settings.lesson_plan_db,
-        curriculum_catalog=_governance_for_paths(
-            str(settings.curriculum_csv.resolve()),
-            str(settings.curriculum_review_db.resolve()),
-        ).catalog,
+        curriculum_catalog=CsvCurriculumCatalog(settings.curriculum_csv),
+        curriculum_baseline=baseline,
         question_bank=get_question_bank(),
         provider=provider,
     )
@@ -70,8 +84,16 @@ def get_lesson_plan_renderer() -> LessonPlanDocumentRenderer:
 
 
 @router.get("", response_model=LessonPlanList)
-def list_lesson_plans(limit: int = Query(default=30, ge=1, le=100)) -> LessonPlanList:
-    return get_lesson_plan_studio().list(limit=limit)
+def list_lesson_plans(limit: int = Query(default=30, ge=1, le=100), lifecycle_state: Literal["active", "trashed"] = Query(default="active")) -> LessonPlanList:
+    return get_lesson_plan_studio().list(limit=limit, lifecycle_state=lifecycle_state)
+
+
+@router.post("/{lesson_plan_id}/lifecycle", response_model=LessonPlanView)
+def change_lesson_plan_lifecycle(lesson_plan_id: str, command: LessonPlanLifecycleCommand) -> LessonPlanView:
+    try:
+        return get_lesson_plan_studio().change_lifecycle(lesson_plan_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="教案不存在") from exc
 
 
 @router.post("/generate", response_model=LessonPlanView, status_code=201)

@@ -1,5 +1,6 @@
 from app.modules.question_variants.providers import (
     LocalDiagnosticVariantProvider,
+    DeepSeekQuestionVariantProvider,
     OpenAIQuestionVariantProvider,
     QuestionVariantProviderError,
 )
@@ -16,6 +17,7 @@ from app.modules.question_variants.service import (
 __all__ = [
     "GeneratedQuestionVariant",
     "LocalDiagnosticVariantProvider",
+    "DeepSeekQuestionVariantProvider",
     "OpenAIQuestionVariantProvider",
     "QuestionVariantGenerationRequest",
     "QuestionVariantGenerationResult",

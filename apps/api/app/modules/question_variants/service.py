@@ -37,7 +37,7 @@ class QuestionVariantService:
             generation={
                 "provider": self.provider.name,
                 "model": self.provider.model,
-                "mode": "live_ai" if self.provider.name == "openai" else "local_rule",
+                "mode": "live_ai" if self.provider.name in {"openai", "deepseek"} else "local_rule",
                 "request": request.model_dump(),
             },
         )
@@ -51,6 +51,6 @@ class QuestionVariantService:
             source_question_id=source_question_id,
             provider=self.provider.name,
             model=self.provider.model,
-            mode="live_ai" if self.provider.name == "openai" else "local_rule",
+            mode="live_ai" if self.provider.name in {"openai", "deepseek"} else "local_rule",
             warnings=warnings,
         )

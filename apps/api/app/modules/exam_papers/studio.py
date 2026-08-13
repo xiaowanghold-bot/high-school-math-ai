@@ -14,6 +14,7 @@ from app.modules.exam_papers.schemas import (
     ExamPaperImageSnapshot,
     ExamPaperItemInput,
     ExamPaperItemView,
+    ExamPaperLifecycleCommand,
     ExamPaperList,
     ExamPaperOptionSnapshot,
     ExamPaperQuestionSnapshot,
@@ -132,20 +133,31 @@ class ExamPaperStudio:
             raise KeyError(paper_id)
         return ExamPaperView.model_validate_json(row["raw_json"])
 
-    def list(self, *, limit: int = 30) -> ExamPaperList:
+    def list(self, *, limit: int = 30, lifecycle_state: str = "active") -> ExamPaperList:
+        if lifecycle_state not in {"active", "trashed"}:
+            raise ExamPaperStudioError("不支持的试卷状态")
         with self._connect() as connection:
-            total = connection.execute("SELECT COUNT(*) FROM exam_papers").fetchone()[0]
+            total = connection.execute("SELECT COUNT(*) FROM exam_papers WHERE lifecycle_state = ?", (lifecycle_state,)).fetchone()[0]
             rows = connection.execute(
                 """
                 SELECT exam_paper_id, title, status, version, duration_minutes,
-                       total_score, question_count, updated_at
-                FROM exam_papers ORDER BY updated_at DESC LIMIT ?
+                       total_score, question_count, updated_at, lifecycle_state, trashed_at
+                FROM exam_papers WHERE lifecycle_state = ? ORDER BY updated_at DESC LIMIT ?
                 """,
-                (limit,),
+                (lifecycle_state, limit),
             ).fetchall()
         return ExamPaperList(
             items=[ExamPaperSummary(**dict(row)) for row in rows], total=total
         )
+
+    def change_lifecycle(self, paper_id: str, command: ExamPaperLifecycleCommand) -> ExamPaperView:
+        current = self.get(paper_id)
+        target = "trashed" if command.action == "trash" else "active"
+        now = self._now()
+        updated = current.model_copy(update={"lifecycle_state": target, "trashed_at": now if target == "trashed" else None, "updated_at": now})
+        with self._connect() as connection:
+            connection.execute("UPDATE exam_papers SET lifecycle_state = ?, trashed_at = ?, raw_json = ?, updated_at = ? WHERE exam_paper_id = ?", (target, updated.trashed_at, updated.model_dump_json(), now, paper_id))
+        return updated
 
     def asset_path(self, paper_id: str, asset_id: str) -> Path:
         paper = self.get(paper_id)
@@ -342,6 +354,7 @@ class ExamPaperStudio:
                     raw_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                    , lifecycle_state TEXT NOT NULL DEFAULT 'active', trashed_at TEXT
                 );
                 CREATE TABLE IF NOT EXISTS exam_paper_revisions (
                     revision_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -356,6 +369,11 @@ class ExamPaperStudio:
                 ON exam_papers(updated_at DESC);
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(exam_papers)")}
+            if "lifecycle_state" not in columns:
+                connection.execute("ALTER TABLE exam_papers ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'")
+            if "trashed_at" not in columns:
+                connection.execute("ALTER TABLE exam_papers ADD COLUMN trashed_at TEXT")
 
     @staticmethod
     def _insert_current(connection: sqlite3.Connection, paper: ExamPaperView) -> None:

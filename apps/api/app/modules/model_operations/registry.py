@@ -192,6 +192,9 @@ class ModelOperationsRegistry:
         lesson_plan_provider: str,
         question_variant_provider: str,
         solution_provider: str,
+        external_provider: str = "openai",
+        provider_configuration: dict[str, tuple[bool, str]] | None = None,
+        ocr_api_configured: bool | None = None,
         limit: int = 50,
     ) -> ModelOperationsDashboard:
         runs = self.list_runs(limit=limit)
@@ -200,19 +203,22 @@ class ModelOperationsRegistry:
             self._aggregate_feature(feature)
             for feature in FEATURE_LABELS
         ]
+        provider_configuration = provider_configuration or {
+            external_provider: (api_configured, model)
+        }
         routes = [
-            self._route("lesson_plan_generation", "教案生成", lesson_plan_provider, api_configured, model, local_provider="local_template"),
-            self._route("lesson_block_rewrite", "教案局部改写", lesson_plan_provider, api_configured, model, local_provider="local_template"),
-            self._route("question_variant", "题目变式", question_variant_provider, api_configured, model, local_provider="local_rule"),
-            self._route("solution_assistant", "解题助手", solution_provider, api_configured, model, local_provider="verified_answer"),
+            self._route("lesson_plan_generation", "教案生成", lesson_plan_provider, provider_configuration, local_provider="local_template", external_provider=external_provider),
+            self._route("lesson_block_rewrite", "教案局部改写", lesson_plan_provider, provider_configuration, local_provider="local_template", external_provider=external_provider),
+            self._route("question_variant", "题目变式", question_variant_provider, provider_configuration, local_provider="local_rule", external_provider=external_provider),
+            self._route("solution_assistant", "解题助手", solution_provider, provider_configuration, local_provider="verified_answer", external_provider=external_provider),
             ModelRouteStatus(
                 feature="private_resource_ocr",
                 label="私人资料 OCR",
                 configured_mode="openai",
-                effective_provider="openai" if api_configured else "unavailable",
-                model=model if api_configured else "—",
-                ready=api_configured,
-                note="仅在教师明确同意外部处理后调用" if api_configured else "需要配置 API Key",
+                effective_provider="openai" if (ocr_api_configured if ocr_api_configured is not None else api_configured) else "unavailable",
+                model=provider_configuration.get("openai", (False, "—"))[1] if (ocr_api_configured if ocr_api_configured is not None else api_configured) else "—",
+                ready=ocr_api_configured if ocr_api_configured is not None else api_configured,
+                note="仅在教师明确同意外部处理后调用" if (ocr_api_configured if ocr_api_configured is not None else api_configured) else "需要配置 OpenAI API Key 或使用可视化重建",
             ),
         ]
         return ModelOperationsDashboard(
@@ -358,27 +364,29 @@ class ModelOperationsRegistry:
         feature: str,
         label: str,
         configured_mode: str,
-        api_configured: bool,
-        model: str,
+        provider_configuration: dict[str, tuple[bool, str]],
         *,
         local_provider: str,
+        external_provider: str = "openai",
     ) -> ModelRouteStatus:
-        wants_openai = configured_mode == "openai" or (
-            configured_mode == "auto" and api_configured
+        selected_provider = configured_mode if configured_mode in {"openai", "deepseek"} else external_provider
+        configured, selected_model = provider_configuration.get(selected_provider, (False, "—"))
+        wants_external = configured_mode in {"openai", "deepseek"} or (
+            configured_mode == "auto" and configured
         )
-        effective = "openai" if wants_openai else local_provider
-        ready = not (configured_mode == "openai" and not api_configured)
+        effective = selected_provider if wants_external else local_provider
+        ready = not (configured_mode in {"openai", "deepseek"} and not configured)
         return ModelRouteStatus(
             feature=feature,
             label=label,
             configured_mode=configured_mode,
             effective_provider=effective if ready else "unavailable",
-            model=model if wants_openai and ready else local_provider,
+            model=selected_model if wants_external and ready else local_provider,
             ready=ready,
             note=(
                 "已连接外部模型"
-                if wants_openai and ready
-                else "显式选择 OpenAI，但尚未配置 API Key"
+                if wants_external and ready
+                else "显式选择外部模型，但尚未配置对应 API Key"
                 if not ready
                 else "当前使用本地确定性能力"
             ),

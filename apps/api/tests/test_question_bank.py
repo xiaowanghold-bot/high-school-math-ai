@@ -320,3 +320,37 @@ def test_question_image_rejects_non_image_payload(tmp_path: Path) -> None:
 
     with pytest.raises(QuestionBankError, match="有效的"):
         bank.add_image(detail.question_id, b"not-an-image", "fake.png", "stem", "", "")
+
+
+def test_search_finds_imported_question_by_exact_question_id(tmp_path: Path) -> None:
+    bank = QuestionBank(tmp_path / "question-bank.sqlite3")
+    question = bank.create_private_resource_question(
+        {
+            "candidate_id": "pdf_imp_draft_regression",
+            "source_version": 1,
+            "position": 1,
+            "question_type": "open_response",
+            "stem_plain": "已知函数 f(x)=x，求 f(1)。",
+            "stem_latex": None,
+            "options": [],
+            "answer_value": "1",
+            "solution_method": "代入",
+            "solution_steps": ["令 x=1"],
+            "final_answer": "1",
+            "difficulty": 1,
+            "status": "draft",
+        },
+        resource={
+            "library_item_id": "pdf_import_regression",
+            "title": "批量导入回归样本",
+            "original_filename": "sample.pdf",
+            "rights_basis": "original",
+            "rights_statement": "测试资料",
+            "adaptation_allowed": True,
+        },
+    )
+
+    result = bank.search(query=question.question_id)
+
+    assert result.total == 1
+    assert result.items[0].question_id == question.question_id

@@ -12,6 +12,11 @@ _SOLUTION_MARKER_RE = re.compile(
 _SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
 
+def private_use_glyph_count(text: str) -> int:
+    """Count PDF private-use glyphs that cannot be considered readable text."""
+    return len(_PRIVATE_USE_RE.findall(text))
+
+
 @dataclass(frozen=True)
 class StructuredTextRepair:
     stem_plain: str

@@ -96,6 +96,8 @@ class ExamPaperView(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
+    lifecycle_state: Literal["active", "trashed"] = "active"
+    trashed_at: str | None = None
 
 
 class ExamPaperSummary(BaseModel):
@@ -107,6 +109,14 @@ class ExamPaperSummary(BaseModel):
     total_score: float
     question_count: int
     updated_at: str
+    lifecycle_state: Literal["active", "trashed"] = "active"
+    trashed_at: str | None = None
+
+
+class ExamPaperLifecycleCommand(BaseModel):
+    action: Literal["trash", "restore"]
+    actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+    reason: str = Field(default="用户删除", max_length=2000)
 
 
 class ExamPaperList(BaseModel):

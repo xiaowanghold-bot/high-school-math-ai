@@ -49,6 +49,16 @@ class ImportBatchCommand(BaseModel):
     owner_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
 
 
+class ImportBatchLifecycleCommand(BaseModel):
+    action: Literal["trash", "restore"]
+    actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+    reason: str = Field(default="用户删除", max_length=2000)
+
+
+class ImportFileLifecycleCommand(ImportBatchLifecycleCommand):
+    pass
+
+
 class ImportPageView(BaseModel):
     page_id: str
     page_number: int
@@ -70,6 +80,8 @@ class ImportFileSummary(BaseModel):
     sha256: str
     page_count: int
     status: ImportFileStatus
+    lifecycle_state: Literal["active", "trashed"] = "active"
+    trashed_at: str | None = None
     analysis_attempts: int = 0
     analyzed_page_count: int
     progress_percent: float = 0
@@ -97,6 +109,8 @@ class ImportBatchSummary(BaseModel):
     rights_basis: ImportRightsBasis
     rights_statement: str
     owner_id: str
+    lifecycle_state: Literal["active", "trashed"] = "active"
+    trashed_at: str | None = None
     file_count: int
     registered_count: int
     queued_count: int = 0

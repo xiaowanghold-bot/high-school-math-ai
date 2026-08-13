@@ -10,6 +10,7 @@ from reportlab.pdfgen.canvas import Canvas
 from app.main import app
 from app.modules.private_library import (
     LibraryIngestCommand,
+    LibraryLifecycleCommand,
     LibraryOCRCommand,
     LibraryTextReviewCommand,
     OCRTextResult,
@@ -19,6 +20,7 @@ from app.modules.private_library import (
     QuestionCandidateUpdate,
 )
 from app.modules.question_bank import QuestionBank
+from app.modules.private_library.exports import LibraryExportError, LibraryTextRenderer
 
 
 def make_library(tmp_path: Path) -> PrivateLibrary:
@@ -103,6 +105,99 @@ def test_pdf_text_is_extracted_and_download_path_is_confined(tmp_path: Path) -> 
     assert path.parent == (tmp_path / "files").resolve()
     assert path.read_bytes().startswith(b"%PDF-")
     assert downloaded.original_filename == "lesson.pdf"
+
+
+def test_corrected_math_text_exports_to_readable_docx_and_pdf(tmp_path: Path) -> None:
+    library = make_library(tmp_path)
+    item = library.ingest(ingest_command(), filename="lesson.pdf", content=pdf_bytes("x^2"))
+    reviewed = library.review(item.library_item_id, LibraryTextReviewCommand(corrected_text=r"函数 $f(x)=\frac{x^2}{2}$", confirm=True))
+    renderer = LibraryTextRenderer(tmp_path / "output")
+    docx = renderer.render(reviewed, "docx")
+    pdf = renderer.render(reviewed, "pdf")
+    assert docx.path.read_bytes().startswith(b"PK")
+    assert pdf.path.read_bytes().startswith(b"%PDF")
+    document = Document(docx.path)
+    assert "x²/2" in "\n".join(p.text for p in document.paragraphs)
+
+
+def test_unreadable_font_text_cannot_be_exported_before_ocr(tmp_path: Path) -> None:
+    library = make_library(tmp_path)
+    unreadable = library.ingest(
+        ingest_command(rights_basis="original"),
+        filename="scan.png",
+        content=png_bytes(),
+    )
+
+    with pytest.raises(LibraryExportError, match="OCR"):
+        LibraryTextRenderer(tmp_path / "output").render(unreadable, "docx")
+
+
+def test_local_ocr_audit_does_not_claim_external_consent(tmp_path: Path) -> None:
+    library = make_library(tmp_path)
+    item = library.ingest(ingest_command(), filename="lesson.pdf", content=pdf_bytes("x^2"))
+
+    class FakeLocalProvider:
+        name = "local_math_ocr"
+        def extract(self, **_kwargs):
+            return OCRTextResult(text=r"函数 $f(x)=x^2$", warnings=[])
+
+    library.apply_local_ocr(item.library_item_id, provider=FakeLocalProvider(), teacher_id="teacher")
+    import sqlite3
+    with sqlite3.connect(tmp_path / "library.sqlite3") as connection:
+        consent = connection.execute("SELECT external_consent FROM library_ocr_runs").fetchone()[0]
+    assert consent == 0
+
+
+def test_local_ocr_rejects_duplicate_long_running_job() -> None:
+    from app.routes.library import _local_math_ocr_lock
+
+    assert _local_math_ocr_lock.acquire(blocking=False)
+    try:
+        response = TestClient(app).post("/api/v1/library/any-item/local-math-ocr")
+    finally:
+        _local_math_ocr_lock.release()
+
+    assert response.status_code == 409
+    assert "正在处理" in response.json()["detail"]
+
+
+def test_unreadable_pdf_font_text_cannot_be_falsely_confirmed(tmp_path: Path) -> None:
+    library = make_library(tmp_path)
+    item = library.ingest(
+        ingest_command(rights_basis="original"),
+        filename="formula.pdf",
+        content=pdf_bytes("Readable source page"),
+    )
+
+    with pytest.raises(PrivateLibraryError, match="不能确认"):
+        library.review(
+            item.library_item_id,
+            LibraryTextReviewCommand(
+                corrected_text="已知函数 f(\uf021)=\uf022，求 \uf023。", confirm=True
+            ),
+        )
+
+
+def test_library_items_move_to_recycle_bin_and_restore(tmp_path: Path) -> None:
+    library = make_library(tmp_path)
+    item = library.ingest(
+        ingest_command(), filename="lesson.docx", content=docx_bytes("函数单调性")
+    )
+
+    trashed = library.change_lifecycle(
+        item.library_item_id,
+        LibraryLifecycleCommand(action="trash", reason="不再需要"),
+    )
+    assert trashed.lifecycle_state == "trashed"
+    assert library.list().total == 0
+    assert library.list(lifecycle_state="trashed").total == 1
+    assert library.stats().trashed == 1
+
+    restored = library.change_lifecycle(
+        item.library_item_id, LibraryLifecycleCommand(action="restore")
+    )
+    assert restored.lifecycle_state == "active"
+    assert library.list().total == 1
 
 
 def test_image_waits_for_ocr_then_can_be_manually_confirmed(tmp_path: Path) -> None:

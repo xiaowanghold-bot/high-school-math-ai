@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.config import get_settings
 from app.modules.solution_assistant import (
+    DeepSeekSolutionProvider,
     OpenAISolutionProvider,
     SolutionAssistant,
     SolutionAssistantError,
@@ -23,10 +24,21 @@ router = APIRouter(prefix="/solutions", tags=["solution-assistant"])
 @lru_cache
 def get_solution_assistant() -> SolutionAssistant:
     settings = get_settings()
-    use_openai = settings.solution_provider == "openai" or (
-        settings.solution_provider == "auto" and bool(settings.openai_api_key)
+    use_deepseek = settings.solution_provider == "deepseek" or (
+        settings.solution_provider == "auto" and bool(settings.deepseek_api_key)
     )
-    provider = (
+    use_openai = not use_deepseek and (
+        settings.solution_provider == "openai" or (
+            settings.solution_provider == "auto" and bool(settings.openai_api_key)
+        )
+    )
+    provider = DeepSeekSolutionProvider(
+        api_key=settings.deepseek_api_key,
+        model=settings.deepseek_model,
+        base_url=settings.deepseek_base_url,
+        timeout_seconds=settings.deepseek_timeout_seconds,
+        recorder=get_model_operations_registry(),
+    ) if use_deepseek else (
         OpenAISolutionProvider(
             api_key=settings.openai_api_key,
             model=settings.openai_model,

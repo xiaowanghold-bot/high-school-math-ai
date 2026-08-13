@@ -16,8 +16,11 @@ from app.modules.pdf_imports import (
     ImportBatchAnalysisResult,
     ImportBatchQueueResult,
     ImportBatchCommand,
+    ImportBatchLifecycleCommand,
     ImportBatchResult,
+    ImportBatchSummary,
     ImportFileDetail,
+    ImportFileLifecycleCommand,
     ImportQueueStepResult,
     ImportRightsBasis,
     ImportWorkspace,
@@ -65,8 +68,39 @@ def get_import_question_bank() -> QuestionBank:
 
 
 @router.get("", response_model=ImportWorkspace)
-def import_workspace(limit: int = Query(default=30, ge=1, le=100)) -> ImportWorkspace:
-    return get_pdf_import_studio().workspace(limit=limit)
+def import_workspace(
+    limit: int = Query(default=30, ge=1, le=100),
+    lifecycle_state: str = Query(default="active"),
+    file_lifecycle_state: str = Query(default="active"),
+) -> ImportWorkspace:
+    try:
+        return get_pdf_import_studio().workspace(
+            limit=limit,
+            lifecycle_state=lifecycle_state,
+            file_lifecycle_state=file_lifecycle_state,
+        )
+    except PdfImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/batches/{batch_id}/lifecycle", response_model=ImportBatchSummary)
+def change_import_batch_lifecycle(
+    batch_id: str, command: ImportBatchLifecycleCommand
+) -> ImportBatchSummary:
+    try:
+        return get_pdf_import_studio().change_batch_lifecycle(batch_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入批次不存在") from exc
+
+
+@router.post("/files/{file_id}/lifecycle", response_model=ImportFileDetail)
+def change_import_file_lifecycle(
+    file_id: str, command: ImportFileLifecycleCommand
+) -> ImportFileDetail:
+    try:
+        return get_pdf_import_studio().change_file_lifecycle(file_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="导入 PDF 不存在") from exc
 
 
 @router.post("/source-pairs/propose", response_model=SourcePairProposalResult)

@@ -92,3 +92,25 @@ def test_dashboard_exposes_readiness_without_exposing_credentials(tmp_path: Path
     assert routes["lesson_plan_generation"].effective_provider == "local_template"
     assert routes["solution_assistant"].ready is False
     assert routes["private_resource_ocr"].effective_provider == "unavailable"
+
+
+def test_explicit_provider_readiness_uses_its_own_key(tmp_path: Path) -> None:
+    registry = ModelOperationsRegistry(tmp_path / "model-runs.sqlite3")
+    dashboard = registry.dashboard(
+        api_configured=True,
+        model="deepseek-model",
+        reasoning_effort="low",
+        timeout_seconds=90,
+        lesson_plan_provider="openai",
+        question_variant_provider="deepseek",
+        solution_provider="auto",
+        external_provider="deepseek",
+        provider_configuration={
+            "deepseek": (True, "deepseek-model"),
+            "openai": (False, "openai-model"),
+        },
+        ocr_api_configured=False,
+    )
+    routes = {route.feature: route for route in dashboard.routes}
+    assert routes["lesson_plan_generation"].ready is False
+    assert routes["question_variant"].model == "deepseek-model"

@@ -1,5 +1,6 @@
 from .providers import (
     LessonPlanProviderError,
+    DeepSeekLessonPlanProvider,
     OpenAIResponsesLessonPlanProvider,
     TemplateLessonPlanProvider,
 )
@@ -10,6 +11,7 @@ from .schemas import (
     LessonPlanBlockRewriteResult,
     LessonPlanGenerationRequest,
     LessonPlanList,
+    LessonPlanLifecycleCommand,
     LessonPlanUpdateCommand,
     LessonPlanView,
 )
@@ -22,7 +24,9 @@ __all__ = [
     "LessonPlanBlockRewriteResult",
     "LessonPlanGenerationRequest",
     "LessonPlanList",
+    "LessonPlanLifecycleCommand",
     "LessonPlanProviderError",
+    "DeepSeekLessonPlanProvider",
     "LessonPlanStudio",
     "LessonPlanStudioError",
     "LessonPlanUpdateCommand",

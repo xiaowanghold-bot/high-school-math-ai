@@ -27,13 +27,20 @@ def model_operations_dashboard(
     limit: int = Query(default=50, ge=1, le=200),
 ) -> ModelOperationsDashboard:
     settings = get_settings()
+    use_deepseek = bool(settings.deepseek_api_key)
     return get_model_operations_registry().dashboard(
-        api_configured=bool(settings.openai_api_key),
-        model=settings.openai_model,
+        api_configured=use_deepseek or bool(settings.openai_api_key),
+        model=settings.deepseek_model if use_deepseek else settings.openai_model,
         reasoning_effort=settings.openai_reasoning_effort,
         timeout_seconds=settings.openai_timeout_seconds,
         lesson_plan_provider=settings.lesson_plan_provider,
         question_variant_provider=settings.question_variant_provider,
         solution_provider=settings.solution_provider,
+        external_provider="deepseek" if use_deepseek else "openai",
+        provider_configuration={
+            "deepseek": (bool(settings.deepseek_api_key), settings.deepseek_model),
+            "openai": (bool(settings.openai_api_key), settings.openai_model),
+        },
+        ocr_api_configured=bool(settings.openai_api_key),
         limit=limit,
     )

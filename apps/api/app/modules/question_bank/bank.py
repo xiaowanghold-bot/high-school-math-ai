@@ -397,6 +397,7 @@ class QuestionBank:
         difficulty: int | None = None,
         verification_status: str | None = None,
         review_status: str | None = None,
+        knowledge_point_id: str | None = None,
         module: str | None = None,
         work_queue: str | None = None,
         page: int = 1,
@@ -420,9 +421,9 @@ class QuestionBank:
         if query.strip():
             pattern = f"%{query.strip()}%"
             clauses.append(
-                "(stem_plain LIKE ? OR chapter LIKE ? OR section LIKE ? OR source_document LIKE ?)"
+                "(question_id LIKE ? OR stem_plain LIKE ? OR chapter LIKE ? OR section LIKE ? OR source_document LIKE ?)"
             )
-            values.extend([pattern, pattern, pattern, pattern])
+            values.extend([pattern, pattern, pattern, pattern, pattern])
         for column, value in (
             ("chapter", chapter),
             ("difficulty", difficulty),
@@ -432,6 +433,11 @@ class QuestionBank:
             if value is not None and value != "":
                 clauses.append(f"{column} = ?")
                 values.append(value)
+        if knowledge_point_id:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM json_each(questions.knowledge_point_ids) WHERE value = ?)"
+            )
+            values.append(knowledge_point_id)
         if module:
             if module not in MODULE_RULES:
                 raise QuestionBankError("未知的数学模块")

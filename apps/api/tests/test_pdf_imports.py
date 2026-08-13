@@ -11,6 +11,7 @@ from app.modules.pdf_imports import (
     BoundaryCandidateCreate,
     BoundaryCandidateUpdate,
     ImportBatchCommand,
+    ImportFileLifecycleCommand,
     PdfImportError,
     PdfImportStudio,
     SourcePairReviewCommand,
@@ -20,6 +21,12 @@ from app.modules.pdf_imports import (
     StructuredFormulaReviewCommand,
     StructuredQuestionDraftUpdate,
 )
+from app.modules.pdf_imports.text_repair import private_use_glyph_count
+
+
+def test_run_on_exam_text_still_exposes_question_markers() -> None:
+    text = "一、选择题：每题5分。1.已知集合A，求A的子集。2.若函数f(x)单调递增"
+    assert len(PdfImportStudio._marker_spans(text)) == 2
 from app.modules.question_bank import QuestionBank
 
 
@@ -78,6 +85,21 @@ def test_create_batch_preserves_sources_without_analyzing(tmp_path: Path) -> Non
     preview = imports.preview_page(file.file_id, 1, width=700)
     assert preview.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert imports.preview_page(file.file_id, 1, width=700) == preview
+
+
+def test_single_pdf_soft_delete_is_recoverable_and_excluded_from_queue(tmp_path: Path) -> None:
+    imports = studio(tmp_path)
+    created = imports.create_batch(command(), [("a.pdf", pdf_bytes(["1. question"])), ("b.pdf", pdf_bytes(["2. question"]))])
+    removed_id = created.batch.files[0].file_id
+    removed = imports.change_file_lifecycle(removed_id, ImportFileLifecycleCommand(action="trash"))
+    assert removed.lifecycle_state == "trashed"
+    assert imports.workspace().stats.files == 1
+    assert imports.workspace(file_lifecycle_state="trashed").stats.files == 1
+    queued = imports.queue_batch(created.batch.batch_id)
+    assert queued.queued_count == 1
+    restored = imports.change_file_lifecycle(removed_id, ImportFileLifecycleCommand(action="restore"))
+    assert restored.lifecycle_state == "active"
+    assert imports.workspace().stats.files == 2
 
 
 def test_analyze_extracts_page_metrics_and_is_idempotent(tmp_path: Path) -> None:
@@ -1064,3 +1086,9 @@ def test_structured_media_crop_gates_and_delete(tmp_path: Path) -> None:
     imports.delete_media_crop(file_id, draft.draft_id, crop.crop_id)
     assert not path.exists()
     assert imports.structured_question_drafts(file_id).items[0].media_crops == []
+def test_private_use_glyph_detector_flags_broken_pdf_math_text() -> None:
+    broken = "已知 B=x|x²-4x-5<0\uf0e4\uf0e4，则 A∩B"
+    readable = "已知 $B=\\{x\\mid x^2-4x-5<0\\}$，则 $A\\cap B$"
+
+    assert private_use_glyph_count(broken) == 2
+    assert private_use_glyph_count(readable) == 0

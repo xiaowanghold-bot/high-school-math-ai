@@ -14,8 +14,11 @@ from docx import Document
 from PIL import Image, UnidentifiedImageError
 from pypdf import PdfReader
 
+from app.modules.pdf_imports.text_repair import private_use_glyph_count
+
 from app.modules.private_library.schemas import (
     LibraryIngestCommand,
+    LibraryLifecycleCommand,
     QuestionCandidateList,
     QuestionCandidateOption,
     QuestionCandidateUpdate,
@@ -120,13 +123,58 @@ class PrivateLibrary:
                 raise
         return self.get(item_id)
 
-    def list(self, *, limit: int = 50) -> LibraryItemList:
+    def list(self, *, limit: int = 50, lifecycle_state: str = "active") -> LibraryItemList:
+        if lifecycle_state not in {"active", "trashed", "all"}:
+            raise PrivateLibraryError("不支持的资料状态")
+        where = "" if lifecycle_state == "all" else "WHERE lifecycle_state = ?"
+        values = () if lifecycle_state == "all" else (lifecycle_state,)
         with self._connect() as connection:
-            total = connection.execute("SELECT COUNT(*) FROM library_items").fetchone()[0]
+            total = connection.execute(
+                f"SELECT COUNT(*) FROM library_items {where}", values
+            ).fetchone()[0]
             rows = connection.execute(
-                "SELECT * FROM library_items ORDER BY updated_at DESC LIMIT ?", (limit,)
+                f"SELECT * FROM library_items {where} ORDER BY updated_at DESC LIMIT ?",
+                (*values, limit),
             ).fetchall()
         return LibraryItemList(items=[self._summary(row) for row in rows], total=total)
+
+    def change_lifecycle(
+        self, item_id: str, command: LibraryLifecycleCommand
+    ) -> LibraryItemView:
+        target = "trashed" if command.action == "trash" else "active"
+        now = self._now()
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT lifecycle_state FROM library_items WHERE library_item_id = ?",
+                (item_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(item_id)
+            if row["lifecycle_state"] == target:
+                return self.get(item_id)
+            connection.execute(
+                """
+                UPDATE library_items
+                SET lifecycle_state = ?, trashed_at = ?, lifecycle_reason = ?, updated_at = ?
+                WHERE library_item_id = ?
+                """,
+                (
+                    target,
+                    now if target == "trashed" else None,
+                    command.reason.strip(),
+                    now,
+                    item_id,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO library_lifecycle_events
+                (library_item_id, action, actor_id, reason, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (item_id, command.action, command.actor_id, command.reason.strip(), now),
+            )
+        return self.get(item_id)
 
     def get(self, item_id: str) -> LibraryItemView:
         with self._connect() as connection:
@@ -141,6 +189,12 @@ class PrivateLibrary:
         corrected = command.corrected_text.strip()
         if command.confirm and not corrected:
             raise PrivateLibraryError("确认校对前必须提供可用文本")
+        if command.confirm:
+            issue_count = self._unreadable_glyph_count(corrected)
+            if issue_count:
+                raise PrivateLibraryError(
+                    f"文本仍含 {issue_count} 个不可读公式字符，不能确认；请对照原 PDF 重建为 LaTeX，或先运行视觉 OCR"
+                )
         now = self._now()
         with self._connect() as connection:
             row = connection.execute(
@@ -182,6 +236,18 @@ class PrivateLibrary:
         """Run an explicitly authorized OCR provider and return a reviewable draft."""
         if not consent:
             raise PrivateLibraryError("必须明确同意本次将私人文件发送给已配置的 OCR 服务")
+        return self._apply_ocr_provider(
+            item_id, provider=provider, teacher_id=teacher_id, external_consent=True
+        )
+
+    def apply_local_ocr(self, item_id: str, *, provider, teacher_id: str) -> tuple[LibraryItemView, str, list[str]]:
+        return self._apply_ocr_provider(
+            item_id, provider=provider, teacher_id=teacher_id, external_consent=False
+        )
+
+    def _apply_ocr_provider(
+        self, item_id: str, *, provider, teacher_id: str, external_consent: bool
+    ) -> tuple[LibraryItemView, str, list[str]]:
         path, item = self.file_for_download(item_id)
         result = provider.extract(
             path=path,
@@ -231,9 +297,9 @@ class PrivateLibrary:
                 """
                 INSERT INTO library_ocr_runs
                 (library_item_id, provider, teacher_id, external_consent, warning_json, created_at)
-                VALUES (?, ?, ?, 1, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (item_id, provider.name, teacher_id, json.dumps(result.warnings, ensure_ascii=False), now),
+                (item_id, provider.name, teacher_id, int(external_consent), json.dumps(result.warnings, ensure_ascii=False), now),
             )
         return self.get(item_id), provider.name, result.warnings
 
@@ -352,24 +418,31 @@ class PrivateLibrary:
 
     def stats(self) -> LibraryStats:
         with self._connect() as connection:
-            total = connection.execute("SELECT COUNT(*) FROM library_items").fetchone()[0]
+            active_filter = "lifecycle_state = 'active'"
+            total = connection.execute(
+                f"SELECT COUNT(*) FROM library_items WHERE {active_filter}"
+            ).fetchone()[0]
             pending = connection.execute(
-                "SELECT COUNT(*) FROM library_items WHERE text_review_status = 'pending'"
+                f"SELECT COUNT(*) FROM library_items WHERE {active_filter} AND text_review_status = 'pending'"
             ).fetchone()[0]
             confirmed = connection.execute(
-                "SELECT COUNT(*) FROM library_items WHERE text_review_status = 'confirmed'"
+                f"SELECT COUNT(*) FROM library_items WHERE {active_filter} AND text_review_status = 'confirmed'"
             ).fetchone()[0]
             needs_ocr = connection.execute(
-                "SELECT COUNT(*) FROM library_items WHERE extraction_status = 'needs_ocr'"
+                f"SELECT COUNT(*) FROM library_items WHERE {active_filter} AND extraction_status = 'needs_ocr'"
+            ).fetchone()[0]
+            trashed = connection.execute(
+                "SELECT COUNT(*) FROM library_items WHERE lifecycle_state = 'trashed'"
             ).fetchone()[0]
             rows = connection.execute(
-                "SELECT file_kind, COUNT(*) AS count FROM library_items GROUP BY file_kind"
+                f"SELECT file_kind, COUNT(*) AS count FROM library_items WHERE {active_filter} GROUP BY file_kind"
             ).fetchall()
         return LibraryStats(
             total=total,
             pending_review=pending,
             confirmed=confirmed,
             needs_ocr=needs_ocr,
+            trashed=trashed,
             by_file_kind={row["file_kind"]: row["count"] for row in rows},
         )
 
@@ -442,7 +515,13 @@ class PrivateLibrary:
                     break
             text = "\n\n".join(pages)[: self.MAX_TEXT_CHARS]
             status = "extracted" if text.strip() else "needs_ocr"
-            if status == "needs_ocr":
+            unreadable_count = self._unreadable_glyph_count(text)
+            if unreadable_count:
+                status = "needs_ocr"
+                warnings.append(
+                    f"检测到 {unreadable_count} 个 PDF 私有字体/缺失映射字符；自动文本不可直接使用。请以原页预览为准，通过视觉 OCR 或人工 LaTeX 重建后再确认。"
+                )
+            if status == "needs_ocr" and not text.strip():
                 warnings.append("未检测到可复制文本，该 PDF 可能是扫描件，需要 OCR 或人工转录。")
             return {
                 "file_kind": "pdf",
@@ -524,6 +603,9 @@ class PrivateLibrary:
                     version INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
+                    lifecycle_state TEXT NOT NULL DEFAULT 'active',
+                    trashed_at TEXT,
+                    lifecycle_reason TEXT NOT NULL DEFAULT '',
                     UNIQUE(owner_id, source_sha256)
                 );
                 CREATE TABLE IF NOT EXISTS library_text_revisions (
@@ -572,8 +654,52 @@ class PrivateLibrary:
                 );
                 CREATE INDEX IF NOT EXISTS idx_library_candidates_item
                     ON library_question_candidates(library_item_id, source_version, position);
+                CREATE TABLE IF NOT EXISTS library_lifecycle_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    library_item_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(library_item_id) REFERENCES library_items(library_item_id)
+                );
                 """
             )
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(library_items)")
+            }
+            if "lifecycle_state" not in columns:
+                connection.execute(
+                    "ALTER TABLE library_items ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'"
+                )
+            if "trashed_at" not in columns:
+                connection.execute("ALTER TABLE library_items ADD COLUMN trashed_at TEXT")
+            if "lifecycle_reason" not in columns:
+                connection.execute(
+                    "ALTER TABLE library_items ADD COLUMN lifecycle_reason TEXT NOT NULL DEFAULT ''"
+                )
+            rows = connection.execute(
+                "SELECT library_item_id, extracted_text, corrected_text, warnings_json FROM library_items"
+            ).fetchall()
+            for row in rows:
+                unreadable_count = self._unreadable_glyph_count(
+                    row["corrected_text"] or row["extracted_text"]
+                )
+                if not unreadable_count:
+                    continue
+                warning = (
+                    f"检测到 {unreadable_count} 个 PDF 私有字体/缺失映射字符；"
+                    "已撤回错误的可用确认，请以原页预览为准并重建公式。"
+                )
+                warnings = list(dict.fromkeys([*json.loads(row["warnings_json"]), warning]))
+                connection.execute(
+                    """
+                    UPDATE library_items SET extraction_status = 'needs_ocr',
+                        text_review_status = 'pending', warnings_json = ?
+                    WHERE library_item_id = ?
+                    """,
+                    (json.dumps(warnings, ensure_ascii=False), row["library_item_id"]),
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
@@ -600,6 +726,8 @@ class PrivateLibrary:
             extracted_char_count=len(row["extracted_text"]),
             corrected_char_count=len(row["corrected_text"]),
             rights_basis=row["rights_basis"],
+            lifecycle_state=row["lifecycle_state"],
+            trashed_at=row["trashed_at"],
             version=row["version"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -660,6 +788,12 @@ class PrivateLibrary:
             warnings=json.loads(row["warnings_json"]),
             imported_question_id=row["imported_question_id"],
             updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _unreadable_glyph_count(text: str) -> int:
+        return private_use_glyph_count(text) + len(
+            re.findall(r"[�□■]|〔公式符号待核〕", text)
         )
 
     @staticmethod

@@ -9,14 +9,13 @@ type AdminMetrics = {
   removedQuestions: number;
   pendingQuestions: number;
   pendingMath: number;
-  pendingCurriculum: number;
   importFiles: number;
   importPages: number;
   pendingLibrary: number;
   duplicateCandidates: number;
 };
 
-const emptyMetrics: AdminMetrics = { questionTotal: 0, removedQuestions: 0, pendingQuestions: 0, pendingMath: 0, pendingCurriculum: 0, importFiles: 0, importPages: 0, pendingLibrary: 0, duplicateCandidates: 0 };
+const emptyMetrics: AdminMetrics = { questionTotal: 0, removedQuestions: 0, pendingQuestions: 0, pendingMath: 0, importFiles: 0, importPages: 0, pendingLibrary: 0, duplicateCandidates: 0 };
 
 async function readJson(url: string) {
   const response = await fetch(url);
@@ -32,11 +31,10 @@ function AdminDashboard() {
   useEffect(() => {
     Promise.all([
       readJson("/api/v1/question-bank/stats"),
-      readJson("/api/v1/curriculum/reviews?limit=1"),
       readJson("/api/v1/imports"),
       readJson("/api/v1/library/stats"),
       readJson("/api/v1/question-similarity?limit=1"),
-    ]).then(([questions, curriculum, imports, library, similarity]) => {
+    ]).then(([questions, imports, library, similarity]) => {
       const byReview = questions.by_review_status ?? {};
       const byVerification = questions.by_verification_status ?? {};
       const pendingMath = Object.entries(byVerification).reduce((total, [status, count]) => status === "passed" ? total : total + Number(count), 0);
@@ -45,7 +43,6 @@ function AdminDashboard() {
         removedQuestions: Number(questions.removed ?? 0),
         pendingQuestions: Number(byReview.pending ?? 0) + Number(byReview.changes_requested ?? 0),
         pendingMath,
-        pendingCurriculum: Number(curriculum.counts?.pending ?? 0) + Number(curriculum.counts?.changes_requested ?? 0),
         importFiles: Number(imports.stats?.files ?? 0),
         importPages: Number(imports.stats?.pages ?? 0),
         pendingLibrary: Number(library.pending_review ?? 0),
@@ -62,13 +59,13 @@ function AdminDashboard() {
     <section className="admin-metric-grid" aria-label="管理指标">
       <div><span>正常题库</span><strong>{loading ? "—" : metrics.questionTotal}</strong><small>{metrics.removedQuestions} 道已软移出</small></div>
       <div><span>数学核验</span><strong>{loading ? "—" : metrics.pendingMath}</strong><small>未通过独立验证</small></div>
-      <div><span>教材目录</span><strong>{loading ? "—" : metrics.pendingCurriculum}</strong><small>待审核或需修改</small></div>
+      <div><span>教材基线</span><strong>{loading ? "—" : "只读"}</strong><small>官方标准封存</small></div>
       <div><span>PDF 加工</span><strong>{loading ? "—" : metrics.importFiles}</strong><small>{metrics.importPages} 页已登记</small></div>
     </section>
     <section className="admin-work-grid">
       <Link href="/search" className="admin-work-card blue"><span>题</span><div><p>内容质量</p><h2>题库审核与数学核验</h2><small>处理题干、公式、答案、教材映射、来源和发布门禁。</small><strong>{metrics.pendingQuestions + metrics.pendingMath} 项待处理 →</strong></div></Link>
       <Link href="/admin/duplicates" className="admin-work-card blue"><span>比</span><div><p>题库治理</p><h2>重复题与变式关系校对</h2><small>识别完全重复、同题不同来源、同题异解和真正变式，由教师确认关系。</small><strong>{metrics.duplicateCandidates} 组待确认 →</strong></div></Link>
-      <Link href="/curriculum/review" className="admin-work-card green"><span>册</span><div><p>教材治理</p><h2>人教 A 版目录审核</h2><small>维护章节、知识点、核心素养、典型题型与高考优先级。</small><strong>{metrics.pendingCurriculum} 项待处理 →</strong></div></Link>
+      <Link href="/curriculum" className="admin-work-card green"><span>册</span><div><p>教材基线</p><h2>人教 A 版只读目录</h2><small>按教育部课程标准与人教社教材范围封存，供题目标注和教案生成。</small><strong>查看封存目录 →</strong></div></Link>
       <Link href="/imports" className="admin-work-card amber"><span>导</span><div><p>内容生产</p><h2>批量 PDF 加工中心</h2><small>从来源登记、逐页分析、题目边界一直处理到公式与图片校对。</small><strong>{metrics.importFiles} 份 · {metrics.importPages} 页 →</strong></div></Link>
       <Link href="/library" className="admin-work-card slate"><span>资</span><div><p>资料治理</p><h2>私人资料与权利记录</h2><small>查看上传资料、OCR 状态、拆题候选和来源声明。</small><strong>{metrics.pendingLibrary} 项待处理 →</strong></div></Link>
       <Link href="/admin/models" className="admin-work-card purple"><span>模</span><div><p>模型运营</p><h2>调用状态与用量中心</h2><small>查看能力路由、成功率、耗时、token 用量与失败记录，不展示密钥和教学正文。</small><strong>进入运行中心 →</strong></div></Link>

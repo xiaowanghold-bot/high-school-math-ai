@@ -9,13 +9,14 @@ type LibrarySummary = {
   library_item_id: string; title: string; original_filename: string; file_kind: "pdf" | "docx" | "image";
   mime_type: string; size_bytes: number; page_count: number | null; extraction_status: "extracted" | "needs_ocr" | "failed";
   text_review_status: "pending" | "confirmed"; extracted_char_count: number; corrected_char_count: number;
-  rights_basis: "original" | "licensed" | "private_teaching_only"; version: number; updated_at: string;
+  rights_basis: "original" | "licensed" | "private_teaching_only"; lifecycle_state: "active" | "trashed";
+  trashed_at: string | null; version: number; updated_at: string;
 };
 type LibraryItem = LibrarySummary & {
   source_sha256: string; extracted_text: string; corrected_text: string; rights_statement: string;
   adaptation_allowed: boolean; warnings: string[]; review_note: string;
 };
-type LibraryStats = { total: number; pending_review: number; confirmed: number; needs_ocr: number; by_file_kind: Record<string, number> };
+type LibraryStats = { total: number; pending_review: number; confirmed: number; needs_ocr: number; trashed: number; by_file_kind: Record<string, number> };
 type CandidateOption = { key: string; text: string };
 type QuestionCandidate = {
   candidate_id: string; library_item_id: string; source_version: number; position: number;
@@ -53,6 +54,7 @@ export default function LibraryPage() {
   const [candidateBusy, setCandidateBusy] = useState(false);
   const [candidates, setCandidates] = useState<QuestionCandidate[]>([]);
   const [ocrConsent, setOcrConsent] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
   const { auto: setMessage } = useToast();
 
   const filtered = useMemo(() => {
@@ -75,7 +77,7 @@ export default function LibraryPage() {
   }
 
   async function refresh(preferredId?: string) {
-    const [listResponse, statsResponse] = await Promise.all([fetch("/api/v1/library"), fetch("/api/v1/library/stats")]);
+    const [listResponse, statsResponse] = await Promise.all([fetch(`/api/v1/library?lifecycle_state=${showTrash ? "trashed" : "active"}`), fetch("/api/v1/library/stats")]);
     if (!listResponse.ok) throw new Error(await errorText(listResponse));
     if (!statsResponse.ok) throw new Error(await errorText(statsResponse));
     const list = await listResponse.json();
@@ -94,6 +96,11 @@ export default function LibraryPage() {
     window.addEventListener("math-ai:create", receiveCreate);
     return () => window.removeEventListener("math-ai:create", receiveCreate);
   }, []);
+
+  useEffect(() => {
+    setSelected(null);
+    refresh().catch((error: Error) => setMessage(error.message));
+  }, [showTrash]);
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0] ?? null;
@@ -150,6 +157,47 @@ export default function LibraryPage() {
       await refresh(result.item.library_item_id);
       setMessage("OCR 已生成待校对文本；请逐行核对公式、题号和选项后再确认。");
     } catch (error) { setMessage(error instanceof Error ? error.message : "OCR 识别失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function runLocalMathOcr() {
+    if (!selected) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/local-math-ocr`, { method: "POST" });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json(); await refresh(result.item.library_item_id);
+      setMessage("本地数学 OCR 已生成含公式的待校对稿；请对照原页确认后再导出或拆题。");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "本地数学 OCR 失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function sendToStructuredImport() {
+    if (!selected) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/send-to-structured-import`, { method: "POST" });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      setMessage(`已建立可视化重建批次 ${result.batch.batch_id}；将保留原页预览、LaTeX 校正门禁和题图裁剪。`);
+      window.location.href = "/imports";
+    } catch (error) { setMessage(error instanceof Error ? error.message : "转入结构化加工失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function changeLifecycle(action: "trash" | "restore") {
+    if (!selected) return;
+    if (action === "trash" && !window.confirm("移入回收站后将不再出现在正常资料列表，但原 PDF、文本版本和拆题记录仍可恢复。继续吗？")) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/lifecycle`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, reason: action === "trash" ? "用户从资料管理移入回收站" : "用户从资料回收站恢复" }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      setSelected(null); setDraftText(""); await refresh();
+      setMessage(action === "trash" ? "资料已移入回收站，原文件和历史记录均已保留。" : "资料已恢复。" );
+    } catch (error) { setMessage(error instanceof Error ? error.message : "资料状态修改失败"); }
     finally { setBusy(false); }
   }
 
@@ -213,7 +261,7 @@ export default function LibraryPage() {
   return <div className="page-content library-workspace">
     <section className="page-title library-title"><div><p className="eyebrow">个人资料库 · 默认私人</p><h1>先安全收进来，再逐份校对。</h1><p className="subtle">原文件、提取文本与教师修订分开保存；未经明确授权不会进入公共题库或模型训练。</p></div><button className="primary-button" type="button" onClick={() => setUploadOpen((current) => !current)}>{uploadOpen ? "收起上传" : "＋ 上传资料"}</button></section>
 
-    <section className="library-stats"><div><span>私人资料</span><strong>{stats?.total ?? "—"}</strong><small>不会公开检索</small></div><div><span>待人工校对</span><strong>{stats?.pending_review ?? "—"}</strong><small>保留原始提取文本</small></div><div className="confirmed"><span>已确认文本</span><strong>{stats?.confirmed ?? "—"}</strong><small>可进入后续结构化</small></div><div className={stats?.needs_ocr ? "attention" : ""}><span>待 OCR / 转录</span><strong>{stats?.needs_ocr ?? "—"}</strong><small>图片或扫描件</small></div></section>
+    <section className="library-stats"><div><span>私人资料</span><strong>{stats?.total ?? "—"}</strong><small>不会公开检索</small></div><div><span>待人工校对</span><strong>{stats?.pending_review ?? "—"}</strong><small>保留原始提取文本</small></div><div className="confirmed"><span>已确认文本</span><strong>{stats?.confirmed ?? "—"}</strong><small>可进入后续结构化</small></div><div className={stats?.needs_ocr ? "attention" : ""}><span>待 OCR / 转录</span><strong>{stats?.needs_ocr ?? "—"}</strong><small>回收站 {stats?.trashed ?? 0} 份</small></div></section>
 
     {uploadOpen && <form className="library-upload-panel" onSubmit={upload}>
       <div className="library-upload-heading"><span>入</span><div><h2>上传私人资料</h2><p>支持 PDF、DOCX、PNG、JPEG、WebP，单文件不超过 50 MB</p></div></div>
@@ -227,17 +275,18 @@ export default function LibraryPage() {
 
     <ResizableColumns className="library-layout" storageKey="private-library" initialLeftPercent={29} leftMin={240} rightMin={440} collapse="compact" label="调整资料列表与资料校对区宽度">
       <aside className="library-list-panel">
-        <header><div><strong>我的资料</strong><span>{filtered.length} 份</span></div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题或文件名" /></header>
+        <header><div><strong>{showTrash ? "资料回收站" : "我的资料"}</strong><span>{filtered.length} 份</span></div><button type="button" onClick={() => { setShowTrash((current) => !current); setSelected(null); }}>{showTrash ? "返回资料" : `回收站 ${stats?.trashed ?? 0}`}</button><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题或文件名" /></header>
         <div className="library-item-list">{filtered.map((item) => <button className={selected?.library_item_id === item.library_item_id ? "active" : ""} type="button" key={item.library_item_id} onClick={() => openItem(item.library_item_id).catch((error: Error) => setMessage(error.message))}><span className={`library-kind ${item.file_kind}`}>{fileKindLabels[item.file_kind]}</span><div><b>{item.title}</b><p>{item.original_filename}</p><small>{extractionLabels[item.extraction_status]} · {item.text_review_status === "confirmed" ? "教师已确认" : "待校对"} · v{item.version}</small></div></button>)}{!filtered.length && <div className="empty-state"><strong>暂无私人资料</strong><p>从上方上传第一份 PDF、Word 或图片。</p></div>}</div>
       </aside>
 
       <main className="library-review-panel">
         {!selected ? <div className="library-empty"><span>资</span><h2>上传资料后从这里开始校对</h2><p>系统保留原文件和自动提取结果；教师修订会生成新版本，不会覆盖原文。</p></div> : <>
-          <header className="library-document-heading"><div><p>{fileKindLabels[selected.file_kind]} · {formatBytes(selected.size_bytes)}{selected.page_count ? ` · ${selected.page_count} 页` : ""}</p><h2>{selected.title}</h2><small>{selected.original_filename}</small></div><div><span className={`library-review-status ${selected.text_review_status}`}>{selected.text_review_status === "confirmed" ? "教师已确认" : "待人工校对"}</span><a href={`/api/v1/library/${selected.library_item_id}/file`}>下载原文件</a></div></header>
+          <header className="library-document-heading"><div><p>{fileKindLabels[selected.file_kind]} · {formatBytes(selected.size_bytes)}{selected.page_count ? ` · ${selected.page_count} 页` : ""}</p><h2>{selected.title}</h2><small>{selected.original_filename}</small></div><div><span className={`library-review-status ${selected.text_review_status}`}>{selected.text_review_status === "confirmed" ? "教师已确认" : "待人工校对"}</span><a href={`/api/v1/library/${selected.library_item_id}/file`} target="_blank">打开原文件</a>{selected.corrected_text && selected.extraction_status !== "needs_ocr" && <><a href={`/api/v1/library/${selected.library_item_id}/export?format=docx`}>导出 Word</a><a href={`/api/v1/library/${selected.library_item_id}/export?format=pdf`}>导出 PDF</a></>}<button type="button" onClick={() => changeLifecycle(selected.lifecycle_state === "trashed" ? "restore" : "trash")}>{selected.lifecycle_state === "trashed" ? "恢复资料" : "移入回收站"}</button></div></header>
           <section className="library-privacy-strip"><div><span>可见范围</span><strong>仅本人</strong></div><div><span>模型训练</span><strong>禁止</strong></div><div><span>改编权限</span><strong>{selected.adaptation_allowed ? "已声明允许" : "未授权"}</strong></div><div><span>权利依据</span><strong>{rightsLabels[selected.rights_basis]}</strong></div></section>
           {selected.warnings.map((warning) => <p className="library-warning" key={warning}>{warning}</p>)}
-          {selected.extraction_status === "needs_ocr" && <section className="library-ocr-panel"><div><strong>扫描件或图片需要 OCR</strong><p>仅在本次勾选后，原文件才会发送给当前配置的大模型服务。识别结果仍是私人待校对文本。</p></div><label><input type="checkbox" checked={ocrConsent} onChange={(event) => setOcrConsent(event.target.checked)} /><span>我同意本次发送该文件用于 OCR</span></label><button type="button" disabled={busy || !ocrConsent} onClick={runOcr}>{busy ? "识别中…" : "开始 OCR"}</button></section>}
+          {selected.extraction_status === "needs_ocr" && <section className="library-ocr-panel"><div><strong>检测到 PDF 私有字体乱码</strong><p>原页清晰但文本映射已损坏。优先运行本地数学 OCR 生成含 LaTeX 的校对稿；文件不会离开本机。</p></div>{selected.file_kind === "pdf" && <button type="button" disabled={busy} onClick={runLocalMathOcr}>{busy ? "正在本地识别…" : "本地数学 OCR 重建"}</button>}{selected.file_kind === "pdf" && <button type="button" disabled={busy} onClick={sendToStructuredImport}>转入逐题结构化</button>}<label><input type="checkbox" checked={ocrConsent} onChange={(event) => setOcrConsent(event.target.checked)} /><span>备选：同意本次发送该文件到外部 OCR</span></label><button type="button" disabled={busy || !ocrConsent} onClick={runOcr}>外部视觉 OCR</button></section>}
           {selected.file_kind === "image" && <div className="library-image-preview"><img src={`/api/v1/library/${selected.library_item_id}/file`} alt={selected.title} /></div>}
+          {selected.file_kind === "pdf" && <div className="library-image-preview"><iframe title={`${selected.title} 原 PDF 可读预览`} src={`/api/v1/library/${selected.library_item_id}/file#toolbar=1&view=FitH`} /></div>}
           <div className="library-text-compare">
             <section><header><div><strong>自动提取原文</strong><small>{selected.extracted_char_count} 字符 · 不可覆盖</small></div><span>{extractionLabels[selected.extraction_status]}</span></header><pre>{selected.extracted_text || "尚无自动提取文字。请在右侧根据原文件进行人工转录。"}</pre></section>
             <section className="library-correction"><header><div><strong>教师校对文本</strong><small>{draftText.length} 字符 · 保存即生成新版本</small></div><span>v{selected.version}</span></header><textarea value={draftText} onChange={(event) => setDraftText(event.target.value)} placeholder="在此修正识别错误、补充公式或人工转录图片内容……" /></section>

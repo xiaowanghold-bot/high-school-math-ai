@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.modules.model_operations import ModelRunRecorder, NullModelRunRecorder
+from app.modules.deepseek import DeepSeekClientError, DeepSeekJsonClient
 from app.modules.question_bank.schemas import QuestionDetail, QuestionOptionDraft
 from app.modules.question_variants.schemas import (
     GeneratedQuestionVariant,
@@ -186,14 +187,7 @@ class OpenAIQuestionVariantProvider:
             prompt_version="question-variant-v1",
             actor_id=context.request.teacher_id,
         ) as run:
-            try:
-                with urlopen(request, timeout=self.timeout_seconds) as response:
-                    raw = json.loads(response.read().decode("utf-8"))
-            except HTTPError as exc:
-                details = exc.read().decode("utf-8", errors="replace")[:500]
-                raise QuestionVariantProviderError(f"OpenAI 返回 HTTP {exc.code}：{details}") from exc
-            except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-                raise QuestionVariantProviderError(f"OpenAI 题目变式生成失败：{exc}") from exc
+            raw = self._request(payload, request)
             run.capture_response(raw)
             if raw.get("status") == "incomplete":
                 raise QuestionVariantProviderError("OpenAI 返回未完成结果，请缩短补充要求后重试")
@@ -209,6 +203,18 @@ class OpenAIQuestionVariantProvider:
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 raise QuestionVariantProviderError(f"OpenAI 返回内容不符合题目结构：{exc}") from exc
             return generated
+
+    def _request(self, payload: dict, request: Request) -> dict:
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")[:500]
+            raise QuestionVariantProviderError(
+                f"OpenAI 返回 HTTP {exc.code}：{details}"
+            ) from exc
+        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise QuestionVariantProviderError(f"OpenAI 题目变式生成失败：{exc}") from exc
 
     @staticmethod
     def _extract_output_text(payload: dict) -> str:
@@ -250,3 +256,28 @@ class OpenAIQuestionVariantProvider:
                 "required": list(properties),
             },
         }
+
+
+class DeepSeekQuestionVariantProvider(OpenAIQuestionVariantProvider):
+    name = "deepseek"
+
+    def __init__(
+        self, *, api_key: str, model: str, base_url: str,
+        timeout_seconds: int = 90, recorder=None, **_kwargs,
+    ) -> None:
+        self.model = model
+        self.recorder = recorder or NullModelRunRecorder()
+        self.client = DeepSeekJsonClient(
+            api_key=api_key, model=model, base_url=base_url,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def _request(self, payload: dict, request: Request) -> dict:
+        try:
+            return self.client.request(
+                instructions=payload["instructions"],
+                input_text=str(payload["input"]), action="题目变式生成",
+                output_schema=payload.get("text", {}).get("format"),
+            )
+        except DeepSeekClientError as exc:
+            raise QuestionVariantProviderError(str(exc)) from exc

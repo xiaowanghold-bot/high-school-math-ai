@@ -26,6 +26,8 @@ from .schemas import (
     ImportBatchAnalysisResult,
     ImportBatchQueueResult,
     ImportBatchCommand,
+    ImportBatchLifecycleCommand,
+    ImportFileLifecycleCommand,
     ImportBatchResult,
     ImportBatchSummary,
     ImportFileDetail,
@@ -79,6 +81,7 @@ class PdfImportStudio:
 
     _QUESTION_MARKERS = (
         re.compile(r"(?m)^\s*(?:例|题)?\s*\d{1,3}\s*[\.．、)]\s*"),
+        re.compile(r"(?<![\d.])(?:[1-9]|1\d)\.(?=[\u4e00-\u9fff])"),
         re.compile(r"【\s*(?:例|题)\s*\d{1,3}\s*】"),
         re.compile(r"第\s*\d{1,3}\s*题"),
         re.compile(r"(?<!\d)\d{1,3}\s*[（(]\s*20\d{2}\s*[·•]")
@@ -186,13 +189,24 @@ class PdfImportStudio:
             message=f"已登记 {len(prepared)} 份 PDF；分析前不会生成拆题候选。",
         )
 
-    def workspace(self, *, limit: int = 30) -> ImportWorkspace:
+    def workspace(
+        self, *, limit: int = 30, lifecycle_state: str = "active",
+        file_lifecycle_state: str = "active",
+    ) -> ImportWorkspace:
+        if lifecycle_state not in {"active", "trashed"}:
+            raise PdfImportError("不支持的导入批次状态")
+        if file_lifecycle_state not in {"active", "trashed", "all"}:
+            raise PdfImportError("不支持的 PDF 文件状态")
         with self._connect() as connection:
+            file_filter = "" if file_lifecycle_state == "all" else "AND EXISTS (SELECT 1 FROM import_files f WHERE f.batch_id = import_batches.batch_id AND f.lifecycle_state = ?)"
+            params = (lifecycle_state, limit) if file_lifecycle_state == "all" else (lifecycle_state, file_lifecycle_state, limit)
             batch_rows = connection.execute(
-                "SELECT batch_id FROM import_batches ORDER BY created_at DESC LIMIT ?", (limit,)
+                f"SELECT batch_id FROM import_batches WHERE lifecycle_state = ? {file_filter} ORDER BY created_at DESC LIMIT ?", params
             ).fetchall()
+            stats_file_filter = "" if file_lifecycle_state == "all" else "AND import_files.lifecycle_state = ?"
+            stats_params = (lifecycle_state,) if file_lifecycle_state == "all" else (lifecycle_state, file_lifecycle_state)
             values = connection.execute(
-                """
+                f"""
                 SELECT COUNT(DISTINCT batch_id) AS batches, COUNT(*) AS files,
                        COALESCE(SUM(page_count), 0) AS pages,
                        COALESCE(SUM(analyzed_page_count), 0) AS analyzed_pages,
@@ -202,13 +216,54 @@ class PdfImportStudio:
                        COALESCE(SUM(scan_page_count), 0) AS scan_pages,
                        COALESCE(SUM(question_marker_count), 0) AS question_markers,
                        COALESCE(SUM(estimated_question_count), 0) AS estimated_questions
-                FROM import_files
-                """
+                FROM import_files JOIN import_batches USING(batch_id)
+                WHERE import_batches.lifecycle_state = ? {stats_file_filter}
+                """, stats_params
             ).fetchone()
         return ImportWorkspace(
             stats=ImportWorkspaceStats(**dict(values)),
-            batches=[self._batch(row["batch_id"], include_files=True) for row in batch_rows],
+            batches=[self._batch(row["batch_id"], include_files=True, file_lifecycle_state=file_lifecycle_state) for row in batch_rows],
         )
+
+    def change_batch_lifecycle(
+        self, batch_id: str, command: ImportBatchLifecycleCommand
+    ) -> ImportBatchSummary:
+        target = "trashed" if command.action == "trash" else "active"
+        now = self._now()
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT lifecycle_state FROM import_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(batch_id)
+            connection.execute(
+                "UPDATE import_batches SET lifecycle_state = ?, trashed_at = ?, lifecycle_reason = ?, updated_at = ? WHERE batch_id = ?",
+                (target, now if target == "trashed" else None, command.reason.strip(), now, batch_id),
+            )
+            connection.execute(
+                "INSERT INTO import_batch_lifecycle_events (batch_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+                (batch_id, command.action, command.actor_id, command.reason.strip(), now),
+            )
+        return self._batch(batch_id, include_files=True)
+
+    def change_file_lifecycle(
+        self, file_id: str, command: ImportFileLifecycleCommand
+    ) -> ImportFileDetail:
+        target = "trashed" if command.action == "trash" else "active"
+        now = self._now()
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM import_files WHERE file_id = ?", (file_id,)).fetchone()
+            if row is None:
+                raise KeyError(file_id)
+            connection.execute(
+                "UPDATE import_files SET lifecycle_state = ?, trashed_at = ?, lifecycle_reason = ?, updated_at = ? WHERE file_id = ?",
+                (target, now if target == "trashed" else None, command.reason.strip(), now, file_id),
+            )
+            connection.execute(
+                "INSERT INTO import_file_lifecycle_events (file_id, action, actor_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+                (file_id, command.action, command.actor_id, command.reason.strip(), now),
+            )
+        return self.inspect(file_id)
 
     def source_pairing(self, file_id: str) -> SourcePairingFileView:
         """Return the complete pairing state for one source document."""
@@ -249,7 +304,7 @@ class PdfImportStudio:
         """Discover complementary source documents without overwriting review decisions."""
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM import_files ORDER BY created_at, original_filename"
+                "SELECT * FROM import_files WHERE lifecycle_state = 'active' ORDER BY created_at, original_filename"
             ).fetchall()
             classified = [
                 (row, *self._infer_source_role(connection, row)) for row in rows
@@ -722,7 +777,7 @@ class PdfImportStudio:
             queued = connection.execute(
                 f"""
                 UPDATE import_files SET status = 'queued', error_message = '', updated_at = ?
-                WHERE batch_id = ? AND status IN ({placeholders})
+                WHERE batch_id = ? AND lifecycle_state = 'active' AND status IN ({placeholders})
                 """,
                 (self._now(), batch_id, *statuses),
             ).rowcount
@@ -747,7 +802,7 @@ class PdfImportStudio:
             paused = connection.execute(
                 """
                 UPDATE import_files SET status = 'paused', updated_at = ?
-                WHERE batch_id = ? AND status = 'queued'
+                WHERE batch_id = ? AND lifecycle_state = 'active' AND status = 'queued'
                 """,
                 (self._now(), batch_id),
             ).rowcount
@@ -764,7 +819,7 @@ class PdfImportStudio:
             row = connection.execute(
                 """
                 SELECT file_id FROM import_files
-                WHERE batch_id = ? AND status = 'queued'
+                WHERE batch_id = ? AND lifecycle_state = 'active' AND status = 'queued'
                 ORDER BY created_at, original_filename LIMIT 1
                 """,
                 (batch_id,),
@@ -1670,16 +1725,19 @@ class PdfImportStudio:
             return {}
         return estimates
 
-    def _batch(self, batch_id: str, *, include_files: bool) -> ImportBatchSummary:
+    def _batch(
+        self, batch_id: str, *, include_files: bool, file_lifecycle_state: str = "all"
+    ) -> ImportBatchSummary:
         with self._connect() as connection:
             batch = connection.execute(
                 "SELECT * FROM import_batches WHERE batch_id = ?", (batch_id,)
             ).fetchone()
             if batch is None:
                 raise KeyError(batch_id)
+            where = "batch_id = ?" if file_lifecycle_state == "all" else "batch_id = ? AND lifecycle_state = ?"
+            params = (batch_id,) if file_lifecycle_state == "all" else (batch_id, file_lifecycle_state)
             rows = connection.execute(
-                "SELECT * FROM import_files WHERE batch_id = ? ORDER BY created_at, original_filename",
-                (batch_id,),
+                f"SELECT * FROM import_files WHERE {where} ORDER BY created_at, original_filename", params
             ).fetchall()
         files = [self._file(row) for row in rows]
         page_count = sum(item.page_count for item in files)
@@ -1690,6 +1748,8 @@ class PdfImportStudio:
             rights_basis=batch["rights_basis"],
             rights_statement=batch["rights_statement"],
             owner_id=batch["owner_id"],
+            lifecycle_state=batch["lifecycle_state"],
+            trashed_at=batch["trashed_at"],
             file_count=len(files),
             registered_count=sum(item.status == "registered" for item in files),
             queued_count=sum(item.status == "queued" for item in files),
@@ -1713,6 +1773,7 @@ class PdfImportStudio:
             file_id=row["file_id"], batch_id=row["batch_id"],
             original_filename=row["original_filename"], size_bytes=row["size_bytes"],
             sha256=row["sha256"], page_count=row["page_count"], status=row["status"],
+            lifecycle_state=row["lifecycle_state"], trashed_at=row["trashed_at"],
             analysis_attempts=row["analysis_attempts"],
             analyzed_page_count=row["analyzed_page_count"], text_page_count=row["text_page_count"],
             progress_percent=(
@@ -2193,7 +2254,9 @@ class PdfImportStudio:
                 CREATE TABLE IF NOT EXISTS import_batches (
                     batch_id TEXT PRIMARY KEY, title TEXT NOT NULL, rights_basis TEXT NOT NULL,
                     rights_statement TEXT NOT NULL, owner_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    lifecycle_state TEXT NOT NULL DEFAULT 'active', trashed_at TEXT,
+                    lifecycle_reason TEXT NOT NULL DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS import_files (
                     file_id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, original_filename TEXT NOT NULL,
@@ -2210,6 +2273,16 @@ class PdfImportStudio:
                     FOREIGN KEY(batch_id) REFERENCES import_batches(batch_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_import_files_batch ON import_files(batch_id);
+                CREATE TABLE IF NOT EXISTS import_file_lifecycle_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT, file_id TEXT NOT NULL,
+                    action TEXT NOT NULL, actor_id TEXT NOT NULL, reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL, FOREIGN KEY(file_id) REFERENCES import_files(file_id)
+                );
+                CREATE TABLE IF NOT EXISTS import_batch_lifecycle_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id TEXT NOT NULL,
+                    action TEXT NOT NULL, actor_id TEXT NOT NULL, reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL, FOREIGN KEY(batch_id) REFERENCES import_batches(batch_id)
+                );
                 CREATE TABLE IF NOT EXISTS import_pages (
                     page_id TEXT PRIMARY KEY, file_id TEXT NOT NULL, page_number INTEGER NOT NULL,
                     width_points REAL NOT NULL, height_points REAL NOT NULL, extracted_text TEXT NOT NULL,
@@ -2315,11 +2388,21 @@ class PdfImportStudio:
                     ON import_structured_media_crops(draft_id, created_at);
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(import_batches)")}
+            if "lifecycle_state" not in columns:
+                connection.execute("ALTER TABLE import_batches ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'")
+            if "trashed_at" not in columns:
+                connection.execute("ALTER TABLE import_batches ADD COLUMN trashed_at TEXT")
+            if "lifecycle_reason" not in columns:
+                connection.execute("ALTER TABLE import_batches ADD COLUMN lifecycle_reason TEXT NOT NULL DEFAULT ''")
             self._migrate_source_item_match_schema(connection)
             self._ensure_column(connection, "import_files", "image_page_count", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_files", "embedded_image_count", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_files", "analysis_attempts", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_files", "estimated_question_count", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(connection, "import_files", "lifecycle_state", "TEXT NOT NULL DEFAULT 'active'")
+            self._ensure_column(connection, "import_files", "trashed_at", "TEXT")
+            self._ensure_column(connection, "import_files", "lifecycle_reason", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "import_pages", "embedded_image_count", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "import_structured_question_drafts", "formula_check_json", "TEXT")
             self._ensure_column(connection, "import_structured_question_drafts", "formula_checked_signature", "TEXT NOT NULL DEFAULT ''")

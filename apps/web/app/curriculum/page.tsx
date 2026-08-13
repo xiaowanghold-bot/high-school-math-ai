@@ -55,7 +55,7 @@ export default function CurriculumPage() {
     <section className="page-title">
       <div><p className="eyebrow">教材备课</p><h1>人教 A 版 · {selectedVolume?.name || "课程目录"}</h1><p className="subtle">按册次、章、节和知识点进入备课工作区。</p></div>
       <div className="curriculum-page-actions">
-        <a className="review-secondary-button" href={`/curriculum/review?volume=${encodeURIComponent(selectedVolume?.name || "")}`}>审核本册目录</a>
+        <span className="review-secondary-button" aria-label="只读封存教材基线">官方基线 · 只读封存</span>
         <a className="primary-button" href="/lesson-plans">进入教案生成</a>
       </div>
     </section>
@@ -66,8 +66,8 @@ export default function CurriculumPage() {
         {volumes.map((volume) => <button className={selectedVolume?.node_id === volume.node_id ? "active" : ""} type="button" key={volume.node_id} onClick={() => setSelectedVolumeId(volume.node_id)}><strong>{volume.name}</strong><span>{volume.children.length} 章</span></button>)}
       </nav>
       <div className="curriculum-review-banner">
-        <strong>{selectedVolume?.status === "teacher_approved" ? "教师已终审" : "待教师终审"}</strong>
-        <span>本册共 {chapters.length} 章、{sectionCount} 节、{knowledgePointCount} 个知识点。审核台中的修订会同步用于备课，原始目录始终保留。</span>
+        <strong>官方标准基线 · 只读</strong>
+        <span>本册共 {chapters.length} 章、{sectionCount} 节、{knowledgePointCount} 个知识点。目录按教育部课程标准与人教 A 版教材范围封存，用于题目标注和教案生成，不再设置人工教材审核。</span>
       </div>
     </>}
     <div className="curriculum-grid">

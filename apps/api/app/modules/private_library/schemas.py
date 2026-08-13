@@ -9,6 +9,7 @@ RightsBasis = Literal["original", "licensed", "private_teaching_only"]
 LibraryFileKind = Literal["pdf", "docx", "image"]
 ExtractionStatus = Literal["extracted", "needs_ocr", "failed"]
 TextReviewStatus = Literal["pending", "confirmed"]
+LibraryLifecycleState = Literal["active", "trashed"]
 CandidateStatus = Literal["draft", "discarded", "imported"]
 QuestionType = Literal["single_choice", "multiple_choice", "fill_blank", "open_response"]
 
@@ -37,6 +38,12 @@ class LibraryOCRResult(BaseModel):
     item: "LibraryItemView"
     provider: str
     warnings: list[str] = Field(default_factory=list)
+
+
+class LibraryLifecycleCommand(BaseModel):
+    action: Literal["trash", "restore"]
+    actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+    reason: str = Field(default="用户删除", max_length=2000)
 
 
 class QuestionCandidateOption(BaseModel):
@@ -102,6 +109,8 @@ class LibraryItemSummary(BaseModel):
     extracted_char_count: int
     corrected_char_count: int
     rights_basis: RightsBasis
+    lifecycle_state: LibraryLifecycleState = "active"
+    trashed_at: str | None = None
     visibility: Literal["private"] = "private"
     public_search_allowed: bool = False
     model_training_allowed: bool = False
@@ -130,4 +139,5 @@ class LibraryStats(BaseModel):
     pending_review: int
     confirmed: int
     needs_ocr: int
+    trashed: int = 0
     by_file_kind: dict[str, int]

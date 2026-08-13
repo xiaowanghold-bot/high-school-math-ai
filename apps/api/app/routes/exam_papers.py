@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -15,6 +16,7 @@ from app.modules.exam_papers import (
     ExamPaperEdition,
     ExamPaperExportFormat,
     ExamPaperList,
+    ExamPaperLifecycleCommand,
     ExamPaperProposal,
     ExamPaperStudio,
     ExamPaperStudioError,
@@ -66,8 +68,16 @@ def get_exam_paper_renderer() -> ExamPaperDocumentRenderer:
 
 
 @router.get("", response_model=ExamPaperList)
-def list_exam_papers(limit: int = Query(default=30, ge=1, le=100)) -> ExamPaperList:
-    return get_exam_paper_studio().list(limit=limit)
+def list_exam_papers(limit: int = Query(default=30, ge=1, le=100), lifecycle_state: Literal["active", "trashed"] = Query(default="active")) -> ExamPaperList:
+    return get_exam_paper_studio().list(limit=limit, lifecycle_state=lifecycle_state)
+
+
+@router.post("/{paper_id}/lifecycle", response_model=ExamPaperView)
+def change_exam_paper_lifecycle(paper_id: str, command: ExamPaperLifecycleCommand) -> ExamPaperView:
+    try:
+        return get_exam_paper_studio().change_lifecycle(paper_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="试卷不存在") from exc
 
 
 @router.post("", response_model=ExamPaperView, status_code=201)

@@ -160,3 +160,49 @@ class OpenAIResourceOCRProvider:
                 "required": ["text", "warnings"],
             },
         }
+
+
+class LocalMathOCRProvider:
+    """Rebuild readable Chinese and LaTeX from rendered pages without uploading files."""
+
+    name = "local_math_ocr"
+
+    def extract(
+        self, *, path: Path, mime_type: str, filename: str, teacher_id: str
+    ) -> OCRTextResult:
+        if mime_type != "application/pdf":
+            raise OCRProviderError("本地数学 OCR 当前只支持 PDF")
+        try:
+            import io
+            import pymupdf
+            from PIL import Image
+            from app.modules.pdf_imports.math_ocr import _get_engine
+
+            engine = _get_engine()
+            document = pymupdf.open(path)
+            pages: list[str] = []
+            for index, page in enumerate(document):
+                pixmap = page.get_pixmap(dpi=220, alpha=False)
+                image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
+                recognized = engine.recognize_page(
+                    image,
+                    page_number=index,
+                    page_id=f"library-{path.stem}-{index + 1}",
+                    table_as_image=True,
+                )
+                elements = sorted(
+                    (item for item in recognized.elements if str(getattr(item, "text", "")).strip()),
+                    key=lambda item: (float(item.box[1]), float(item.box[0])),
+                )
+                text = "\n".join(str(item.text).strip() for item in elements)
+                pages.append(f"【第 {index + 1} 页】\n{text}")
+        except OCRProviderError:
+            raise
+        except Exception as exc:  # pragma: no cover - model/runtime boundary
+            raise OCRProviderError(f"本地数学 OCR 失败：{exc}") from exc
+        return OCRTextResult(
+            text="\n\n".join(pages),
+            warnings=[
+                "本地数学 OCR 已生成含 LaTeX 的可读草稿；公式、选项和图表仍须对照原页确认。"
+            ],
+        )

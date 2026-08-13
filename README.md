@@ -1,5 +1,7 @@
 # 高中数学 AI 备课工作台
 
+DeepSeek 可用于教案生成、题目变式和解题助手：在本地且已被 Git 忽略的 `.env` 中设置 `MATH_AI_DEEPSEEK_API_KEY`。`auto` 模式会依次选择 DeepSeek、OpenAI、确定性的本地回退；默认使用当前模型 `deepseek-v4-flash`。密钥不得提交到仓库。
+
 教师优先的人教 A 版高中数学备课、搜题、解题、组卷与导出工具。
 
 当前开发边界、后续阶段与商业 V1 完成标准见

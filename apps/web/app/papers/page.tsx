@@ -9,8 +9,8 @@ type Question = { question_id: string; review_status: string; question_type: str
 type PaperQuestionSnapshot = Question & { stem_latex: string | null; images: { asset_id: string }[] };
 type PaperItem = { item_id: string; position: number; section_title: string; score: number; question: PaperQuestionSnapshot };
 type Breakdown = { label: string; question_count: number; score: number };
-type Paper = { exam_paper_id: string; status: string; version: number; title: string; duration_minutes: number; instructions: string; total_score: number; items: PaperItem[]; chapter_breakdown: Breakdown[]; difficulty_breakdown: Breakdown[]; warnings: string[]; updated_at: string };
-type PaperSummary = { exam_paper_id: string; title: string; version: number; duration_minutes: number; total_score: number; question_count: number; updated_at: string };
+type Paper = { exam_paper_id: string; status: string; lifecycle_state: "active" | "trashed"; version: number; title: string; duration_minutes: number; instructions: string; total_score: number; items: PaperItem[]; chapter_breakdown: Breakdown[]; difficulty_breakdown: Breakdown[]; warnings: string[]; updated_at: string };
+type PaperSummary = { exam_paper_id: string; title: string; lifecycle_state: "active" | "trashed"; version: number; duration_minutes: number; total_score: number; question_count: number; updated_at: string };
 type DraftItem = { question: Question; score: number };
 type PaperProposal = { target_score: number; actual_score: number; average_difficulty: number; items: { question: Question; score: number; selection_reason: string }[]; chapter_breakdown: Breakdown[]; difficulty_breakdown: Breakdown[]; warnings: string[] };
 type PaperTemplateSection = { section_title: string; question_type: string; count: number; item_scores: number[] };
@@ -53,6 +53,7 @@ export default function PapersPage() {
   const [approvedOnly, setApprovedOnly] = useState(true);
   const [activeTemplateId, setActiveTemplateId] = useState("");
   const [isDirty, setIsDirty] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
 
   const totalScore = useMemo(() => draftItems.reduce((sum, item) => sum + Number(item.score || 0), 0), [draftItems]);
   const canExport = Boolean(selected && !isDirty);
@@ -86,7 +87,7 @@ export default function PapersPage() {
   }
 
   async function loadPapers(openFirst = false) {
-    const response = await fetch(`${apiBase}/api/v1/exam-papers`);
+    const response = await fetch(`${apiBase}/api/v1/exam-papers?lifecycle_state=${showTrash ? "trashed" : "active"}`);
     if (!response.ok) throw new Error(await errorText(response));
     const payload = await response.json(); setPapers(payload.items);
     if (openFirst && payload.items[0]) await openPaper(payload.items[0].exam_paper_id);
@@ -107,7 +108,13 @@ export default function PapersPage() {
     return () => window.removeEventListener("math-ai:create", receiveCreate);
   }, []);
 
+  useEffect(() => {
+    setSelected(null); setDraftItems([]);
+    loadPapers().catch((error: Error) => setMessage(error.message));
+  }, [showTrash]);
+
   function newPaper() { setSelected(null); setTitle("高中数学阶段检测"); setDuration(90); setInstructions(defaultInstructions); setDraftItems([]); setDraftWarnings(["保存试卷后会固定题目和图片快照。"]); setActiveTemplateId(""); setAutoTarget(50); setAutoProfile("balanced"); setAutoTypeCounts({ single_choice: 4, open_response: 2 }); setQuery(""); setIsDirty(false); setMessage("已创建空白组卷草稿，请从左侧加入题目。"); }
+  async function changeLifecycle(action: "trash" | "restore") { if (!selected) return; if (action === "trash" && !window.confirm("试卷将移入回收站，题目快照、版本和导出记录均保留。继续吗？")) return; const response = await fetch(`${apiBase}/api/v1/exam-papers/${selected.exam_paper_id}/lifecycle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, reason: action === "trash" ? "用户移入试卷回收站" : "用户恢复试卷" }) }); if (!response.ok) throw new Error(await errorText(response)); setSelected(null); setDraftItems([]); await loadPapers(); setMessage(action === "trash" ? "试卷已移入回收站，可随时恢复。" : "试卷已恢复。" ); }
   function addQuestion(question: Question) { setDraftItems((current) => [...current, { question, score: ["single_choice", "multiple_choice", "fill_blank"].includes(question.question_type) ? 5 : 12 }]); setIsDirty(true); }
   function moveItem(index: number, direction: -1 | 1) { const target = index + direction; if (target < 0 || target >= draftItems.length) return; setDraftItems((current) => { const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next; }); setIsDirty(true); }
   function exportUrl(edition: ExportEdition["id"], format: "docx" | "pdf") { return selected ? `${apiBase}/api/v1/exam-papers/${selected.exam_paper_id}/export?format=${format}&edition=${edition}` : "#"; }
@@ -170,9 +177,9 @@ export default function PapersPage() {
           <div className="paper-candidates">{filteredQuestions.map((question) => <button type="button" key={question.question_id} onClick={() => addQuestion(question)}><span>＋</span><div><b>{questionTypeLabels[question.question_type] ?? "解答题"} · 难度 {question.difficulty}</b><p>{question.stem_plain}</p><small>{question.chapter} · {question.review_status === "approved" ? "教师已审核" : "待教师审核"}</small></div></button>)}{!filteredQuestions.length && <p>没有更多匹配题目。</p>}</div>
           <button className="lesson-generate-button" disabled={busy || !title.trim() || !draftItems.length || Boolean(selected && !isDirty)} type="submit">{busy ? "正在保存题目快照…" : selected ? isDirty ? "保存为新版本" : "当前版本已保存" : "创建并启用导出"}</button>
         </form>
-        <section className="lesson-history"><header><strong>最近试卷</strong><span>{papers.length} 份</span></header>{papers.map((paper) => <button className={selected?.exam_paper_id === paper.exam_paper_id ? "active" : ""} type="button" key={paper.exam_paper_id} onClick={() => openPaper(paper.exam_paper_id).catch((error: Error) => setMessage(error.message))}><span>{paper.question_count}</span><div><b>{paper.title}</b><small>v{paper.version} · {scoreText(paper.total_score)} 分 · {paper.duration_minutes} 分钟</small></div></button>)}{!papers.length && <p>尚未保存试卷</p>}</section>
+        <section className="lesson-history"><header><strong>{showTrash ? "试卷回收站" : "最近试卷"}</strong><button type="button" onClick={() => { setShowTrash((current) => !current); setSelected(null); setDraftItems([]); }}>{showTrash ? "返回" : "回收站"}</button><span>{papers.length} 份</span></header>{papers.map((paper) => <button className={selected?.exam_paper_id === paper.exam_paper_id ? "active" : ""} type="button" key={paper.exam_paper_id} onClick={() => openPaper(paper.exam_paper_id).catch((error: Error) => setMessage(error.message))}><span>{paper.question_count}</span><div><b>{paper.title}</b><small>v{paper.version} · {scoreText(paper.total_score)} 分 · {paper.duration_minutes} 分钟</small></div></button>)}{!papers.length && <p>尚未保存试卷</p>}</section>
       </aside>
-      <main className="lesson-editor paper-editor">
+      <main className="lesson-editor paper-editor">{selected && <div className="paper-lifecycle-actions"><button type="button" onClick={() => changeLifecycle(selected.lifecycle_state === "trashed" ? "restore" : "trash")}>{selected.lifecycle_state === "trashed" ? "恢复这份试卷" : "将这份试卷移入回收站"}</button></div>}
         {!draftItems.length ? <div className="lesson-empty"><span>卷</span><h2>从已验证题库开始组卷</h2><p>左侧搜索并加入题目；每道题都可设置分值和顺序，保存后即可导出学生卷、答案卷和双向细目表。</p></div> : <>
           <header className="lesson-document-heading"><div><p>{selected ? `试卷编号 ${selected.exam_paper_id} · 当前 v${selected.version}` : "尚未保存的组卷草稿"}</p><h2>{title}</h2></div><div className="document-actions"><span>{selected ? isDirty ? "有未保存修改" : `v${selected.version} 已保存 · 可导出` : "保存后可导出"}</span>{canExport && <><a href={exportUrl("student", "docx")} title="导出当前已保存版本">学生卷 Word</a><a href={exportUrl("student", "pdf")} title="导出当前已保存版本">学生卷 PDF</a></>}<button type="button" disabled={busy || Boolean(selected && !isDirty)} onClick={() => savePaper()}>{busy ? "保存中…" : selected ? isDirty ? "保存新版本" : "当前版本已保存" : "创建并启用导出"}</button></div></header>
           <div className="lesson-context-strip"><div><span>题目数量</span><strong>{draftItems.length} 道</strong></div><div><span>总分</span><strong>{scoreText(totalScore)} 分</strong></div><div><span>考试时长</span><strong>{duration} 分钟</strong></div><div><span>待教师审核</span><strong>{draftItems.filter((item) => item.question.review_status !== "approved").length} 道</strong></div></div>

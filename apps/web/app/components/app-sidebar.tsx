@@ -11,7 +11,7 @@ const teacherNav = [
 ];
 const adminNav = [
   ["管理总览", "/admin"], ["题库审核", "/search"], ["题目去重", "/admin/duplicates"], ["教材目录", "/curriculum"],
-  ["教材审核", "/curriculum/review"], ["资料管理", "/library"], ["批量导入", "/imports"],
+  ["资料管理", "/library"], ["批量导入", "/imports"],
   ["模型运行", "/admin/models"],
 ];
 

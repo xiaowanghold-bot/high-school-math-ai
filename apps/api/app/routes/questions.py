@@ -13,6 +13,8 @@ from app.modules.question_bank import (
     QuestionImage,
     QuestionImageMetadataCommand,
     QuestionImageOrderCommand,
+    QuestionLibraryStateCommand,
+    QuestionLibraryStateResult,
     QuestionRevisionCommand,
     QuestionRevisionResult,
     ReviewCommand,
@@ -28,6 +30,7 @@ from app.modules.question_bank.schemas import (
     ReviewResult,
 )
 from app.modules.question_variants import (
+    DeepSeekQuestionVariantProvider,
     LocalDiagnosticVariantProvider,
     OpenAIQuestionVariantProvider,
     QuestionVariantGenerationRequest,
@@ -48,7 +51,7 @@ from app.modules.question_quality import (
     QuestionQualityWorkflow,
     QuestionQualityWorkspace,
 )
-from app.routes.curriculum import _governance_for_paths
+from app.modules.curriculum import CsvCurriculumCatalog
 from app.routes.model_operations import get_model_operations_registry
 
 
@@ -77,10 +80,21 @@ def get_question_bank() -> QuestionBank:
 @lru_cache
 def get_question_variant_service() -> QuestionVariantService:
     settings = get_settings()
-    use_openai = settings.question_variant_provider == "openai" or (
-        settings.question_variant_provider == "auto" and bool(settings.openai_api_key)
+    use_deepseek = settings.question_variant_provider == "deepseek" or (
+        settings.question_variant_provider == "auto" and bool(settings.deepseek_api_key)
     )
-    provider = (
+    use_openai = not use_deepseek and (
+        settings.question_variant_provider == "openai" or (
+            settings.question_variant_provider == "auto" and bool(settings.openai_api_key)
+        )
+    )
+    provider = DeepSeekQuestionVariantProvider(
+        api_key=settings.deepseek_api_key,
+        model=settings.deepseek_model,
+        base_url=settings.deepseek_base_url,
+        timeout_seconds=settings.deepseek_timeout_seconds,
+        recorder=get_model_operations_registry(),
+    ) if use_deepseek else (
         OpenAIQuestionVariantProvider(
             api_key=settings.openai_api_key,
             model=settings.openai_model,
@@ -99,10 +113,7 @@ def get_question_quality_workflow() -> QuestionQualityWorkflow:
     settings = get_settings()
     return QuestionQualityWorkflow(
         question_bank=get_question_bank(),
-        curriculum_catalog=_governance_for_paths(
-            str(settings.curriculum_csv.resolve()),
-            str(settings.curriculum_review_db.resolve()),
-        ).catalog,
+        curriculum_catalog=CsvCurriculumCatalog(settings.curriculum_csv),
     )
 
 
@@ -183,8 +194,10 @@ def search_questions(
     difficulty: int | None = Query(default=None, ge=1, le=5),
     verification_status: str | None = None,
     review_status: str | None = None,
+    knowledge_point_id: str | None = Query(default=None, max_length=160),
     module: str | None = None,
     work_queue: str | None = None,
+    library_state: str = Query(default="active"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> QuestionSearchPage:
@@ -195,11 +208,23 @@ def search_questions(
             difficulty=difficulty,
             verification_status=verification_status,
             review_status=review_status,
+            knowledge_point_id=knowledge_point_id,
             module=module,
             work_queue=work_queue,
+            library_state=library_state,
             page=page,
             page_size=page_size,
         )
+    except QuestionBankError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/questions/library-state", response_model=QuestionLibraryStateResult)
+def change_question_library_state(
+    command: QuestionLibraryStateCommand,
+) -> QuestionLibraryStateResult:
+    try:
+        return get_question_bank().change_library_state(command)
     except QuestionBankError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

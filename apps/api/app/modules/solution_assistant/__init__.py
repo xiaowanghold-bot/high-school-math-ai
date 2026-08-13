@@ -4,6 +4,7 @@ from app.modules.solution_assistant.assistant import (
 )
 from app.modules.solution_assistant.providers import (
     OpenAISolutionProvider,
+    DeepSeekSolutionProvider,
     SolutionProvider,
     SolutionProviderError,
 )
@@ -17,6 +18,7 @@ from app.modules.solution_assistant.schemas import (
 __all__ = [
     "GeneratedSolution",
     "OpenAISolutionProvider",
+    "DeepSeekSolutionProvider",
     "SolutionAssistant",
     "SolutionAssistantError",
     "SolutionExplanation",

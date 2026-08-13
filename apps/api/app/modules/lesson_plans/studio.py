@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from app.modules.curriculum import InMemoryCurriculumCatalog
+from app.modules.curriculum import CurriculumBaseline, InMemoryCurriculumCatalog
 from app.modules.lesson_plans.providers import (
     LessonPlanGenerationContext,
     LessonPlanProvider,
@@ -20,6 +20,7 @@ from app.modules.lesson_plans.schemas import (
     LessonPlanContent,
     LessonPlanGenerationMeta,
     LessonPlanGenerationRequest,
+    LessonPlanLifecycleCommand,
     LessonPlanList,
     LessonPlanSummary,
     LessonPlanUpdateCommand,
@@ -44,11 +45,13 @@ class LessonPlanStudio:
         curriculum_catalog: InMemoryCurriculumCatalog,
         question_bank: QuestionBank,
         provider: LessonPlanProvider,
+        curriculum_baseline: CurriculumBaseline | None = None,
     ) -> None:
         self.database_path = database_path
         self.curriculum_catalog = curriculum_catalog
         self.question_bank = question_bank
         self.provider = provider
+        self.curriculum_baseline = curriculum_baseline
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
@@ -91,7 +94,7 @@ class LessonPlanStudio:
             generation=LessonPlanGenerationMeta(
                 provider=self.provider.name,
                 model=self.provider.model,
-                mode="live_ai" if self.provider.name == "openai" else "local_preview",
+                mode="live_ai" if self.provider.name in {"openai", "deepseek"} else "local_preview",
                 retrieved_question_ids=[item.question_id for item in questions],
                 warnings=warnings,
             ),
@@ -118,16 +121,18 @@ class LessonPlanStudio:
             )
         return plan
 
-    def list(self, *, limit: int = 30) -> LessonPlanList:
+    def list(self, *, limit: int = 30, lifecycle_state: str = "active") -> LessonPlanList:
+        if lifecycle_state not in {"active", "trashed"}:
+            raise LessonPlanStudioError("不支持的教案状态")
         with self._connect() as connection:
-            total = connection.execute("SELECT COUNT(*) FROM lesson_plans").fetchone()[0]
+            total = connection.execute("SELECT COUNT(*) FROM lesson_plans WHERE lifecycle_state = ?", (lifecycle_state,)).fetchone()[0]
             rows = connection.execute(
                 """
                 SELECT lesson_plan_id, title, status, version, curriculum_node_id,
-                       provider, raw_json, updated_at
-                FROM lesson_plans ORDER BY updated_at DESC LIMIT ?
+                       provider, raw_json, updated_at, lifecycle_state, trashed_at
+                FROM lesson_plans WHERE lifecycle_state = ? ORDER BY updated_at DESC LIMIT ?
                 """,
-                (limit,),
+                (lifecycle_state, limit),
             ).fetchall()
         items = []
         for row in rows:
@@ -142,9 +147,20 @@ class LessonPlanStudio:
                     topic=raw["curriculum"]["topic"],
                     provider=row["provider"],
                     updated_at=row["updated_at"],
+                    lifecycle_state=row["lifecycle_state"],
+                    trashed_at=row["trashed_at"],
                 )
             )
         return LessonPlanList(items=items, total=total)
+
+    def change_lifecycle(self, lesson_plan_id: str, command: LessonPlanLifecycleCommand) -> LessonPlanView:
+        current = self.get(lesson_plan_id)
+        target = "trashed" if command.action == "trash" else "active"
+        now = self._now()
+        updated = current.model_copy(update={"lifecycle_state": target, "trashed_at": now if target == "trashed" else None, "updated_at": now})
+        with self._connect() as connection:
+            connection.execute("UPDATE lesson_plans SET lifecycle_state = ?, trashed_at = ?, raw_json = ?, updated_at = ? WHERE lesson_plan_id = ?", (target, updated.trashed_at, updated.model_dump_json(), now, lesson_plan_id))
+        return updated
 
     def get(self, lesson_plan_id: str) -> LessonPlanView:
         with self._connect() as connection:
@@ -239,7 +255,7 @@ class LessonPlanStudio:
             value=getattr(candidate, block),
             provider=self.provider.name,
             model=self.provider.model,
-            mode="live_ai" if self.provider.name == "openai" else "local_preview",
+            mode="live_ai" if self.provider.name in {"openai", "deepseek"} else "local_preview",
             warnings=["局部改写仅生成待审核草稿，点击“保存修订”后才会写入教案版本"],
         )
 
@@ -271,6 +287,9 @@ class LessonPlanStudio:
             competencies=node.primary_competencies,
             common_errors=node.common_errors,
             knowledge_points=knowledge_points,
+            baseline_id=self.curriculum_baseline.baseline_id if self.curriculum_baseline else "legacy-unversioned",
+            standard_title=self.curriculum_baseline.standard_title if self.curriculum_baseline else "普通高中数学课程标准",
+            textbook_edition=self.curriculum_baseline.textbook_edition if self.curriculum_baseline else "人教 A 版",
         )
 
     def _child_knowledge_points(self, node_id: str) -> list[str]:
@@ -346,11 +365,17 @@ class LessonPlanStudio:
                     raw_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                    , lifecycle_state TEXT NOT NULL DEFAULT 'active', trashed_at TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_lesson_plans_updated
                 ON lesson_plans(updated_at DESC);
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(lesson_plans)")}
+            if "lifecycle_state" not in columns:
+                connection.execute("ALTER TABLE lesson_plans ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'")
+            if "trashed_at" not in columns:
+                connection.execute("ALTER TABLE lesson_plans ADD COLUMN trashed_at TEXT")
 
     @staticmethod
     def _now() -> str:

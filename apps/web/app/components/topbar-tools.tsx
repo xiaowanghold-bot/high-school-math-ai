@@ -24,7 +24,6 @@ const teacherCreateActions: CreateAction[] = [
 const adminCreateActions: CreateAction[] = [
   { id: "pdf-import", mark: "导", label: "导入 PDF 资料", description: "登记来源与权利后进入逐页拆题加工", href: "/imports" },
   { id: "question-review", mark: "题", label: "审核题库内容", description: "处理公式、数学验证、教材映射和发布门禁", href: "/search" },
-  { id: "curriculum-review", mark: "册", label: "审核教材目录", description: "维护人教 A 版章节、知识点与高考优先级", href: "/curriculum/review" },
   { id: "library-admin", mark: "资", label: "管理私人资料", description: "查看上传资料、OCR 状态与拆题候选", href: "/library" },
 ];
 
@@ -49,13 +48,12 @@ export function TopbarTools() {
     setTaskLoading(true);
     setTaskError("");
     try {
-      const [questionStats, libraryStats, lessons, papers, imports, curriculum] = await Promise.all([
+      const [questionStats, libraryStats, lessons, papers, imports] = await Promise.all([
         jsonOrThrow("/api/v1/question-bank/stats"),
         jsonOrThrow("/api/v1/library/stats"),
         jsonOrThrow("/api/v1/lesson-plans"),
         jsonOrThrow("/api/v1/exam-papers"),
         jsonOrThrow("/api/v1/imports"),
-        jsonOrThrow("/api/v1/curriculum/reviews?limit=1"),
       ]);
       const reviewCount = Number(questionStats.by_review_status?.pending ?? 0) + Number(questionStats.by_review_status?.changes_requested ?? 0);
       const verificationCount = Object.entries(questionStats.by_verification_status ?? {}).reduce(
@@ -71,7 +69,6 @@ export function TopbarTools() {
       const adminTasks: TaskItem[] = [
         { id: "question-review", label: "题库内容待审核", description: "检查题干、答案、解析、来源和发布门禁", count: reviewCount, href: "/search", tone: "blue" },
         { id: "math-review", label: "独立数学核验待处理", description: "未通过验证的题目不能进入正式内容链", count: verificationCount, href: "/search?verification=needs_math_review", tone: "amber" },
-        { id: "curriculum-review", label: "教材目录待审核", description: "维护章节、知识点和高考优先级", count: Number(curriculum.counts?.pending ?? 0) + Number(curriculum.counts?.changes_requested ?? 0), href: "/curriculum/review", tone: "green" },
         { id: "pdf-import", label: "PDF 加工任务", description: `${Number(imports.stats?.scan_pages ?? 0)} 页等待 OCR`, count: Number(imports.stats?.ready_files ?? 0), href: "/imports", tone: "slate" },
         { id: "library-review", label: "私人资料待处理", description: "检查来源声明、OCR 和拆题候选", count: Number(libraryStats.pending_review ?? 0), href: "/library", tone: "slate" },
       ];

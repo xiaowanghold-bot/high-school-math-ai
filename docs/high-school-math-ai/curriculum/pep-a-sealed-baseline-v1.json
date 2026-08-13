@@ -1,0 +1,21 @@
+{
+  "baseline_id": "pep-a-high-school-math-v1",
+  "state": "sealed_read_only",
+  "textbook_edition": "普通高中教科书 数学 A 版（2019）",
+  "purpose": ["question_annotation", "lesson_plan_generation", "coverage_analysis"],
+  "catalog_file": "pep-a-full-knowledge-tree-v1.csv",
+  "catalog_sha256": "f982b884c24f1e299d25b825c57a44833bdc8ccca66e5a2dfadf2704ec7f335a",
+  "official_sources": [
+    {
+      "authority": "中华人民共和国教育部",
+      "title": "普通高中课程方案和语文等学科课程标准（2017年版2020年修订）",
+      "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip"
+    },
+    {
+      "authority": "人民教育出版社",
+      "title": "普通高中教科书配套教学资源 数学（A版）册次范围",
+      "url": "https://www.pep.com.cn/jxzy/tbjl/xkl/gz/"
+    }
+  ],
+  "policy": "课程目录作为只读标注基线；应用不提供教材审核、覆盖或在线改写入口。更新必须替换基线文件、更新 SHA-256 并经过代码评审。"
+}

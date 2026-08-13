@@ -41,6 +41,9 @@ class LessonCurriculumContext(BaseModel):
     competencies: list[str]
     common_errors: list[str]
     knowledge_points: list[str]
+    baseline_id: str = "legacy-unversioned"
+    standard_title: str = "普通高中数学课程标准"
+    textbook_edition: str = "人教 A 版"
 
 
 class TeachingPhase(BaseModel):
@@ -93,6 +96,8 @@ class LessonPlanView(BaseModel):
     content: LessonPlanContent
     generation: LessonPlanGenerationMeta
     locked_blocks: list[LessonPlanBlock] = Field(default_factory=list, max_length=7)
+    lifecycle_state: Literal["active", "trashed"] = "active"
+    trashed_at: str | None = None
 
 
 class LessonPlanSummary(BaseModel):
@@ -104,6 +109,14 @@ class LessonPlanSummary(BaseModel):
     topic: str
     provider: str
     updated_at: str
+    lifecycle_state: Literal["active", "trashed"] = "active"
+    trashed_at: str | None = None
+
+
+class LessonPlanLifecycleCommand(BaseModel):
+    action: Literal["trash", "restore"]
+    actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+    reason: str = Field(default="用户删除", max_length=2000)
 
 
 class LessonPlanList(BaseModel):

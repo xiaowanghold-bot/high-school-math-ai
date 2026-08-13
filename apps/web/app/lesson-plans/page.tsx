@@ -67,6 +67,7 @@ type LessonPlan = {
   version: number;
   created_at: string;
   updated_at: string;
+  lifecycle_state: "active" | "trashed";
   request: {
     curriculum_node_id: string;
     lesson_type: string;
@@ -98,6 +99,7 @@ type LessonPlanSummary = {
   status: string;
   version: number;
   topic: string;
+  lifecycle_state: "active" | "trashed";
   provider: string;
   updated_at: string;
 };
@@ -157,6 +159,7 @@ async function responseError(response: Response): Promise<string> {
 export default function LessonPlansPage() {
   const [options, setOptions] = useState<CurriculumOption[]>([]);
   const [plans, setPlans] = useState<LessonPlanSummary[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
   const [selected, setSelected] = useState<LessonPlan | null>(null);
   const [draft, setDraft] = useState<LessonPlanContent | null>(null);
   const [busy, setBusy] = useState(false);
@@ -183,7 +186,7 @@ export default function LessonPlansPage() {
   );
 
   async function loadPlans(selectLatest = false) {
-    const response = await fetch(`${apiBase}/api/v1/lesson-plans`);
+    const response = await fetch(`${apiBase}/api/v1/lesson-plans?lifecycle_state=${showTrash ? "trashed" : "active"}`);
     if (!response.ok) throw new Error(await responseError(response));
     const payload = await response.json();
     setPlans(payload.items);
@@ -199,6 +202,18 @@ export default function LessonPlansPage() {
     setActiveRewriteBlock(null);
     setPendingRewrite(null);
     setLastAcceptedRewrite(null);
+  }
+
+  useEffect(() => {
+    loadPlans().catch((error: Error) => setMessage(error.message));
+  }, [showTrash]);
+
+  async function changeLifecycle(action: "trash" | "restore") {
+    if (!selected) return;
+    if (action === "trash" && !window.confirm("教案将移入回收站，正文、版本与导出信息均保留。继续吗？")) return;
+    const response = await fetch(`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/lifecycle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, reason: action === "trash" ? "用户移入教案回收站" : "用户恢复教案" }) });
+    if (!response.ok) throw new Error(await responseError(response));
+    setSelected(null); setDraft(null); await loadPlans(); setMessage(action === "trash" ? "教案已移入回收站，可随时恢复。" : "教案已恢复。" );
   }
 
   useEffect(() => {
@@ -473,7 +488,7 @@ export default function LessonPlansPage() {
           </form>
 
           <section className="lesson-history">
-            <header><strong>最近教案</strong><span>{plans.length}</span></header>
+            <header><strong>{showTrash ? "教案回收站" : "最近教案"}</strong><button type="button" onClick={() => { setShowTrash((current) => !current); setSelected(null); setDraft(null); }}>{showTrash ? "返回" : "回收站"}</button><span>{plans.length}</span></header>
             {plans.map((plan) => (
               <button className={selected?.lesson_plan_id === plan.lesson_plan_id ? "active" : ""} type="button" key={plan.lesson_plan_id} onClick={() => openPlan(plan.lesson_plan_id).catch((error: Error) => setMessage(error.message))}>
                 <span>{plan.provider === "openai" ? "AI" : "稿"}</span><div><b>{plan.title}</b><small>{plan.topic} · v{plan.version}</small></div>
@@ -497,6 +512,7 @@ export default function LessonPlansPage() {
                   <a href={`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/export?format=docx`} title="导出当前已保存版本">导出 Word</a>
                   <a href={`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/export?format=pdf`} title="导出当前已保存版本">导出 PDF</a>
                   <button type="button" disabled={saving || minuteTotal !== selected.request.duration_minutes} onClick={save}>{saving ? "保存中…" : "保存修订"}</button>
+                  <button type="button" onClick={() => changeLifecycle(selected.lifecycle_state === "trashed" ? "restore" : "trash")}>{selected.lifecycle_state === "trashed" ? "恢复教案" : "移入回收站"}</button>
                   {lastAcceptedRewrite && <button className="undo-rewrite" type="button" onClick={undoAcceptedRewrite}>撤销 AI 改写</button>}
                 </div>
               </header>

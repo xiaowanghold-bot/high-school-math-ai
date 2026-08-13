@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.modules.model_operations import ModelRunRecorder, NullModelRunRecorder
+from app.modules.deepseek import DeepSeekClientError, DeepSeekJsonClient
 from app.modules.lesson_plans.schemas import (
     GeneratedLessonPlanContent,
     LessonCurriculumContext,
@@ -364,6 +365,7 @@ class OpenAIResponsesLessonPlanProvider:
         except (URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise LessonPlanProviderError(f"OpenAI {action}失败：{exc}") from exc
 
+
     @staticmethod
     def _extract_output_text(payload: dict) -> str:
         for item in payload.get("output", []):
@@ -410,7 +412,6 @@ class OpenAIResponsesLessonPlanProvider:
                 "required": list(properties),
             },
         }
-
     @staticmethod
     def _rewrite_output_format(block: LessonPlanBlock) -> dict:
         if block == "teaching_flow":
@@ -450,3 +451,28 @@ class OpenAIResponsesLessonPlanProvider:
                 "required": [item_name],
             },
         }
+
+
+class DeepSeekLessonPlanProvider(OpenAIResponsesLessonPlanProvider):
+    name = "deepseek"
+
+    def __init__(
+        self, *, api_key: str, model: str, base_url: str,
+        timeout_seconds: int = 90, recorder=None, **_kwargs,
+    ) -> None:
+        self.model = model
+        self.recorder = recorder or NullModelRunRecorder()
+        self.client = DeepSeekJsonClient(
+            api_key=api_key, model=model, base_url=base_url,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def _request_structured_output(self, payload: dict, *, action: str) -> dict:
+        try:
+            return self.client.request(
+                instructions=payload["instructions"],
+                input_text=str(payload["input"]), action=action,
+                output_schema=payload.get("text", {}).get("format"),
+            )
+        except DeepSeekClientError as exc:
+            raise LessonPlanProviderError(str(exc)) from exc

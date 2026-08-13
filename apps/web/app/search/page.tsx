@@ -23,6 +23,7 @@ type Question = {
   source_page_start: number | null;
   source_page_end: number | null;
   publication_blockers: string[];
+  library_state: "active" | "removed";
 };
 
 type QuestionImage = {
@@ -69,6 +70,8 @@ type EditDraft = {
 
 type Stats = {
   total: number;
+  active: number;
+  removed: number;
   by_review_status: Record<string, number>;
   by_verification_status: Record<string, number>;
   by_chapter: Record<string, number>;
@@ -219,6 +222,7 @@ export default function SearchPage() {
   const [reviewStatus, setReviewStatus] = useState("");
   const [module, setModule] = useState("");
   const [workQueue, setWorkQueue] = useState("");
+  const [knowledgePointId, setKnowledgePointId] = useState("");
   const [listVersion, setListVersion] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<QuestionDetail | null>(null);
@@ -241,6 +245,7 @@ export default function SearchPage() {
   const [curriculumResults, setCurriculumResults] = useState<CurriculumSearchItem[]>([]);
   const [curriculumTotal, setCurriculumTotal] = useState(0);
   const [catalogSearching, setCatalogSearching] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   const searchUrl = useMemo(() => {
     const params = new URLSearchParams({ page_size: "50" });
@@ -250,8 +255,10 @@ export default function SearchPage() {
     if (reviewStatus) params.set("review_status", reviewStatus);
     if (module) params.set("module", module);
     if (workQueue) params.set("work_queue", workQueue);
+    if (knowledgePointId) params.set("knowledge_point_id", knowledgePointId);
+    params.set("library_state", showRemoved ? "removed" : "active");
     return `${apiBase}/api/v1/questions?${params.toString()}`;
-  }, [query, chapter, verification, reviewStatus, module, workQueue]);
+  }, [query, chapter, verification, reviewStatus, module, workQueue, knowledgePointId, showRemoved]);
 
   const loadStats = () => fetch(`${apiBase}/api/v1/question-bank/stats`).then((response) => response.json()).then(setStats);
 
@@ -292,11 +299,13 @@ export default function SearchPage() {
     const initialReview = params.get("review") || "";
     const initialModule = params.get("module") || "";
     const initialQueue = params.get("queue") || "";
+    const initialKnowledgePoint = params.get("knowledge_point") || "";
     if (initialQuery) { setQueryInput(initialQuery); setQuery(initialQuery); }
     if (initialVerification) setVerification(initialVerification);
     if (initialReview) setReviewStatus(initialReview);
     if (initialModule) setModule(initialModule);
     if (initialQueue) setWorkQueue(initialQueue);
+    if (initialKnowledgePoint) setKnowledgePointId(initialKnowledgePoint);
     function receiveGlobalSearch(event: Event) {
       const keyword = String((event as CustomEvent).detail || "").trim();
       setQueryInput(keyword);
@@ -596,6 +605,22 @@ export default function SearchPage() {
     setMessage("图片已删除。" );
   }
 
+  async function changeQuestionLibraryState(action: "remove" | "restore") {
+    if (!selectedId) return;
+    if (action === "remove" && !window.confirm("题目将移入回收站，不再参与搜索、组卷、教案和推荐；正文、图片、来源及审核历史均保留。继续吗？")) return;
+    setWorking(true); setMessage(null);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/questions/library-state`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_ids: [selectedId], action, reason: action === "remove" ? "用户从题库审核移入回收站" : "用户从题库回收站恢复" }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      setSelectedId(null); setListVersion((value) => value + 1); await loadStats();
+      setMessage(action === "remove" ? "题目已移入回收站，可随时恢复。" : "题目已恢复到正常题库。" );
+    } catch (error) { setMessage(error instanceof Error ? error.message : "题目状态修改失败"); }
+    finally { setWorking(false); }
+  }
+
   async function moveImage(image: QuestionImage, direction: -1 | 1) {
     if (!detail || !selectedId) return;
     const samePlacement = detail.images.filter((item) => item.placement === image.placement);
@@ -674,7 +699,7 @@ export default function SearchPage() {
       </section>
 
       <form className="question-filters" onSubmit={submitSearch}>
-        <label className="search-field"><span>⌕</span><input aria-label="搜索题目" value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="搜索题干、章节或来源，例如：集合、椭圆、概率" /></label>
+        <label className="search-field"><span>⌕</span><input aria-label="搜索题目" value={queryInput} onChange={(event) => { setQueryInput(event.target.value); setKnowledgePointId(""); }} placeholder="搜索题干、章节或来源，例如：集合、椭圆、概率" /></label>
         <select value={chapter} onChange={(event) => { setChapter(event.target.value); setModule(""); }} aria-label="按章节筛选"><option value="">全部章节</option>{Object.keys(stats?.by_chapter ?? {}).map((item) => <option key={item} value={item}>{item}</option>)}</select>
         <select value={verification} onChange={(event) => { setVerification(event.target.value); setWorkQueue(""); }} aria-label="按验证状态筛选"><option value="">全部质量状态</option><option value="passed">验证通过</option><option value="needs_formula_review">待公式校正</option><option value="needs_math_review">待数学验算</option><option value="source_inconsistency_detected">来源存在矛盾</option></select>
         <select value={reviewStatus} onChange={(event) => { setReviewStatus(event.target.value); setWorkQueue(""); }} aria-label="按教师审核状态筛选"><option value="">全部审核状态</option><option value="pending">待教师审核</option><option value="approved">教师已通过</option><option value="changes_requested">需要修改</option><option value="rejected">已拒绝</option></select>
@@ -696,7 +721,7 @@ export default function SearchPage() {
 
       <ResizableColumns className="question-layout" storageKey="question-search" initialLeftPercent={42} leftMin={320} rightMin={420} collapse="wide" label="调整题目列表与题目详情宽度">
         <section className="question-results" aria-label="题目列表">
-          <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong><span>图片不进入列表，保持浏览稳定</span></div>
+          <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong><button type="button" onClick={() => { setShowRemoved((current) => !current); setSelectedId(null); }}>{showRemoved ? "返回正常题库" : `题目回收站 ${stats?.removed ?? 0}`}</button></div>
           <div className="result-list">
             {items.map((item, index) => <button className={selectedId === item.question_id ? "question-row selected" : "question-row"} type="button" key={item.question_id} onClick={() => setSelectedId(item.question_id)}><span className="question-index">{String(index + 1).padStart(2, "0")}</span><span className="question-main"><span className="question-tags"><em>{item.question_type === "single_choice" ? "单选题" : "解答题"}</em><i className={`quality-tag ${item.verification_status}`}>{verificationLabels[item.verification_status] ?? item.verification_status}</i></span><b>{item.stem_plain}</b><small>{item.chapter} · 难度 {item.difficulty}/5</small></span><span className="review-mark">{reviewLabels[item.review_status] ?? item.review_status}</span></button>)}
             {!loading && items.length === 0 && <div className="empty-state"><strong>没有匹配题目</strong><p>换一个关键词或清空筛选条件。</p></div>}
@@ -706,7 +731,7 @@ export default function SearchPage() {
         <aside className="question-detail" aria-label="题目审核详情">
           {!detail && <div className="empty-state"><strong>请选择一道题</strong><p>右侧将显示来源、答案与审核动作。</p></div>}
           {detail && editDraft && <>
-            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools"><span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span></div></header>
+            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools"><span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span><button type="button" onClick={() => changeQuestionLibraryState(detail.library_state === "removed" ? "restore" : "remove")}>{detail.library_state === "removed" ? "恢复题目" : "移入回收站"}</button></div></header>
             <div className="detail-mode-tabs"><button className={detailMode === "preview" ? "active" : ""} type="button" onClick={() => setDetailMode("preview")}>内容预览</button><button className={detailMode === "edit" ? "active" : ""} type="button" onClick={() => setDetailMode("edit")}>编辑与配图</button></div>
 
             {detailMode === "preview" ? <>

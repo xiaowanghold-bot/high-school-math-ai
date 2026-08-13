@@ -3,10 +3,12 @@ from app.modules.private_library.providers import (
     OCRProviderError,
     OCRTextResult,
     OpenAIResourceOCRProvider,
+    LocalMathOCRProvider,
 )
 from app.modules.private_library.schemas import (
     CandidateImportResult,
     LibraryIngestCommand,
+    LibraryLifecycleCommand,
     LibraryOCRCommand,
     LibraryOCRResult,
     LibraryItemList,
@@ -23,6 +25,7 @@ from app.modules.private_library.schemas import (
 __all__ = [
     "CandidateImportResult",
     "LibraryIngestCommand",
+    "LibraryLifecycleCommand",
     "LibraryOCRCommand",
     "LibraryOCRResult",
     "LibraryItemList",
@@ -33,6 +36,7 @@ __all__ = [
     "OCRProviderError",
     "OCRTextResult",
     "OpenAIResourceOCRProvider",
+    "LocalMathOCRProvider",
     "PrivateLibrary",
     "PrivateLibraryError",
     "QuestionCandidateList",

@@ -13,9 +13,9 @@ type DraftStatus = "draft" | "confirmed" | "imported";
 type FormulaStatus = "pending" | "needs_review" | "confirmed";
 type QuestionType = "single_choice" | "multiple_choice" | "fill_blank" | "open_response" | "unknown";
 type ImportPage = { page_id: string; page_number: number; width_points: number; height_points: number; extracted_text: string; character_count: number; question_marker_count: number; embedded_image_count: number; has_text_layer: boolean; warnings: string[] };
-type ImportFile = { file_id: string; batch_id: string; original_filename: string; size_bytes: number; sha256: string; page_count: number; status: ImportStatus; analysis_attempts: number; analyzed_page_count: number; progress_percent: number; resume_page: number | null; text_page_count: number; scan_page_count: number; extracted_character_count: number; question_marker_count: number; estimated_question_count: number; image_page_count: number; embedded_image_count: number; warnings: string[]; error_message: string; created_at: string; updated_at: string };
+type ImportFile = { file_id: string; batch_id: string; original_filename: string; size_bytes: number; sha256: string; page_count: number; status: ImportStatus; lifecycle_state: "active" | "trashed"; trashed_at: string | null; analysis_attempts: number; analyzed_page_count: number; progress_percent: number; resume_page: number | null; text_page_count: number; scan_page_count: number; extracted_character_count: number; question_marker_count: number; estimated_question_count: number; image_page_count: number; embedded_image_count: number; warnings: string[]; error_message: string; created_at: string; updated_at: string };
 type ImportFileDetail = ImportFile & { pages: ImportPage[] };
-type ImportBatch = { batch_id: string; title: string; rights_basis: string; rights_statement: string; owner_id: string; file_count: number; registered_count: number; queued_count: number; analyzing_count: number; paused_count: number; ready_count: number; failed_count: number; page_count: number; analyzed_page_count: number; progress_percent: number; question_marker_count: number; estimated_question_count: number; created_at: string; updated_at: string; files: ImportFile[] };
+type ImportBatch = { batch_id: string; title: string; rights_basis: string; rights_statement: string; owner_id: string; lifecycle_state: "active" | "trashed"; trashed_at: string | null; file_count: number; registered_count: number; queued_count: number; analyzing_count: number; paused_count: number; ready_count: number; failed_count: number; page_count: number; analyzed_page_count: number; progress_percent: number; question_marker_count: number; estimated_question_count: number; created_at: string; updated_at: string; files: ImportFile[] };
 type ImportWorkspace = { stats: { batches: number; files: number; pages: number; analyzed_pages: number; ready_files: number; queued_files: number; failed_files: number; scan_pages: number; question_markers: number; estimated_questions: number }; batches: ImportBatch[] };
 type SourceRole = "question_only" | "solution_reference" | "combined" | "unknown";
 type SourcePairStatus = "proposed" | "confirmed" | "rejected";
@@ -71,6 +71,7 @@ function draftUpdatePayload(target: StructuredDraft, status: DraftStatus = targe
 
 function ImportsPageContent() {
   const [workspace, setWorkspace] = useState<ImportWorkspace | null>(null);
+  const [showTrash, setShowTrash] = useState(false);
   const [selectedFileId, setSelectedFileId] = useState("");
   const [selected, setSelected] = useState<ImportFileDetail | null>(null);
   const [sourcePairing, setSourcePairing] = useState<SourcePairing | null>(null);
@@ -170,16 +171,59 @@ function ImportsPageContent() {
   }
 
   async function refresh(preferredFileId?: string) {
-    const response = await fetch("/api/v1/imports");
-    if (!response.ok) throw new Error(await errorText(response));
-    const payload: ImportWorkspace = await response.json();
+    let payload: ImportWorkspace;
+    if (showTrash) {
+      const [filesResponse, batchesResponse] = await Promise.all([
+        fetch("/api/v1/imports?lifecycle_state=active&file_lifecycle_state=trashed"),
+        fetch("/api/v1/imports?lifecycle_state=trashed&file_lifecycle_state=all"),
+      ]);
+      if (!filesResponse.ok) throw new Error(await errorText(filesResponse));
+      if (!batchesResponse.ok) throw new Error(await errorText(batchesResponse));
+      const filesTrash: ImportWorkspace = await filesResponse.json();
+      const batchesTrash: ImportWorkspace = await batchesResponse.json();
+      payload = {
+        stats: Object.fromEntries(Object.keys(filesTrash.stats).map((key) => [key, Number(filesTrash.stats[key as keyof typeof filesTrash.stats]) + Number(batchesTrash.stats[key as keyof typeof batchesTrash.stats])])) as ImportWorkspace["stats"],
+        batches: [...filesTrash.batches, ...batchesTrash.batches],
+      };
+    } else {
+      const response = await fetch("/api/v1/imports?lifecycle_state=active&file_lifecycle_state=active");
+      if (!response.ok) throw new Error(await errorText(response));
+      payload = await response.json();
+    }
     setWorkspace(payload);
     const target = preferredFileId || selectedFileId || payload.batches[0]?.files[0]?.file_id;
     if (target) await openFile(target);
     else { setSelected(null); setSelectedFileId(""); setSourcePairing(null); setSourceItemMatches(null); setBoundaries(emptyBoundaries()); setDrafts(emptyDrafts()); }
   }
 
-  useEffect(() => { refresh().catch((error: Error) => setMessage(error.message)); }, []);
+  async function changeBatchLifecycle(batch: ImportBatch, action: "trash" | "restore") {
+    if (action === "trash" && !window.confirm("整个批次将移入回收站；原 PDF、分析页、拆题草稿和已入库题目均保留。继续吗？")) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/imports/batches/${batch.batch_id}/lifecycle`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, reason: action === "trash" ? "用户从批量导入移入回收站" : "用户恢复导入批次" }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      setSelected(null); setSelectedFileId(""); await refresh();
+      setMessage(action === "trash" ? "导入批次已移入回收站，所有处理记录均已保留。" : "导入批次已恢复。" );
+    } catch (error) { setMessage(error instanceof Error ? error.message : "批次状态修改失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function changeFileLifecycle(file: ImportFile, action: "trash" | "restore") {
+    if (action === "trash" && !window.confirm("这份 PDF 将移入回收站并停止参与加工与自动配对；原文件、页分析、拆题草稿和已入库题目均保留。继续吗？")) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/imports/files/${file.file_id}/lifecycle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, reason: action === "trash" ? "用户移出单份导入 PDF" : "用户恢复单份导入 PDF" }) });
+      if (!response.ok) throw new Error(await errorText(response));
+      setSelected(null); setSelectedFileId(""); await refresh();
+      setMessage(action === "trash" ? "PDF 已移入回收站，处理记录和已入库题目均保留。" : "PDF 已恢复到加工队列。");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "PDF 状态修改失败"); }
+    finally { setBusy(false); }
+  }
+
+  useEffect(() => { refresh().catch((error: Error) => setMessage(error.message)); }, [showTrash]);
 
   function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     const chosen = Array.from(event.target.files ?? []);
@@ -570,7 +614,7 @@ function ImportsPageContent() {
   function selectDraft(item: StructuredDraft) { setDraft(item); setPreviewPage(item.start_page); setCropMode(false); setCropRect(null); }
 
   return <div className="page-content import-workspace">
-    <section className="page-title import-title"><div><p className="eyebrow">题库生产 · 来源可追溯</p><h1>批量 PDF 加工中心</h1><p className="subtle">先登记来源和权利，再逐页分析与校对题目边界；任何内容都不会自动进入正式题库。</p></div><button className="primary-button" type="button" onClick={() => setUploadOpen((value) => !value)}>{uploadOpen ? "收起登记" : "＋ 新建批次"}</button></section>
+    <section className="page-title import-title"><div><p className="eyebrow">题库生产 · 来源可追溯</p><h1>批量 PDF 加工中心</h1><p className="subtle">先登记来源和权利，再逐页分析与校对题目边界；任何内容都不会自动进入正式题库。</p></div><div>{selectedBatch && <button type="button" disabled={busy || queueRunning} onClick={() => changeBatchLifecycle(selectedBatch, selectedBatch.lifecycle_state === "trashed" ? "restore" : "trash")}>{selectedBatch.lifecycle_state === "trashed" ? "恢复当前批次" : "当前批次移入回收站"}</button>}<button className="primary-button" type="button" onClick={() => setUploadOpen((value) => !value)}>{uploadOpen ? "收起登记" : "＋ 新建批次"}</button></div></section>
     <section className="import-stats"><div><span>导入批次</span><strong>{workspace?.stats.batches ?? "—"}</strong><small>保留权利声明</small></div><div><span>PDF 文件</span><strong>{workspace?.stats.files ?? "—"}</strong><small>{workspace?.stats.pages ?? 0} 页</small></div><div className="ready"><span>页面处理进度</span><strong>{workspace ? `${workspace.stats.analyzed_pages}/${workspace.stats.pages}` : "—"}</strong><small>{workspace?.stats.ready_files ?? 0} 份可进入拆题</small></div><div><span>候选题量估计</span><strong>{workspace?.stats.estimated_questions ?? "—"}</strong><small>来自题量审计表</small></div><div className={workspace?.stats.scan_pages ? "attention" : ""}><span>待 OCR 页面</span><strong>{workspace?.stats.scan_pages ?? "—"}</strong><small>{workspace?.stats.failed_files ?? 0} 份失败待重试</small></div></section>
 
     {uploadOpen && <form className="import-upload-panel" onSubmit={upload}>
@@ -582,9 +626,9 @@ function ImportsPageContent() {
     </form>}
 
     <ResizableColumns className="import-layout" storageKey="pdf-import-queue" initialLeftPercent={32} leftMin={260} rightMin={480} collapse="compact" label="调整 PDF 处理队列与加工区宽度">
-      <aside className="import-queue"><header><strong>处理队列</strong><span>{workspace?.stats.files ?? 0} 份</span></header>
+      <aside className="import-queue"><header><strong>{showTrash ? "批次回收站" : "处理队列"}</strong><button type="button" onClick={() => { setShowTrash((current) => !current); setSelected(null); setSelectedFileId(""); }}>{showTrash ? "返回队列" : "回收站"}</button><span>{workspace?.stats.files ?? 0} 份</span></header>
         {!workspace?.batches.length && <div className="import-empty"><strong>暂无导入批次</strong><p>从上方选择 PDF，登记后再逐份分析。</p></div>}
-        {workspace?.batches.map((batch) => <section key={batch.batch_id} className="import-batch-group"><header><div><strong>{batch.title}</strong><small>{batch.file_count} 份 · {batch.page_count} 页 · 估计 {batch.estimated_question_count || "待统计"} 题</small></div><em>{batch.progress_percent}%</em></header><div className="import-batch-progress"><span style={{ width: `${batch.progress_percent}%` }} /></div><div className="import-batch-state"><span>{batch.analyzed_page_count}/{batch.page_count} 页</span><span>{batch.queued_count + batch.analyzing_count ? `${batch.queued_count + batch.analyzing_count} 份排队` : batch.paused_count ? `${batch.paused_count} 份暂停` : batch.failed_count ? `${batch.failed_count} 份失败` : `${batch.ready_count}/${batch.file_count} 完成`}</span></div>{batch.files.map((file) => <button type="button" className={selectedFileId === file.file_id ? "active" : ""} key={file.file_id} onClick={() => openFile(file.file_id).catch((error: Error) => setMessage(error.message))}><span className={`import-file-status ${file.status}`}>PDF</span><div><b>{file.original_filename}</b><small>{file.analyzed_page_count}/{file.page_count} 页 · 估计 {file.estimated_question_count || "—"} 题 · {formatBytes(file.size_bytes)}</small><span className="import-file-progress"><i style={{ width: `${file.progress_percent}%` }} /></span></div><em className={file.status}>{statusLabels[file.status]}</em></button>)}</section>)}
+        {workspace?.batches.map((batch) => <section key={batch.batch_id} className="import-batch-group"><header><div><strong>{batch.title}</strong><small>{batch.file_count} 份 · {batch.page_count} 页 · 估计 {batch.estimated_question_count || "待统计"} 题</small></div><em>{batch.progress_percent}%</em></header><div className="import-batch-progress"><span style={{ width: `${batch.progress_percent}%` }} /></div><div className="import-batch-state"><span>{batch.analyzed_page_count}/{batch.page_count} 页</span><span>{batch.queued_count + batch.analyzing_count ? `${batch.queued_count + batch.analyzing_count} 份排队` : batch.paused_count ? `${batch.paused_count} 份暂停` : batch.failed_count ? `${batch.failed_count} 份失败` : `${batch.ready_count}/${batch.file_count} 完成`}</span></div>{batch.files.map((file) => <div className="import-file-row" key={file.file_id}><button type="button" className={selectedFileId === file.file_id ? "active" : ""} onClick={() => openFile(file.file_id).catch((error: Error) => setMessage(error.message))}><span className={`import-file-status ${file.status}`}>PDF</span><div><b>{file.original_filename}</b><small>{file.analyzed_page_count}/{file.page_count} 页 · 估计 {file.estimated_question_count || "—"} 题 · {formatBytes(file.size_bytes)}</small><span className="import-file-progress"><i style={{ width: `${file.progress_percent}%` }} /></span></div><em className={file.status}>{statusLabels[file.status]}</em></button><button type="button" className="import-file-lifecycle" onClick={() => changeFileLifecycle(file, file.lifecycle_state === "trashed" ? "restore" : "trash")}>{file.lifecycle_state === "trashed" ? "恢复" : "移除"}</button></div>)}</section>)}
       </aside>
 
       <main className="import-inspector">{!selected ? <div className="import-inspector-empty"><span>PDF</span><h2>选择文件检查页面质量</h2><p>这里会显示原文件、文字层覆盖、题号标记和需要 OCR 的页面。</p></div> : <>

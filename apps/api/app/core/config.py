@@ -11,7 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MATH_AI_", env_file=".env", extra="ignore")
+    # Resolve the private runtime configuration from the repository root no
+    # matter whether Uvicorn is launched from the root or from apps/api.
+    model_config = SettingsConfigDict(
+        env_prefix="MATH_AI_", env_file=PROJECT_ROOT / ".env", extra="ignore"
+    )
 
     app_name: str = "高中数学 AI 备课工作台"
     environment: str = "development"
@@ -23,8 +27,12 @@ class Settings(BaseSettings):
         / "curriculum"
         / "pep-a-full-knowledge-tree-v1.csv"
     )
-    curriculum_review_db: Path = Field(
-        default=PROJECT_ROOT / "data" / "runtime" / "curriculum-reviews.sqlite3"
+    curriculum_baseline_manifest: Path = Field(
+        default=PROJECT_ROOT
+        / "docs"
+        / "high-school-math-ai"
+        / "curriculum"
+        / "pep-a-sealed-baseline-v1.json"
     )
     question_bank_db: Path = Field(
         default=PROJECT_ROOT / "data" / "runtime" / "question-bank.sqlite3"
@@ -79,6 +87,10 @@ class Settings(BaseSettings):
     openai_input_usd_per_million: float | None = None
     openai_cached_input_usd_per_million: float | None = None
     openai_output_usd_per_million: float | None = None
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-v4-flash"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_timeout_seconds: int = 90
     pilot_batch_json: Path = Field(
         default=PROJECT_ROOT / "data" / "pilot" / "batch-2026-08-001-30q.json"
     )
