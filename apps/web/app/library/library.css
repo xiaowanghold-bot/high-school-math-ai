@@ -16,3 +16,31 @@
 .library-workspace :is(.library-item-list b, .library-document-heading p, .library-text-compare header strong, .library-candidate > summary strong, .library-candidate-empty strong) { font-size: var(--module-text-sm) !important; }
 .library-workspace :is(.library-upload-submit, .library-document-heading a, .library-ocr-panel button, .library-candidate-workspace > header button, .library-review-actions button, .library-candidate-editor footer a, .library-candidate-editor footer button) { min-height: var(--module-control-height); padding: 9px 12px; font-size: var(--module-text-sm) !important; }
 .library-workspace :is(.library-text-compare pre, .library-text-compare textarea, .library-candidate-editor input, .library-candidate-editor select, .library-candidate-editor textarea) { font-size: var(--module-control-text) !important; }
+
+/* LaTeX workbench: readable rendering on the left, editable source on the right. */
+.library-ai-tools { display: grid; grid-template-columns: minmax(250px,1fr) minmax(260px,1.1fr) auto auto; gap: 10px; align-items: center; margin: 12px 0; border: 1px solid #cfd9ef; border-radius: 11px; background: #f6f8ff; padding: 11px 12px; }
+.library-ai-tools > div strong, .library-ai-tools > div small { display: block; }
+.library-ai-tools > div strong { color: #32477f; font-size: 11px; }
+.library-ai-tools > div small { margin-top: 3px; color: #6f7c96; font-size: 9px; line-height: 1.45; }
+.library-ai-tools > input[type="text"] { min-width: 0; border: 1px solid #d3dced; border-radius: 8px; background: white; padding: 9px 10px; outline: none; font-size: 10px; }
+.library-ai-tools > label { display: flex; align-items: center; gap: 6px; color: #5d6981; font-size: 9px; white-space: nowrap; }
+.library-ai-tools > label input { accent-color: var(--blue); }
+.library-ai-tools > button { min-height: 38px; border: 0; border-radius: 8px; background: var(--blue); color: white; padding: 9px 12px; cursor: pointer; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.library-ai-tools > button:disabled { opacity: .45; cursor: not-allowed; }
+.library-latex-workbench { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: white; }
+.library-latex-workbench > section { min-width: 0; }
+.library-latex-workbench > section + section { border-left: 1px solid var(--line); }
+.library-latex-workbench section > header { min-height: 56px; display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); background: #fafbfc; padding: 10px 12px; }
+.library-latex-workbench header strong, .library-latex-workbench header small { display: block; }
+.library-latex-workbench header strong { font-size: 11px; }
+.library-latex-workbench header small, .library-latex-workbench header span { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.library-rendered-paper article, .library-latex-source textarea { width: 100%; height: 620px; overflow: auto; margin: 0; border: 0; outline: 0; background: white; color: #263249; padding: 22px 24px; }
+.library-rendered-paper article { font: 15px/1.9 "Songti SC","SimSun",serif; }
+.library-rendered-paper article p { margin: 0 0 15px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.library-rendered-paper article .math-text { font-size: inherit; }
+.library-latex-source textarea { resize: vertical; background: #fbfcff; font: 13px/1.75 "Cascadia Mono","Microsoft YaHei",monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.library-original-extraction { margin-top: 11px; border: 1px solid var(--line); border-radius: 9px; background: #fafbfc; }
+.library-original-extraction summary { cursor: pointer; padding: 10px 12px; color: #536079; font-size: 10px; font-weight: 700; }
+.library-original-extraction pre { max-height: 320px; overflow: auto; margin: 0; border-top: 1px solid var(--line); padding: 14px; white-space: pre-wrap; overflow-wrap: anywhere; color: #667085; font: 11px/1.7 "Songti SC",serif; }
+@media (max-width:1150px) { .library-ai-tools { grid-template-columns: 1fr 1fr; }.library-latex-workbench { grid-template-columns: 1fr 1fr; } }
+@media (max-width:800px) { .library-ai-tools, .library-latex-workbench { grid-template-columns: 1fr; }.library-latex-workbench > section + section { border-left: 0; border-top: 1px solid var(--line); }.library-rendered-paper article, .library-latex-source textarea { height: 480px; } }

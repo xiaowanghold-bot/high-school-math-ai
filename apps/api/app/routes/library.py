@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from functools import lru_cache
 from threading import Lock
 from typing import Literal
@@ -14,6 +16,8 @@ from app.modules.private_library import (
     LibraryLifecycleCommand,
     LibraryOCRCommand,
     LibraryOCRResult,
+    LibraryAIRepairCommand,
+    LibraryAIRepairResult,
     LibraryItemList,
     LibraryItemView,
     LibraryStats,
@@ -33,6 +37,7 @@ from app.modules.pdf_imports import ImportBatchCommand, ImportBatchResult, PdfIm
 from app.routes.imports import get_pdf_import_studio
 from app.routes.model_operations import get_model_operations_registry
 from app.modules.private_library.exports import LibraryExportError, LibraryTextRenderer
+from app.modules.deepseek import DeepSeekClientError, DeepSeekJsonClient
 
 
 router = APIRouter(prefix="/library", tags=["private-library"])
@@ -70,6 +75,45 @@ def get_local_math_ocr_provider() -> LocalMathOCRProvider:
 @lru_cache
 def get_library_text_renderer() -> LibraryTextRenderer:
     return LibraryTextRenderer(get_settings().lesson_export_dir)
+
+
+def get_library_ai_repair_client() -> DeepSeekJsonClient:
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        raise RuntimeError("尚未配置 DeepSeek API Key")
+    return DeepSeekJsonClient(
+        api_key=settings.deepseek_api_key,
+        model=settings.deepseek_model,
+        base_url=settings.deepseek_base_url,
+        timeout_seconds=settings.deepseek_timeout_seconds,
+    )
+
+
+def _split_latex_repair_draft(text: str, *, max_chars: int = 7000) -> list[str]:
+    """Split long papers on page boundaries so DeepSeek can return complete JSON."""
+    page_parts = re.split(r"(?=【第\s*\d+\s*页】)", text)
+    parts = [part for part in page_parts if part]
+    if not parts:
+        parts = [text]
+    chunks: list[str] = []
+    current = ""
+    for part in parts:
+        if current and len(current) + len(part) > max_chars:
+            chunks.append(current)
+            current = ""
+        while len(part) > max_chars:
+            split_at = part.rfind("\n", 0, max_chars)
+            if split_at < max_chars // 2:
+                split_at = max_chars
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(part[:split_at])
+            part = part[split_at:]
+        current += part
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 @router.get("", response_model=LibraryItemList)
@@ -184,6 +228,80 @@ def run_local_math_ocr(item_id: str) -> LibraryOCRResult:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     finally:
         _local_math_ocr_lock.release()
+
+
+@router.post("/{item_id}/ai-repair", response_model=LibraryAIRepairResult)
+def repair_library_latex(item_id: str, command: LibraryAIRepairCommand) -> LibraryAIRepairResult:
+    if not command.external_processing_consent:
+        raise HTTPException(
+            status_code=422,
+            detail="使用 DeepSeek 修复前必须明确同意发送当前校对草稿；原 PDF 不会发送",
+        )
+    try:
+        item = get_private_library().get(item_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="私人资料不存在") from exc
+    if item.lifecycle_state == "trashed":
+        raise HTTPException(status_code=409, detail="回收站中的资料不能运行 AI 修复")
+    settings = get_settings()
+    try:
+        client = get_library_ai_repair_client()
+        chunks = _split_latex_repair_draft(command.draft_text)
+        repaired_chunks: list[str] = []
+        warnings: list[str] = []
+        for index, chunk in enumerate(chunks, start=1):
+            raw = client.request(
+                instructions=(
+                    "你是高中数学试卷 LaTeX 校对助手。修复 OCR 文本中的数学公式、上下标、分式、"
+                    "集合符号、向量、题号和选项排版。保留原有中文、页码、题目顺序、答案和解析，"
+                    "不得补造原文没有的题目、答案、数值或图形。数学表达式统一放在单个美元符号中。"
+                    "无法可靠判断的内容原样保留，并写入 warnings。"
+                ),
+                input_text=json.dumps(
+                    {
+                        "teacher_instruction": command.instruction,
+                        "chunk_position": f"{index}/{len(chunks)}",
+                        "draft_text": chunk,
+                    },
+                    ensure_ascii=False,
+                ),
+                action="私人资料 LaTeX 校对",
+                output_schema={
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "repaired_text": {"type": "string"},
+                        "warnings": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["repaired_text", "warnings"],
+                },
+            )
+            content = json.loads(raw["output"][0]["content"][0]["text"])
+            repaired_chunk = str(content["repaired_text"]).strip()
+            if not repaired_chunk:
+                raise ValueError(f"第 {index}/{len(chunks)} 段修复结果为空")
+            repaired_chunks.append(repaired_chunk)
+            warnings.extend(str(value) for value in content.get("warnings", []))
+        repaired = "\n\n".join(repaired_chunks)
+        if not repaired:
+            raise ValueError("修复结果为空")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (
+        DeepSeekClientError,
+        KeyError,
+        IndexError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise HTTPException(status_code=503, detail=f"DeepSeek LaTeX 修复失败：{exc}") from exc
+    return LibraryAIRepairResult(
+        repaired_text=repaired,
+        provider="deepseek",
+        model=settings.deepseek_model,
+        warnings=warnings,
+    )
 
 
 @router.post("/{item_id}/send-to-structured-import", response_model=ImportBatchResult)
@@ -302,7 +420,12 @@ def download_library_file(item_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="私人资料不存在") from exc
     except PrivateLibraryError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return FileResponse(path, media_type=item.mime_type, filename=item.original_filename)
+    return FileResponse(
+        path,
+        media_type=item.mime_type,
+        filename=item.original_filename,
+        content_disposition_type="inline",
+    )
 
 
 @router.get("/{item_id}/export")

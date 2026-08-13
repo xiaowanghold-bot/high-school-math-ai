@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 
 from app.modules.deepseek import DeepSeekJsonClient
+from app.modules.lesson_plans import DeepSeekLessonPlanProvider
+from app.modules.question_variants import DeepSeekQuestionVariantProvider
+from app.modules.solution_assistant import DeepSeekSolutionProvider
 
 
 def test_deepseek_uses_chat_completions_json_mode(monkeypatch) -> None:
@@ -46,3 +49,21 @@ def test_deepseek_uses_chat_completions_json_mode(monkeypatch) -> None:
     assert '"required": ["answer"]' in captured["payload"]["messages"][0]["content"]
     assert captured["timeout"] == 23
     assert result["output"][0]["content"][0]["text"] == '{"answer":"4"}'
+
+
+def test_deepseek_providers_initialize_openai_compatible_fields() -> None:
+    common = {
+        "api_key": "test-secret",
+        "model": "deepseek-v4-flash",
+        "base_url": "https://api.deepseek.com",
+    }
+
+    providers = [
+        DeepSeekLessonPlanProvider(**common),
+        DeepSeekQuestionVariantProvider(**common),
+        DeepSeekSolutionProvider(**common),
+    ]
+
+    assert all(provider.reasoning_effort == "low" for provider in providers)
+    assert all(provider.api_key == "test-secret" for provider in providers)
+    assert all(provider.timeout_seconds == 90 for provider in providers)

@@ -40,6 +40,20 @@ class LibraryOCRResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class LibraryAIRepairCommand(BaseModel):
+    draft_text: str = Field(min_length=1, max_length=2_000_000)
+    instruction: str = Field(default="", max_length=2000)
+    external_processing_consent: bool
+    teacher_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class LibraryAIRepairResult(BaseModel):
+    repaired_text: str
+    provider: str
+    model: str
+    warnings: list[str] = Field(default_factory=list)
+
+
 class LibraryLifecycleCommand(BaseModel):
     action: Literal["trash", "restore"]
     actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)

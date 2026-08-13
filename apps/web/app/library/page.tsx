@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { ResizableColumns } from "../components/resizable-columns";
+import { MathText } from "../components/math-text";
 import { useToast } from "../components/toast-provider";
 import "./library.css";
 
@@ -54,6 +55,8 @@ export default function LibraryPage() {
   const [candidateBusy, setCandidateBusy] = useState(false);
   const [candidates, setCandidates] = useState<QuestionCandidate[]>([]);
   const [ocrConsent, setOcrConsent] = useState(false);
+  const [aiConsent, setAiConsent] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState("");
   const [showTrash, setShowTrash] = useState(false);
   const { auto: setMessage } = useToast();
 
@@ -73,6 +76,7 @@ export default function LibraryPage() {
     setDraftText(item.corrected_text || item.extracted_text);
     setReviewNote(item.review_note);
     setOcrConsent(false);
+    setAiConsent(false);
     setCandidates(candidateResponse.ok ? (await candidateResponse.json()).items : []);
   }
 
@@ -169,6 +173,24 @@ export default function LibraryPage() {
       const result = await response.json(); await refresh(result.item.library_item_id);
       setMessage("本地数学 OCR 已生成含公式的待校对稿；请对照原页确认后再导出或拆题。");
     } catch (error) { setMessage(error instanceof Error ? error.message : "本地数学 OCR 失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function runAiRepair() {
+    if (!selected) return;
+    if (!aiConsent) { setMessage("请先确认本次仅将右侧校对草稿发送给 DeepSeek；原 PDF 不会发送。"); return; }
+    if (!draftText.trim()) { setMessage("当前没有可供 AI 修复的 LaTeX 草稿。"); return; }
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/library/${selected.library_item_id}/ai-repair`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft_text: draftText, instruction: aiInstruction, external_processing_consent: true }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result = await response.json();
+      setDraftText(result.repaired_text);
+      setMessage(`DeepSeek 已修复当前 LaTeX 草稿（${result.model}）；请查看左侧渲染结果并对照原 PDF 审核，保存前不会覆盖版本。`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "DeepSeek LaTeX 修复失败"); }
     finally { setBusy(false); }
   }
 
@@ -286,11 +308,12 @@ export default function LibraryPage() {
           {selected.warnings.map((warning) => <p className="library-warning" key={warning}>{warning}</p>)}
           {selected.extraction_status === "needs_ocr" && <section className="library-ocr-panel"><div><strong>检测到 PDF 私有字体乱码</strong><p>原页清晰但文本映射已损坏。优先运行本地数学 OCR 生成含 LaTeX 的校对稿；文件不会离开本机。</p></div>{selected.file_kind === "pdf" && <button type="button" disabled={busy} onClick={runLocalMathOcr}>{busy ? "正在本地识别…" : "本地数学 OCR 重建"}</button>}{selected.file_kind === "pdf" && <button type="button" disabled={busy} onClick={sendToStructuredImport}>转入逐题结构化</button>}<label><input type="checkbox" checked={ocrConsent} onChange={(event) => setOcrConsent(event.target.checked)} /><span>备选：同意本次发送该文件到外部 OCR</span></label><button type="button" disabled={busy || !ocrConsent} onClick={runOcr}>外部视觉 OCR</button></section>}
           {selected.file_kind === "image" && <div className="library-image-preview"><img src={`/api/v1/library/${selected.library_item_id}/file`} alt={selected.title} /></div>}
-          {selected.file_kind === "pdf" && <div className="library-image-preview"><iframe title={`${selected.title} 原 PDF 可读预览`} src={`/api/v1/library/${selected.library_item_id}/file#toolbar=1&view=FitH`} /></div>}
-          <div className="library-text-compare">
-            <section><header><div><strong>自动提取原文</strong><small>{selected.extracted_char_count} 字符 · 不可覆盖</small></div><span>{extractionLabels[selected.extraction_status]}</span></header><pre>{selected.extracted_text || "尚无自动提取文字。请在右侧根据原文件进行人工转录。"}</pre></section>
-            <section className="library-correction"><header><div><strong>教师校对文本</strong><small>{draftText.length} 字符 · 保存即生成新版本</small></div><span>v{selected.version}</span></header><textarea value={draftText} onChange={(event) => setDraftText(event.target.value)} placeholder="在此修正识别错误、补充公式或人工转录图片内容……" /></section>
+          <section className="library-ai-tools"><div><strong>DeepSeek LaTeX 校对助手</strong><p>仅发送右侧当前草稿，不发送原 PDF。AI 负责修复公式、上下标、分式、题号和选项排版；结果先回填草稿，不会自动保存或确认。</p></div><input value={aiInstruction} onChange={(event) => setAiInstruction(event.target.value)} placeholder="补充要求（可选），例如：重点检查向量和分式" /><label><input type="checkbox" checked={aiConsent} onChange={(event) => setAiConsent(event.target.checked)} />同意本次发送校对草稿</label><button type="button" disabled={busy || !aiConsent || !draftText.trim()} onClick={runAiRepair}>{busy ? "AI 正在校对…" : "用 DeepSeek 修复草稿"}</button></section>
+          <div className="library-latex-workbench">
+            <section className="library-rendered-paper"><header><div><strong>可读成品预览</strong><small>随右侧编辑实时渲染 · 学生与教师看到的数学格式</small></div><span>{selected.text_review_status === "confirmed" ? "已确认版本" : "待校对"}</span></header><article>{draftText.trim() ? draftText.split(/\n{2,}/).map((block, index) => <p key={index}><MathText text={block} /></p>) : <p className="library-render-empty">右侧尚无 LaTeX 草稿。先运行本地数学 OCR，或在右侧录入内容。</p>}</article></section>
+            <section className="library-latex-source"><header><div><strong>LaTeX 可编辑稿</strong><small>{draftText.length} 字符 · 数学公式使用 $...$</small></div><span>v{selected.version}</span></header><textarea value={draftText} onChange={(event) => setDraftText(event.target.value)} spellCheck={false} placeholder="本地数学 OCR 会把 PDF 转为中文 + $LaTeX$ 草稿；教师可在这里自由修改……" /></section>
           </div>
+          <details className="library-original-extraction"><summary>查看系统原始提取文本（只读）</summary><pre>{selected.extracted_text || "尚无自动提取文字。"}</pre></details>
           <label className="library-review-note"><span>本次校对说明</span><input value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="例如：核对第 1—5 页，修正函数公式与上下标" /></label>
           <footer className="library-review-actions"><div><span>确认后仍只进入私人资料库</span><small>后续拆题和进入题库需要再次审核</small></div><button type="button" disabled={busy} onClick={() => saveReview(false)}>保存校对草稿</button><button className="confirm" type="button" disabled={busy || !draftText.trim()} onClick={() => saveReview(true)}>{busy ? "保存中…" : "确认文本可用"}</button></footer>
           <section className="library-candidate-workspace">

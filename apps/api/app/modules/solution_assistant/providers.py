@@ -154,7 +154,10 @@ class DeepSeekSolutionProvider(OpenAISolutionProvider):
         self, *, api_key: str, model: str, base_url: str,
         timeout_seconds: int = 90, recorder=None, **_kwargs,
     ) -> None:
+        self.api_key = api_key
         self.model = model
+        self.reasoning_effort = "low"
+        self.timeout_seconds = timeout_seconds
         self.recorder = recorder or NullModelRunRecorder()
         self.client = DeepSeekJsonClient(
             api_key=api_key, model=model, base_url=base_url,

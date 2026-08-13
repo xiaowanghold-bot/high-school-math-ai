@@ -299,8 +299,70 @@ def test_private_library_http_upload_review_and_download(
     assert review.json()["text_review_status"] == "confirmed"
     assert download.status_code == 200
     assert download.content.startswith(b"PK")
+    assert download.headers["content-disposition"].startswith("inline;")
     assert listing.status_code == 200
     assert listing.json()["total"] == 1
+
+
+def test_library_ai_repair_requires_explicit_consent() -> None:
+    response = TestClient(app).post(
+        "/api/v1/library/any-item/ai-repair",
+        json={
+            "draft_text": "函数 f(x)=x2",
+            "external_processing_consent": False,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "DeepSeek" in response.json()["detail"]
+
+
+def test_library_ai_repair_returns_editable_latex_without_saving(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    library = make_library(tmp_path)
+    item = library.ingest(
+        ingest_command(rights_basis="original"),
+        filename="lesson.pdf",
+        content=pdf_bytes("f(x)=x2"),
+    )
+
+    class FakeDeepSeekClient:
+        def request(self, **kwargs):
+            payload = kwargs["input_text"]
+            assert "f(x)=x2" in payload
+            return {
+                "output": [{"content": [{"text": '{"repaired_text":"函数 $f(x)=x^2$","warnings":[]}'}]}]
+            }
+
+    monkeypatch.setattr("app.routes.library.get_private_library", lambda: library)
+    monkeypatch.setattr(
+        "app.routes.library.get_library_ai_repair_client", lambda: FakeDeepSeekClient()
+    )
+    client = TestClient(app)
+    response = client.post(
+        f"/api/v1/library/{item.library_item_id}/ai-repair",
+        json={
+            "draft_text": "函数 f(x)=x2",
+            "external_processing_consent": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["repaired_text"] == "函数 $f(x)=x^2$"
+    assert response.json()["provider"] == "deepseek"
+    assert library.get(item.library_item_id).corrected_text == item.corrected_text
+
+
+def test_long_latex_repair_draft_splits_on_page_boundaries() -> None:
+    from app.routes.library import _split_latex_repair_draft
+
+    draft = "".join(f"【第 {index} 页】\n" + ("题目内容" * 500) for index in range(1, 9))
+    chunks = _split_latex_repair_draft(draft, max_chars=5000)
+
+    assert len(chunks) > 1
+    assert "".join(chunks) == draft
+    assert all(len(chunk) <= 5000 for chunk in chunks)
 
 
 def test_http_rejects_short_rights_statement(
