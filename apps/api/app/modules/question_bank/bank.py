@@ -403,11 +403,16 @@ class QuestionBank:
         page: int = 1,
         page_size: int = 20,
         library_state: str = "active",
+        usage_scope: str = "admin",
     ) -> QuestionSearchPage:
         clauses: list[str] = []
         values: list[Any] = []
         if library_state not in {"active", "removed", "all"}:
             raise QuestionBankError("未知的题库状态")
+        if usage_scope not in {"admin", "teacher"}:
+            raise QuestionBankError("未知的题库使用范围")
+        if usage_scope == "teacher":
+            clauses.append("(verification_status = 'passed' OR question_id LIKE 'q_variant_%')")
         if library_state == "active":
             clauses.append(
                 "NOT EXISTS (SELECT 1 FROM question_library_state qls "

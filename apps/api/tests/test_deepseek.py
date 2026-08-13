@@ -46,9 +46,33 @@ def test_deepseek_uses_chat_completions_json_mode(monkeypatch) -> None:
     assert captured["payload"]["model"] == "deepseek-v4-flash"
     assert captured["payload"]["response_format"] == {"type": "json_object"}
     assert captured["payload"]["thinking"] == {"type": "disabled"}
+    assert captured["payload"]["max_tokens"] == 4096
     assert '"required": ["answer"]' in captured["payload"]["messages"][0]["content"]
     assert captured["timeout"] == 23
-    assert result["output"][0]["content"][0]["text"] == '{"answer":"4"}'
+    assert json.loads(result["output"][0]["content"][0]["text"]) == {"answer": "4"}
+
+
+def test_deepseek_normalizes_control_characters_fences_and_trailing_text(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            payload = {
+                "choices": [{"message": {"content": '```json\n{"answer":"line\none","formula":"\\frac{1}{2}"}\n```\n补充说明'}}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
+            }
+            return json.dumps(payload, ensure_ascii=False).encode()
+
+    monkeypatch.setattr("app.modules.deepseek.urlopen", lambda *_args, **_kwargs: Response())
+    result = DeepSeekJsonClient(api_key="test-secret").request(
+        instructions="test", input_text="{}", action="test", max_tokens=900,
+    )
+    parsed = json.loads(result["output"][0]["content"][0]["text"])
+    assert parsed == {"answer": "line\none", "formula": "\\frac{1}{2}"}
 
 
 def test_deepseek_providers_initialize_openai_compatible_fields() -> None:

@@ -38,10 +38,12 @@ from app.routes.imports import get_pdf_import_studio
 from app.routes.model_operations import get_model_operations_registry
 from app.modules.private_library.exports import LibraryExportError, LibraryTextRenderer
 from app.modules.deepseek import DeepSeekClientError, DeepSeekJsonClient
+from app.modules.background_jobs import BackgroundJobRegistry, BackgroundJobView
 
 
 router = APIRouter(prefix="/library", tags=["private-library"])
 _local_math_ocr_lock = Lock()
+_background_jobs = BackgroundJobRegistry()
 
 
 @lru_cache
@@ -68,8 +70,8 @@ def get_library_ocr_provider() -> OpenAIResourceOCRProvider:
     )
 
 
-def get_local_math_ocr_provider() -> LocalMathOCRProvider:
-    return LocalMathOCRProvider()
+def get_local_math_ocr_provider(progress=None) -> LocalMathOCRProvider:
+    return LocalMathOCRProvider(progress=progress)
 
 
 @lru_cache
@@ -230,6 +232,56 @@ def run_local_math_ocr(item_id: str) -> LibraryOCRResult:
         _local_math_ocr_lock.release()
 
 
+@router.post("/{item_id}/local-math-ocr/jobs", response_model=BackgroundJobView, status_code=202)
+def start_local_math_ocr_job(item_id: str) -> BackgroundJobView:
+    try:
+        get_private_library().get(item_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="私人资料不存在") from exc
+    if not _local_math_ocr_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="本地数学 OCR 正在处理另一份资料，请等待当前任务完成")
+
+    def runner(progress):
+        try:
+            item, provider_name, warnings = get_private_library().apply_local_ocr(
+                item_id,
+                provider=get_local_math_ocr_provider(progress),
+                teacher_id="owner_teacher",
+            )
+            return LibraryOCRResult(item=item, provider=provider_name, warnings=warnings).model_dump(mode="json")
+        finally:
+            _local_math_ocr_lock.release()
+
+    return _background_jobs.start(kind="local_math_ocr", subject_id=item_id, runner=runner)
+
+
+@router.post("/{item_id}/ai-repair/jobs", response_model=BackgroundJobView, status_code=202)
+def start_library_ai_repair_job(item_id: str, command: LibraryAIRepairCommand) -> BackgroundJobView:
+    # Validate consent and item synchronously so invalid jobs never enter the queue.
+    if not command.external_processing_consent:
+        raise HTTPException(status_code=422, detail="使用 DeepSeek 修复前必须明确同意发送当前校对草稿")
+    try:
+        get_private_library().get(item_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="私人资料不存在") from exc
+
+    def runner(progress):
+        progress(0, 1, "正在调用 DeepSeek 修复 LaTeX 草稿")
+        result = repair_library_latex(item_id, command)
+        progress(1, 1, "DeepSeek 草稿修复完成")
+        return result.model_dump(mode="json")
+
+    return _background_jobs.start(kind="library_ai_repair", subject_id=item_id, runner=runner)
+
+
+@router.get("/jobs/{job_id}", response_model=BackgroundJobView)
+def get_library_background_job(job_id: str) -> BackgroundJobView:
+    try:
+        return _background_jobs.get(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="后台任务不存在或 API 已重启") from exc
+
+
 @router.post("/{item_id}/ai-repair", response_model=LibraryAIRepairResult)
 def repair_library_latex(item_id: str, command: LibraryAIRepairCommand) -> LibraryAIRepairResult:
     if not command.external_processing_consent:
@@ -275,6 +327,7 @@ def repair_library_latex(item_id: str, command: LibraryAIRepairCommand) -> Libra
                     },
                     "required": ["repaired_text", "warnings"],
                 },
+                max_tokens=6000,
             )
             content = json.loads(raw["output"][0]["content"][0]["text"])
             repaired_chunk = str(content["repaired_text"]).strip()

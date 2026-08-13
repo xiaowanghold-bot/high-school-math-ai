@@ -4,6 +4,8 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
 import { useToast } from "../components/toast-provider";
+import { longTaskApiUrl } from "../components/api-url";
+import { useAppRole } from "../components/role-provider";
 
 type Question = {
   question_id: string;
@@ -89,6 +91,9 @@ type QuestionVariantResult = {
   model: string;
   mode: "local_rule" | "live_ai";
   warnings: string[];
+};
+type SolutionResult = {
+  explanation: { method: string; steps: string[]; final_answer: string };
 };
 
 type CurriculumSuggestion = {
@@ -212,6 +217,7 @@ async function errorText(response: Response) {
 }
 
 export default function SearchPage() {
+  const { isAdmin } = useAppRole();
   const [stats, setStats] = useState<Stats | null>(null);
   const [items, setItems] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
@@ -256,9 +262,10 @@ export default function SearchPage() {
     if (module) params.set("module", module);
     if (workQueue) params.set("work_queue", workQueue);
     if (knowledgePointId) params.set("knowledge_point_id", knowledgePointId);
+    params.set("usage_scope", isAdmin ? "admin" : "teacher");
     params.set("library_state", showRemoved ? "removed" : "active");
     return `${apiBase}/api/v1/questions?${params.toString()}`;
-  }, [query, chapter, verification, reviewStatus, module, workQueue, knowledgePointId, showRemoved]);
+  }, [query, chapter, verification, reviewStatus, module, workQueue, knowledgePointId, showRemoved, isAdmin]);
 
   const loadStats = () => fetch(`${apiBase}/api/v1/question-bank/stats`).then((response) => response.json()).then(setStats);
 
@@ -325,14 +332,15 @@ export default function SearchPage() {
       })
       .then((payload) => {
         if (!active) return;
-        setItems(payload.items);
+        const visibleItems: Question[] = payload.items;
+        setItems(visibleItems);
         setTotal(payload.total);
-        setSelectedId((current) => current && payload.items.some((item: Question) => item.question_id === current) ? current : payload.items[0]?.question_id ?? null);
+        setSelectedId((current) => current && visibleItems.some((item: Question) => item.question_id === current) ? current : visibleItems[0]?.question_id ?? null);
       })
       .catch(() => active && setMessage("题库接口暂时不可用，请确认后端已启动。"))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [searchUrl, listVersion]);
+  }, [searchUrl, listVersion, isAdmin]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -387,6 +395,61 @@ export default function SearchPage() {
     } finally {
       setWorking(false);
     }
+  }
+
+  async function calculateVariantAnswer() {
+    if (!editDraft?.stem_plain.trim()) return;
+    setWorking(true);
+    try {
+      const optionText = editDraft.options.length
+        ? `\n${editDraft.options.map((item) => `${item.key}. ${item.text}`).join("\n")}`
+        : "";
+      const response = await fetch(longTaskApiUrl("/api/v1/solutions/solve"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question_text: `${editDraft.stem_plain}${optionText}`,
+          solution_mode: "standard",
+          teacher_instruction: "这是教师正在编写的变式题。请独立计算答案并给出可审核步骤；不要改写题干。",
+        }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const result: SolutionResult = await response.json();
+      setEditDraft({
+        ...editDraft,
+        answer_value: result.explanation.final_answer,
+        final_answer: result.explanation.final_answer,
+        solution_method: result.explanation.method,
+        solution_steps: result.explanation.steps.join("\n"),
+      });
+      setMessage("DeepSeek 已独立计算并回填答案与解析草稿；请教师复核后再保存。 ");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "DeepSeek 计算答案失败");
+    } finally { setWorking(false); }
+  }
+
+  async function saveAsTeacherVariant() {
+    if (!selectedId || !detail || !editDraft?.stem_plain.trim()) return;
+    setWorking(true);
+    try {
+      const response = await fetch(`${apiBase}/api/v1/questions/${selectedId}/teacher-variants`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question_type: detail.question_type,
+          ...editDraft,
+          stem_latex: editDraft.stem_latex || null,
+          solution_steps: editDraft.solution_steps.split("\n").map((item) => item.trim()).filter(Boolean),
+          difficulty: detail.difficulty,
+          teacher_id: "owner_teacher",
+        }),
+      });
+      if (!response.ok) throw new Error(await errorText(response));
+      const saved: QuestionDetail = await response.json();
+      setItems((current) => [saved, ...current]);
+      setSelectedId(saved.question_id);
+      setMessage("变式已另存为你的私有题目；不会修改管理员维护的原题，正式共享前仍需管理员审核。 ");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "保存私有变式失败");
+    } finally { setWorking(false); }
   }
 
   async function review(decision: "approved" | "changes_requested" | "rejected") {
@@ -504,7 +567,7 @@ export default function SearchPage() {
     if (!selectedId || !detail) return;
     setWorking(true);
     try {
-      const response = await fetch(`${apiBase}/api/v1/questions/${selectedId}/variants`, {
+      const response = await fetch(longTaskApiUrl(`${apiBase}/api/v1/questions/${selectedId}/variants`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -684,29 +747,29 @@ export default function SearchPage() {
   return (
     <div className="page-content question-workspace">
       <section className="page-title question-title">
-        <div><p className="eyebrow">智能搜题 · 教师审核台</p><h1>先把每一道题变得可信。</h1><p className="subtle">教师可直接修订题干、答案和解析；题干图与解析图在固定图片槽内受控展示。</p></div>
-        <button className="primary-button" type="button" onClick={showImportStatus}>导入记录</button>
+        <div><p className="eyebrow">{isAdmin ? "智能搜题 · 题库管理台" : "智能搜题 · 教师使用台"}</p><h1>{isAdmin ? "先把每一道题变得可信。" : "从成型题库选题，并制作自己的变式。"}</h1><p className="subtle">{isAdmin ? "管理员修订题干、答案、解析和来源，并负责正式入库。" : "这里只展示已验证题目；修改会另存为私人变式，不会改变正式母题。"}</p></div>
+        {isAdmin && <button className="primary-button" type="button" onClick={showImportStatus}>导入记录</button>}
       </section>
 
 
-      <section className="quality-strip" aria-label="题库质量概览">
+      {isAdmin && <section className="quality-strip" aria-label="题库质量概览">
         <div><span>试点题目</span><strong>{stats?.total ?? "—"}</strong><small>本地私有题库</small></div>
         <div><span>待教师审核</span><strong>{pending}</strong><small>逐题确认</small></div>
         <div className="metric-passed"><span>独立验证通过</span><strong>{verifiedCount}</strong><small>含计算证据</small></div>
         <div><span>待公式校正</span><strong>{formulaIssues}</strong><small>禁止直接展示</small></div>
         <div className={sourceIssues ? "metric-alert" : ""}><span>来源矛盾</span><strong>{sourceIssues}</strong><small>需重点复核</small></div>
         <div><span>当前可发布</span><strong>{stats?.publishable ?? 0}</strong><small>全部门禁通过</small></div>
-      </section>
+      </section>}
 
       <form className="question-filters" onSubmit={submitSearch}>
         <label className="search-field"><span>⌕</span><input aria-label="搜索题目" value={queryInput} onChange={(event) => { setQueryInput(event.target.value); setKnowledgePointId(""); }} placeholder="搜索题干、章节或来源，例如：集合、椭圆、概率" /></label>
         <select value={chapter} onChange={(event) => { setChapter(event.target.value); setModule(""); }} aria-label="按章节筛选"><option value="">全部章节</option>{Object.keys(stats?.by_chapter ?? {}).map((item) => <option key={item} value={item}>{item}</option>)}</select>
-        <select value={verification} onChange={(event) => { setVerification(event.target.value); setWorkQueue(""); }} aria-label="按验证状态筛选"><option value="">全部质量状态</option><option value="passed">验证通过</option><option value="needs_formula_review">待公式校正</option><option value="needs_math_review">待数学验算</option><option value="source_inconsistency_detected">来源存在矛盾</option></select>
-        <select value={reviewStatus} onChange={(event) => { setReviewStatus(event.target.value); setWorkQueue(""); }} aria-label="按教师审核状态筛选"><option value="">全部审核状态</option><option value="pending">待教师审核</option><option value="approved">教师已通过</option><option value="changes_requested">需要修改</option><option value="rejected">已拒绝</option></select>
+        {isAdmin && <select value={verification} onChange={(event) => { setVerification(event.target.value); setWorkQueue(""); }} aria-label="按验证状态筛选"><option value="">全部质量状态</option><option value="passed">验证通过</option><option value="needs_formula_review">待公式校正</option><option value="needs_math_review">待数学验算</option><option value="source_inconsistency_detected">来源存在矛盾</option></select>}
+        {isAdmin && <select value={reviewStatus} onChange={(event) => { setReviewStatus(event.target.value); setWorkQueue(""); }} aria-label="按教师审核状态筛选"><option value="">全部审核状态</option><option value="pending">待教师审核</option><option value="approved">教师已通过</option><option value="changes_requested">需要修改</option><option value="rejected">已拒绝</option></select>}
         <button className="primary-button" type="submit">检索</button>
       </form>
 
-      <section className="review-shortcuts-panel" aria-label="题库审核快速入口">
+      {isAdmin && <section className="review-shortcuts-panel" aria-label="题库审核快速入口">
         <nav className="module-shortcuts work-queue-shortcuts" aria-label="按审核队列快速筛选"><span>审核队列</span>{workQueueShortcuts.map((item) => {
           const active = item.key ? workQueue === item.key : !workQueue && !reviewStatus && !verification;
           const count = item.key ? stats?.by_work_queue?.[item.key] ?? 0 : stats?.total ?? 0;
@@ -717,11 +780,11 @@ export default function SearchPage() {
           const count = item.key ? stats?.by_module?.[item.key] ?? 0 : stats?.total ?? 0;
           return <button className={active ? "active" : ""} key={item.label} type="button" onClick={() => { setModule(item.key); setChapter(""); }}>{item.label}<small>{count}</small></button>;
         })}</nav>
-      </section>
+      </section>}
 
       <ResizableColumns className="question-layout" storageKey="question-search" initialLeftPercent={42} leftMin={320} rightMin={420} collapse="wide" label="调整题目列表与题目详情宽度">
         <section className="question-results" aria-label="题目列表">
-          <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong><button type="button" onClick={() => { setShowRemoved((current) => !current); setSelectedId(null); }}>{showRemoved ? "返回正常题库" : `题目回收站 ${stats?.removed ?? 0}`}</button></div>
+          <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong>{isAdmin && <button type="button" onClick={() => { setShowRemoved((current) => !current); setSelectedId(null); }}>{showRemoved ? "返回正常题库" : `题目回收站 ${stats?.removed ?? 0}`}</button>}</div>
           <div className="result-list">
             {items.map((item, index) => <button className={selectedId === item.question_id ? "question-row selected" : "question-row"} type="button" key={item.question_id} onClick={() => setSelectedId(item.question_id)}><span className="question-index">{String(index + 1).padStart(2, "0")}</span><span className="question-main"><span className="question-tags"><em>{item.question_type === "single_choice" ? "单选题" : "解答题"}</em><i className={`quality-tag ${item.verification_status}`}>{verificationLabels[item.verification_status] ?? item.verification_status}</i></span><b>{item.stem_plain}</b><small>{item.chapter} · 难度 {item.difficulty}/5</small></span><span className="review-mark">{reviewLabels[item.review_status] ?? item.review_status}</span></button>)}
             {!loading && items.length === 0 && <div className="empty-state"><strong>没有匹配题目</strong><p>换一个关键词或清空筛选条件。</p></div>}
@@ -731,7 +794,7 @@ export default function SearchPage() {
         <aside className="question-detail" aria-label="题目审核详情">
           {!detail && <div className="empty-state"><strong>请选择一道题</strong><p>右侧将显示来源、答案与审核动作。</p></div>}
           {detail && editDraft && <>
-            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools"><span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span><button type="button" onClick={() => changeQuestionLibraryState(detail.library_state === "removed" ? "restore" : "remove")}>{detail.library_state === "removed" ? "恢复题目" : "移入回收站"}</button></div></header>
+            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools"><span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span>{isAdmin && <button type="button" onClick={() => changeQuestionLibraryState(detail.library_state === "removed" ? "restore" : "remove")}>{detail.library_state === "removed" ? "恢复题目" : "移入回收站"}</button>}</div></header>
             <div className="detail-mode-tabs"><button className={detailMode === "preview" ? "active" : ""} type="button" onClick={() => setDetailMode("preview")}>内容预览</button><button className={detailMode === "edit" ? "active" : ""} type="button" onClick={() => setDetailMode("edit")}>编辑与配图</button></div>
 
             {detailMode === "preview" ? <>
@@ -742,7 +805,7 @@ export default function SearchPage() {
               <div className="answer-line"><span>{detail.verification_status === "passed" ? "独立验证答案" : "当前答案"}</span><strong>{detail.raw.verification?.computed_answer || detail.answer_value || "待独立求解"}</strong></div>
               {!!detail.raw.solutions?.[0]?.steps_latex?.length && <div className="solution-card"><header><span>自有解析草稿</span><strong>{detail.raw.solutions[0].method}</strong></header><ol>{detail.raw.solutions[0].steps_latex?.map((step, index) => <li key={index}><MathText text={step} /></li>)}</ol><small>需由教师确认后才可作为正式解析</small></div>}
               {renderImages("solution")}
-              <details className="question-quality-workspace" open={detail.verification_status !== "passed" || !detail.knowledge_point_ids.length}>
+              {isAdmin && <details className="question-quality-workspace" open={detail.verification_status !== "passed" || !detail.knowledge_point_ids.length}>
                 <summary><span><strong>教材映射与数学核验</strong><small>建议只供参考，应用与通过均由教师确认</small></span><i>{qualityLoading ? "读取中" : detail.verification_status === "passed" ? "已核验" : "待处理"}</i></summary>
                 {quality && <div className="quality-workspace-grid">
                   <section className="curriculum-quality-panel">
@@ -792,7 +855,7 @@ export default function SearchPage() {
                   </section>
                 </div>}
                 {!quality && !qualityLoading && <p className="quality-load-error">质量工作区暂不可用，请确认接口已启动后重试。</p>}
-              </details>
+              </details>}
               <div className="question-editor-form">
                 <div className="editor-safety-note"><strong>生成私有变式</strong><span>只允许从独立验证通过的原题生成；新题保留母题和生成记录，并重新进入教师审核门禁。</span></div>
                 <div className="question-editor-two">
@@ -803,23 +866,20 @@ export default function SearchPage() {
                 <div className="question-editor-actions"><span>{detail.verification_status === "passed" ? "生成后自动打开新题，可继续修改题干、答案、解析和图片。" : "该题尚未验证，暂不能作为变式母题。"}</span><button className="primary" type="button" disabled={working || detail.verification_status !== "passed"} onClick={generateVariant}>{working ? "生成中…" : "生成变式草稿"}</button></div>
               </div>
             </> : <div className="question-editor-form">
-              <div className="editor-safety-note"><strong>修改即生成新版本</strong><span>题干、选项、答案或题干图变化会自动退回数学验算；来源原文不会被覆盖。</span></div>
+              <div className="editor-safety-note"><strong>{isAdmin ? "修改即生成新版本" : "编辑自己的变式"}</strong><span>{isAdmin ? "题干、选项、答案或题干图变化会自动退回数学验算；来源原文不会被覆盖。" : "这里的修改不会覆盖正式母题；可让 DeepSeek 计算答案后另存为私人变式。"}</span></div>
               <label><span>题干正文</span><textarea className="large" value={editDraft.stem_plain} onChange={(event) => setEditDraft({ ...editDraft, stem_plain: event.target.value })} /></label>
               <label><span>LaTeX 题干（可选）</span><textarea value={editDraft.stem_latex} onChange={(event) => setEditDraft({ ...editDraft, stem_latex: event.target.value })} placeholder="可直接输入含 $...$ 的数学公式；留空则显示题干正文" /></label>
-              {renderImages("stem", true)}
+              {isAdmin && renderImages("stem", true)}
               <section className="option-editor"><header><strong>选项</strong><button type="button" onClick={() => setEditDraft({ ...editDraft, options: [...editDraft.options, { key: String.fromCharCode(65 + editDraft.options.length), text: "" }] })}>＋ 添加选项</button></header>{editDraft.options.map((option, index) => <div key={`${option.key}-${index}`}><input className="option-key-input" aria-label={`选项 ${index + 1} 编号`} value={option.key} onChange={(event) => setEditDraft({ ...editDraft, options: editDraft.options.map((item, itemIndex) => itemIndex === index ? { ...item, key: event.target.value } : item) })} /><textarea value={option.text} onChange={(event) => setEditDraft({ ...editDraft, options: editDraft.options.map((item, itemIndex) => itemIndex === index ? { ...item, text: event.target.value } : item) })} /><button type="button" aria-label={`删除选项 ${option.key}`} onClick={() => setEditDraft({ ...editDraft, options: editDraft.options.filter((_, itemIndex) => itemIndex !== index) })}>×</button></div>)}</section>
               <div className="question-editor-two"><label><span>参考答案</span><input value={editDraft.answer_value} onChange={(event) => setEditDraft({ ...editDraft, answer_value: event.target.value })} /></label><label><span>解析方法</span><input value={editDraft.solution_method} onChange={(event) => setEditDraft({ ...editDraft, solution_method: event.target.value })} /></label></div>
               <label><span>解析步骤（每行一步）</span><textarea className="large" value={editDraft.solution_steps} onChange={(event) => setEditDraft({ ...editDraft, solution_steps: event.target.value })} /></label>
               <label><span>最终答案</span><input value={editDraft.final_answer} onChange={(event) => setEditDraft({ ...editDraft, final_answer: event.target.value })} /></label>
-              {renderImages("solution", true)}
+              {isAdmin && renderImages("solution", true)}
               <label><span>修订说明</span><input value={editDraft.note} onChange={(event) => setEditDraft({ ...editDraft, note: event.target.value })} /></label>
-              <div className="question-editor-actions"><button type="button" onClick={() => { setEditDraft(draftFromDetail(detail)); setDetailMode("preview"); }}>放弃未保存修改</button><button className="primary" type="button" disabled={working || !editDraft.stem_plain.trim()} onClick={saveRevision}>{working ? "保存中…" : "保存为新修订"}</button></div>
+              <div className="question-editor-actions"><button type="button" onClick={() => { setEditDraft(draftFromDetail(detail)); setDetailMode("preview"); }}>放弃未保存修改</button><button type="button" disabled={working || !editDraft.stem_plain.trim()} onClick={calculateVariantAnswer}>{working ? "计算中…" : "用 DeepSeek 计算答案"}</button><button className="primary" type="button" disabled={working || !editDraft.stem_plain.trim()} onClick={isAdmin || detail.question_id.startsWith("q_variant_") ? saveRevision : saveAsTeacherVariant}>{working ? "保存中…" : isAdmin ? "保存为新修订" : detail.question_id.startsWith("q_variant_") ? "保存我的变式" : "存入我的私人题库"}</button></div>
             </div>}
 
-            <dl className="source-meta"><div><dt>来源文件</dt><dd>{detail.source_document}</dd></div><div><dt>定位页</dt><dd>{detail.source_page_start ?? "—"}{detail.source_page_end && detail.source_page_end !== detail.source_page_start ? `–${detail.source_page_end}` : ""}</dd></div><div><dt>审核状态</dt><dd>{reviewLabels[detail.review_status] ?? detail.review_status}</dd></div></dl>
-            <div className="gate-list"><h3>发布门禁</h3>{detail.publication_blockers.map((item) => <span key={item}>○ {blockerLabels[item] ?? item}</span>)}</div>
-            <div className="review-actions"><button type="button" className="approve" disabled={detail.verification_status !== "passed"} onClick={() => review("approved")}>教师通过</button><button type="button" onClick={() => review("changes_requested")}>需要修改</button><button type="button" className="reject" onClick={() => review("rejected")}>拒绝入库</button></div>
-            <button className="publish-check" type="button" onClick={checkPublish}>检查是否可以发布</button>
+            {isAdmin && <><dl className="source-meta"><div><dt>来源文件</dt><dd>{detail.source_document}</dd></div><div><dt>定位页</dt><dd>{detail.source_page_start ?? "—"}{detail.source_page_end && detail.source_page_end !== detail.source_page_start ? `–${detail.source_page_end}` : ""}</dd></div><div><dt>审核状态</dt><dd>{reviewLabels[detail.review_status] ?? detail.review_status}</dd></div></dl><div className="gate-list"><h3>发布门禁</h3>{detail.publication_blockers.map((item) => <span key={item}>○ {blockerLabels[item] ?? item}</span>)}</div><div className="review-actions"><button type="button" className="approve" disabled={detail.verification_status !== "passed"} onClick={() => review("approved")}>教师通过</button><button type="button" onClick={() => review("changes_requested")}>需要修改</button><button type="button" className="reject" onClick={() => review("rejected")}>拒绝入库</button></div><button className="publish-check" type="button" onClick={checkPublish}>检查是否可以发布</button></>}
           </>}
         </aside>
       </ResizableColumns>

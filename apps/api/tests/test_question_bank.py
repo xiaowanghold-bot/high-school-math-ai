@@ -67,6 +67,18 @@ def test_search_combines_keyword_and_structured_filters(tmp_path: Path) -> None:
     assert all(item.chapter == "第一章 集合与常用逻辑用语" for item in page.items)
 
 
+def test_teacher_search_scope_excludes_unfinished_questions(tmp_path: Path) -> None:
+    bank = make_bank(tmp_path)
+    bank.import_batch(PILOT_BATCH)
+    bank.apply_curation_package(SET_CURATION, MathVerifier())
+
+    teacher_page = bank.search(usage_scope="teacher", page_size=50)
+
+    assert teacher_page.total > 0
+    assert all(item.verification_status == "passed" for item in teacher_page.items)
+    assert teacher_page.total < bank.search(usage_scope="admin", page_size=50).total
+
+
 def test_search_supports_complete_module_and_review_work_queues(tmp_path: Path) -> None:
     bank = make_bank(tmp_path)
     bank.import_batch(PILOT_BATCH)

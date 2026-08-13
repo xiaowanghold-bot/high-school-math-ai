@@ -14,6 +14,7 @@ from app.modules.question_variants import (
     QuestionVariantProviderError,
     QuestionVariantService,
     QuestionVariantServiceError,
+    TeacherVariantDraftCommand,
 )
 from app.routes import questions as question_routes
 
@@ -86,6 +87,27 @@ def test_generated_variant_enters_existing_teacher_editing_workflow(tmp_path: Pa
     assert revised.verification_reset is True
     assert revised.question.verification_status == "needs_math_review"
     assert revised.question.revision_count == 1
+
+
+def test_teacher_custom_variant_is_private_and_does_not_change_source(tmp_path: Path) -> None:
+    bank, service = make_service(tmp_path)
+    source_before = bank.get_question("q_pilot_set_1_1")
+
+    saved = service.save_teacher_draft(
+        source_before.question_id,
+        TeacherVariantDraftCommand(
+            question_type="single_choice",
+            stem_plain="教师自拟：设全集为实数集，重新判断下列集合关系。",
+            answer_value="B",
+            final_answer="B",
+            solution_steps=["由补集定义判断"],
+        ),
+    )
+
+    assert saved.visibility == "private"
+    assert saved.verification_status == "needs_math_review"
+    assert saved.raw["generation_request"]["teacher_id"] == "owner_teacher"
+    assert bank.get_question(source_before.question_id).stem_plain == source_before.stem_plain
 
 
 def test_unverified_source_and_nonlocal_modes_are_blocked(tmp_path: Path) -> None:

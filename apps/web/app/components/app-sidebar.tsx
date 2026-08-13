@@ -7,7 +7,7 @@ import { AppRole, useAppRole } from "./role-provider";
 
 const teacherNav = [
   ["工作台", "/"], ["教材备课", "/curriculum"], ["智能搜题", "/search"],
-  ["解题助手", "/solve"], ["教案", "/lesson-plans"], ["组卷", "/papers"], ["我的资料", "/library"],
+  ["解题助手", "/solve"], ["教案", "/lesson-plans"], ["组卷", "/papers"],
 ];
 const adminNav = [
   ["管理总览", "/admin"], ["题库审核", "/search"], ["题目去重", "/admin/duplicates"], ["教材目录", "/curriculum"],
@@ -35,7 +35,7 @@ export function AppSidebar() {
     setRole(nextRole);
     setOpen(false);
     if (nextRole === "admin") router.push("/admin");
-    else if (pathname === "/admin" || pathname === "/imports" || pathname.startsWith("/curriculum/review")) router.push("/");
+    else if (pathname === "/admin" || pathname === "/imports" || pathname === "/library" || pathname.startsWith("/curriculum/review")) router.push("/");
   }
 
   return <aside className={`sidebar ${role}-mode`}>

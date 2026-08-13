@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ResizableColumns } from "../components/resizable-columns";
 import { useToast } from "../components/toast-provider";
+import { longTaskApiUrl } from "../components/api-url";
 
 type CurriculumNode = {
   node_id: string;
@@ -243,7 +244,7 @@ export default function LessonPlansPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch(`${apiBase}/api/v1/lesson-plans/generate`, {
+      const response = await fetch(longTaskApiUrl(`${apiBase}/api/v1/lesson-plans/generate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -324,7 +325,7 @@ export default function LessonPlansPage() {
     setRewritingBlock(block);
     setMessage(null);
     try {
-      const response = await fetch(`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/blocks/${block}/rewrite`, {
+      const response = await fetch(longTaskApiUrl(`${apiBase}/api/v1/lesson-plans/${selected.lesson_plan_id}/blocks/${block}/rewrite`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

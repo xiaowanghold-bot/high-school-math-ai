@@ -476,6 +476,7 @@ class DeepSeekLessonPlanProvider(OpenAIResponsesLessonPlanProvider):
                 instructions=payload["instructions"],
                 input_text=str(payload["input"]), action=action,
                 output_schema=payload.get("text", {}).get("format"),
+                max_tokens=4500,
             )
         except DeepSeekClientError as exc:
             raise LessonPlanProviderError(str(exc)) from exc

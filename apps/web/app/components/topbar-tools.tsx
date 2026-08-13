@@ -18,7 +18,6 @@ type CreateAction = { id: string; mark: string; label: string; description: stri
 const teacherCreateActions: CreateAction[] = [
   { id: "lesson", mark: "教", label: "新建教案", description: "选择人教 A 版知识点并生成可编辑教案", href: "/lesson-plans/new" },
   { id: "paper", mark: "卷", label: "新建试卷", description: "从已验证题库选题或按模板自动组卷", href: "/papers?create=new" },
-  { id: "library", mark: "资", label: "上传资料", description: "上传 PDF、Word 或图片并进行私人校对", href: "/library?create=upload" },
   { id: "solve", mark: "解", label: "开始解题", description: "输入高中数学题并生成可审核解析", href: "/solve" },
 ];
 const adminCreateActions: CreateAction[] = [
@@ -60,9 +59,6 @@ export function TopbarTools() {
         (total, [status, count]) => status === "passed" ? total : total + Number(count), 0,
       );
       const teacherTasks: TaskItem[] = [
-        { id: "question-review", label: "题目待教师审核", description: "检查题干、答案、解析与来源", count: reviewCount, href: "/search", tone: "blue" },
-        { id: "math-review", label: "题目待数学核验", description: "未通过独立验证，暂不能用于正式组卷", count: verificationCount, href: "/search?verification=needs_math_review", tone: "amber" },
-        { id: "library-review", label: "私人资料待处理", description: `其中 ${Number(libraryStats.needs_ocr ?? 0)} 份等待 OCR 或转录`, count: Number(libraryStats.pending_review ?? 0), href: "/library", tone: "green" },
         { id: "lesson-drafts", label: "教案草稿", description: "继续编辑教学目标、课堂流程和作业", count: Number(lessons.total ?? 0), href: "/lesson-plans", tone: "slate" },
         { id: "paper-drafts", label: "试卷草稿", description: "继续选题、调整分值或导出已保存版本", count: Number(papers.total ?? 0), href: "/papers", tone: "slate" },
       ];

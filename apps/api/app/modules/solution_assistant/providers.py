@@ -170,6 +170,7 @@ class DeepSeekSolutionProvider(OpenAISolutionProvider):
                 instructions=payload["instructions"],
                 input_text=str(payload["input"]), action="解题",
                 output_schema=payload.get("text", {}).get("format"),
+                max_tokens=3000,
             )
         except DeepSeekClientError as exc:
             raise SolutionProviderError(str(exc)) from exc

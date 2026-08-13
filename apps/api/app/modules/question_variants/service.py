@@ -8,6 +8,7 @@ from app.modules.question_variants.providers import (
 from app.modules.question_variants.schemas import (
     QuestionVariantGenerationRequest,
     QuestionVariantGenerationResult,
+    TeacherVariantDraftCommand,
 )
 
 
@@ -53,4 +54,27 @@ class QuestionVariantService:
             model=self.provider.model,
             mode="live_ai" if self.provider.name in {"openai", "deepseek"} else "local_rule",
             warnings=warnings,
+        )
+
+    def save_teacher_draft(
+        self, source_question_id: str, command: TeacherVariantDraftCommand
+    ):
+        source = self.question_bank.get_question(source_question_id)
+        if source.verification_status != "passed":
+            raise QuestionVariantServiceError("只有已验证母题可以另存为教师私有变式")
+        candidate = command.model_dump(exclude={"teacher_id"})
+        candidate.update(
+            verification_status="needs_math_review",
+            verification_details=["教师自拟变式，答案和解析需重新独立验算"],
+        )
+        candidate["options"] = [item.model_dump() for item in command.options]
+        return self.question_bank.create_derived_question(
+            source_question_id,
+            candidate,
+            generation={
+                "provider": "teacher",
+                "model": "teacher-authored-v1",
+                "mode": "teacher_authored",
+                "request": {"variant_kind": "teacher_custom", "teacher_id": command.teacher_id},
+            },
         )

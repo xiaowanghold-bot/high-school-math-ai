@@ -8,6 +8,7 @@ from app.modules.question_variants.schemas import (
     GeneratedQuestionVariant,
     QuestionVariantGenerationRequest,
     QuestionVariantGenerationResult,
+    TeacherVariantDraftCommand,
 )
 from app.modules.question_variants.service import (
     QuestionVariantService,
@@ -21,6 +22,7 @@ __all__ = [
     "OpenAIQuestionVariantProvider",
     "QuestionVariantGenerationRequest",
     "QuestionVariantGenerationResult",
+    "TeacherVariantDraftCommand",
     "QuestionVariantProviderError",
     "QuestionVariantService",
     "QuestionVariantServiceError",

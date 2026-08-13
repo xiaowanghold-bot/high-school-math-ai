@@ -4,6 +4,8 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { ResizableColumns } from "../components/resizable-columns";
 import { MathText } from "../components/math-text";
 import { useToast } from "../components/toast-provider";
+import { longTaskApiUrl } from "../components/api-url";
+import { AdminGuard } from "../components/admin-guard";
 import "./library.css";
 
 type LibrarySummary = {
@@ -26,6 +28,10 @@ type QuestionCandidate = {
   solution_method: string; solution_steps: string[]; final_answer: string | null; difficulty: number;
   status: "draft" | "discarded" | "imported"; warnings: string[]; imported_question_id: string | null;
 };
+type BackgroundJob = {
+  job_id: string; status: "queued" | "running" | "succeeded" | "failed";
+  current: number; total: number; message: string; error: string; result: Record<string, unknown>;
+};
 
 const extractionLabels = { extracted: "已提取文字", needs_ocr: "待 OCR / 转录", failed: "提取失败" };
 const rightsLabels = { original: "本人原创", licensed: "已获授权", private_teaching_only: "仅限私人教学" };
@@ -38,7 +44,7 @@ async function errorText(response: Response) {
 }
 function formatBytes(value: number) { return value < 1024 * 1024 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1024 / 1024).toFixed(1)} MB`; }
 
-export default function LibraryPage() {
+function LibraryWorkspace() {
   const [items, setItems] = useState<LibrarySummary[]>([]);
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [selected, setSelected] = useState<LibraryItem | null>(null);
@@ -58,6 +64,7 @@ export default function LibraryPage() {
   const [aiConsent, setAiConsent] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
   const [showTrash, setShowTrash] = useState(false);
+  const [jobStatus, setJobStatus] = useState("");
   const { auto: setMessage } = useToast();
 
   const filtered = useMemo(() => {
@@ -168,9 +175,11 @@ export default function LibraryPage() {
     if (!selected) return;
     setBusy(true); setMessage(null);
     try {
-      const response = await fetch(`/api/v1/library/${selected.library_item_id}/local-math-ocr`, { method: "POST" });
+      const response = await fetch(longTaskApiUrl(`/api/v1/library/${selected.library_item_id}/local-math-ocr/jobs`), { method: "POST" });
       if (!response.ok) throw new Error(await errorText(response));
-      const result = await response.json(); await refresh(result.item.library_item_id);
+      const result = await waitForJob(await response.json());
+      const item = (result.result as { item?: LibraryItem }).item;
+      await refresh(item?.library_item_id || selected.library_item_id);
       setMessage("本地数学 OCR 已生成含公式的待校对稿；请对照原页确认后再导出或拆题。");
     } catch (error) { setMessage(error instanceof Error ? error.message : "本地数学 OCR 失败"); }
     finally { setBusy(false); }
@@ -182,16 +191,31 @@ export default function LibraryPage() {
     if (!draftText.trim()) { setMessage("当前没有可供 AI 修复的 LaTeX 草稿。"); return; }
     setBusy(true); setMessage(null);
     try {
-      const response = await fetch(`/api/v1/library/${selected.library_item_id}/ai-repair`, {
+      const response = await fetch(longTaskApiUrl(`/api/v1/library/${selected.library_item_id}/ai-repair/jobs`), {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft_text: draftText, instruction: aiInstruction, external_processing_consent: true }),
       });
       if (!response.ok) throw new Error(await errorText(response));
-      const result = await response.json();
+      const job = await waitForJob(await response.json());
+      const result = job.result as { repaired_text: string; model: string };
       setDraftText(result.repaired_text);
       setMessage(`DeepSeek 已修复当前 LaTeX 草稿（${result.model}）；请查看左侧渲染结果并对照原 PDF 审核，保存前不会覆盖版本。`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "DeepSeek LaTeX 修复失败"); }
     finally { setBusy(false); }
+  }
+
+  async function waitForJob(initial: BackgroundJob): Promise<BackgroundJob> {
+    let job = initial;
+    while (job.status === "queued" || job.status === "running") {
+      setJobStatus(job.total ? `${job.message}（${job.current}/${job.total}）` : job.message);
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      const response = await fetch(longTaskApiUrl(`/api/v1/library/jobs/${job.job_id}`), { cache: "no-store" });
+      if (!response.ok) throw new Error(await errorText(response));
+      job = await response.json();
+    }
+    setJobStatus("");
+    if (job.status === "failed") throw new Error(job.error || "后台任务失败");
+    return job;
   }
 
   async function sendToStructuredImport() {
@@ -308,7 +332,7 @@ export default function LibraryPage() {
           {selected.warnings.map((warning) => <p className="library-warning" key={warning}>{warning}</p>)}
           {selected.extraction_status === "needs_ocr" && <section className="library-ocr-panel"><div><strong>检测到 PDF 私有字体乱码</strong><p>原页清晰但文本映射已损坏。优先运行本地数学 OCR 生成含 LaTeX 的校对稿；文件不会离开本机。</p></div>{selected.file_kind === "pdf" && <button type="button" disabled={busy} onClick={runLocalMathOcr}>{busy ? "正在本地识别…" : "本地数学 OCR 重建"}</button>}{selected.file_kind === "pdf" && <button type="button" disabled={busy} onClick={sendToStructuredImport}>转入逐题结构化</button>}<label><input type="checkbox" checked={ocrConsent} onChange={(event) => setOcrConsent(event.target.checked)} /><span>备选：同意本次发送该文件到外部 OCR</span></label><button type="button" disabled={busy || !ocrConsent} onClick={runOcr}>外部视觉 OCR</button></section>}
           {selected.file_kind === "image" && <div className="library-image-preview"><img src={`/api/v1/library/${selected.library_item_id}/file`} alt={selected.title} /></div>}
-          <section className="library-ai-tools"><div><strong>DeepSeek LaTeX 校对助手</strong><p>仅发送右侧当前草稿，不发送原 PDF。AI 负责修复公式、上下标、分式、题号和选项排版；结果先回填草稿，不会自动保存或确认。</p></div><input value={aiInstruction} onChange={(event) => setAiInstruction(event.target.value)} placeholder="补充要求（可选），例如：重点检查向量和分式" /><label><input type="checkbox" checked={aiConsent} onChange={(event) => setAiConsent(event.target.checked)} />同意本次发送校对草稿</label><button type="button" disabled={busy || !aiConsent || !draftText.trim()} onClick={runAiRepair}>{busy ? "AI 正在校对…" : "用 DeepSeek 修复草稿"}</button></section>
+          <section className="library-ai-tools"><div><strong>DeepSeek LaTeX 校对助手</strong><p>仅发送右侧当前草稿，不发送原 PDF。AI 负责修复公式、上下标、分式、题号和选项排版；结果先回填草稿，不会自动保存或确认。</p>{jobStatus && <small>{jobStatus}</small>}</div><input value={aiInstruction} onChange={(event) => setAiInstruction(event.target.value)} placeholder="补充要求（可选），例如：重点检查向量和分式" /><label><input type="checkbox" checked={aiConsent} onChange={(event) => setAiConsent(event.target.checked)} />同意本次发送校对草稿</label><button type="button" disabled={busy || !aiConsent || !draftText.trim()} onClick={runAiRepair}>{busy ? (jobStatus || "AI 正在校对…") : "用 DeepSeek 修复草稿"}</button></section>
           <div className="library-latex-workbench">
             <section className="library-rendered-paper"><header><div><strong>可读成品预览</strong><small>随右侧编辑实时渲染 · 学生与教师看到的数学格式</small></div><span>{selected.text_review_status === "confirmed" ? "已确认版本" : "待校对"}</span></header><article>{draftText.trim() ? draftText.split(/\n{2,}/).map((block, index) => <p key={index}><MathText text={block} /></p>) : <p className="library-render-empty">右侧尚无 LaTeX 草稿。先运行本地数学 OCR，或在右侧录入内容。</p>}</article></section>
             <section className="library-latex-source"><header><div><strong>LaTeX 可编辑稿</strong><small>{draftText.length} 字符 · 数学公式使用 $...$</small></div><span>v{selected.version}</span></header><textarea value={draftText} onChange={(event) => setDraftText(event.target.value)} spellCheck={false} placeholder="本地数学 OCR 会把 PDF 转为中文 + $LaTeX$ 草稿；教师可在这里自由修改……" /></section>
@@ -335,4 +359,8 @@ export default function LibraryPage() {
       </main>
     </ResizableColumns>
   </div>;
+}
+
+export default function LibraryPage() {
+  return <AdminGuard><LibraryWorkspace /></AdminGuard>;
 }

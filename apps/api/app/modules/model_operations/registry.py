@@ -106,11 +106,11 @@ class _SQLiteModelRunSpan:
 
     def capture_response(self, payload: dict) -> None:
         usage = payload.get("usage") or {}
-        input_details = usage.get("input_tokens_details") or {}
+        input_details = usage.get("input_tokens_details") or usage.get("prompt_tokens_details") or {}
         self.usage = {
-            "input_tokens": int(usage.get("input_tokens") or 0),
+            "input_tokens": int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0),
             "cached_input_tokens": int(input_details.get("cached_tokens") or 0),
-            "output_tokens": int(usage.get("output_tokens") or 0),
+            "output_tokens": int(usage.get("output_tokens") or usage.get("completion_tokens") or 0),
             "total_tokens": int(usage.get("total_tokens") or 0),
         }
         if not self.usage["total_tokens"]:

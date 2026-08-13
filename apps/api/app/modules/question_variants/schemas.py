@@ -38,3 +38,16 @@ class QuestionVariantGenerationResult(BaseModel):
     model: str
     mode: Literal["local_rule", "live_ai"]
     warnings: list[str] = Field(default_factory=list)
+
+
+class TeacherVariantDraftCommand(BaseModel):
+    question_type: str = Field(min_length=1, max_length=80)
+    stem_plain: str = Field(min_length=1, max_length=20000)
+    stem_latex: str | None = Field(default=None, max_length=20000)
+    options: list[QuestionOptionDraft] = Field(default_factory=list, max_length=20)
+    answer_value: str = Field(default="待教师确认", max_length=4000)
+    solution_method: str = Field(default="教师自拟变式", max_length=500)
+    solution_steps: list[str] = Field(default_factory=lambda: ["待教师补充或由 DeepSeek 计算"], max_length=100)
+    final_answer: str = Field(default="待教师确认", max_length=4000)
+    difficulty: int = Field(default=3, ge=1, le=5)
+    teacher_id: str = Field(default="owner_teacher", min_length=1, max_length=120)

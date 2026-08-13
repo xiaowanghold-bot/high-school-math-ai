@@ -38,6 +38,7 @@ from app.modules.question_variants import (
     QuestionVariantProviderError,
     QuestionVariantService,
     QuestionVariantServiceError,
+    TeacherVariantDraftCommand,
 )
 from app.modules.question_quality import (
     BatchCurriculumActionResult,
@@ -198,6 +199,7 @@ def search_questions(
     module: str | None = None,
     work_queue: str | None = None,
     library_state: str = Query(default="active"),
+    usage_scope: str = Query(default="admin"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> QuestionSearchPage:
@@ -212,6 +214,7 @@ def search_questions(
             module=module,
             work_queue=work_queue,
             library_state=library_state,
+            usage_scope=usage_scope,
             page=page,
             page_size=page_size,
         )
@@ -253,6 +256,20 @@ def generate_question_variant(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except QuestionVariantProviderError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post(
+    "/questions/{question_id}/teacher-variants",
+    response_model=QuestionDetail,
+    status_code=201,
+)
+def save_teacher_variant(question_id: str, command: TeacherVariantDraftCommand) -> QuestionDetail:
+    try:
+        return get_question_variant_service().save_teacher_draft(question_id, command)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="题目不存在") from exc
+    except (QuestionVariantServiceError, QuestionBankError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.patch("/questions/{question_id}", response_model=QuestionRevisionResult)

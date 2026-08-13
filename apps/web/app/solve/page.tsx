@@ -5,6 +5,7 @@ import Link from "next/link";
 import { MathText } from "../components/math-text";
 import { ResizableColumns } from "../components/resizable-columns";
 import { useToast } from "../components/toast-provider";
+import { longTaskApiUrl } from "../components/api-url";
 import "./solver.css";
 
 type QuestionSample = { question_id: string; stem_plain: string; chapter: string | null; difficulty: number };
@@ -52,7 +53,7 @@ export default function SolvePage() {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/v1/solutions/solve", {
+      const response = await fetch(longTaskApiUrl("/api/v1/solutions/solve"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question_text: questionText, solution_mode: solutionMode, teacher_instruction: instruction }),

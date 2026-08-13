@@ -281,6 +281,7 @@ class DeepSeekQuestionVariantProvider(OpenAIQuestionVariantProvider):
                 instructions=payload["instructions"],
                 input_text=str(payload["input"]), action="题目变式生成",
                 output_schema=payload.get("text", {}).get("format"),
+                max_tokens=3500,
             )
         except DeepSeekClientError as exc:
             raise QuestionVariantProviderError(str(exc)) from exc

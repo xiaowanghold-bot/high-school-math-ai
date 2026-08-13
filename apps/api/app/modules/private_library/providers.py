@@ -167,6 +167,9 @@ class LocalMathOCRProvider:
 
     name = "local_math_ocr"
 
+    def __init__(self, progress=None) -> None:
+        self.progress = progress
+
     def extract(
         self, *, path: Path, mime_type: str, filename: str, teacher_id: str
     ) -> OCRTextResult:
@@ -181,7 +184,10 @@ class LocalMathOCRProvider:
             engine = _get_engine()
             document = pymupdf.open(path)
             pages: list[str] = []
+            total_pages = len(document)
             for index, page in enumerate(document):
+                if self.progress:
+                    self.progress(index, total_pages, f"正在识别第 {index + 1}/{total_pages} 页")
                 pixmap = page.get_pixmap(dpi=220, alpha=False)
                 image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
                 recognized = engine.recognize_page(
@@ -196,6 +202,8 @@ class LocalMathOCRProvider:
                 )
                 text = "\n".join(str(item.text).strip() for item in elements)
                 pages.append(f"【第 {index + 1} 页】\n{text}")
+            if self.progress:
+                self.progress(total_pages, total_pages, "正在保存 OCR 草稿")
         except OCRProviderError:
             raise
         except Exception as exc:  # pragma: no cover - model/runtime boundary
