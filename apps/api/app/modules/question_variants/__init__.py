@@ -9,6 +9,8 @@ from app.modules.question_variants.schemas import (
     QuestionVariantGenerationRequest,
     QuestionVariantGenerationResult,
     TeacherVariantDraftCommand,
+    TeacherVariantPolishCommand,
+    TeacherVariantPolishResult,
 )
 from app.modules.question_variants.service import (
     QuestionVariantService,
@@ -23,6 +25,8 @@ __all__ = [
     "QuestionVariantGenerationRequest",
     "QuestionVariantGenerationResult",
     "TeacherVariantDraftCommand",
+    "TeacherVariantPolishCommand",
+    "TeacherVariantPolishResult",
     "QuestionVariantProviderError",
     "QuestionVariantService",
     "QuestionVariantServiceError",

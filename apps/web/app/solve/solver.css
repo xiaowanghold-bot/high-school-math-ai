@@ -45,6 +45,7 @@
 .solver-result-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .solver-result-heading p { margin: 0 0 4px; color: var(--muted); font-size: 9px; }
 .solver-result-heading h2 { margin: 0; font: 700 21px/1.4 "Songti SC", serif; }
+.solver-back-solution { margin: 0 0 8px; border: 0; background: transparent; color: #4059ad; padding: 0; cursor: pointer; font-size: 10px; font-weight: 700; }
 .solver-confidence { border-radius: 999px; padding: 7px 10px; font-size: 9px; font-weight: 700; }
 .solver-confidence.program_verified { color: #176c59; background: #e9f7f2; }
 .solver-confidence.model_reviewed { color: #3855a2; background: #edf1ff; }

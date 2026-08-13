@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -110,6 +111,84 @@ def test_teacher_custom_variant_is_private_and_does_not_change_source(tmp_path: 
     assert bank.get_question(source_before.question_id).stem_plain == source_before.stem_plain
 
 
+def test_teacher_scope_only_returns_the_current_teachers_private_variants(tmp_path: Path) -> None:
+    bank, service = make_service(tmp_path)
+    for teacher_id in ("teacher_a", "teacher_b"):
+        service.save_teacher_draft(
+            "q_pilot_set_1_1",
+            TeacherVariantDraftCommand(
+                question_type="single_choice",
+                stem_plain=f"{teacher_id} 的私人变式",
+                answer_value="A",
+                final_answer="A",
+                solution_steps=["教师自拟"],
+                teacher_id=teacher_id,
+            ),
+        )
+
+    teacher_a = bank.search(usage_scope="teacher", usage_owner_id="teacher_a", page_size=100)
+    private_stems = [item.stem_plain for item in teacher_a.items if item.question_id.startswith("q_variant_")]
+
+    assert "teacher_a 的私人变式" in private_stems
+    assert "teacher_b 的私人变式" not in private_stems
+
+
+def test_admin_revision_flows_to_teachers_after_reverification_without_touching_private_copy(
+    tmp_path: Path,
+) -> None:
+    bank, service = make_service(tmp_path)
+    source = bank.get_question("q_pilot_set_1_1")
+    private_copy = service.save_teacher_draft(
+        source.question_id,
+        TeacherVariantDraftCommand(
+            question_type="single_choice",
+            stem_plain="teacher_a private wording",
+            answer_value=source.answer_value,
+            final_answer=source.answer_value,
+            solution_steps=["teacher-owned derivation"],
+            teacher_id="teacher_a",
+        ),
+    )
+
+    revised = bank.revise(
+        source.question_id,
+        QuestionRevisionCommand(
+            stem_plain=f"{source.stem_plain}\nadmin formal clarification",
+            stem_latex=(source.raw.get("stem") or {}).get("latex"),
+            options=[
+                {"key": item["key"], "text": item.get("latex") or item.get("plain_text") or ""}
+                for item in source.raw.get("options", [])
+            ],
+            answer_value=source.answer_value,
+            solution_method=((source.raw.get("solutions") or [{}])[0].get("method") or "admin revision"),
+            solution_steps=((source.raw.get("solutions") or [{}])[0].get("steps_latex") or []),
+            final_answer=(source.raw.get("solutions") or [{}])[0].get("final_answer"),
+            editor_id="admin_owner",
+        ),
+    )
+    assert revised.verification_reset is True
+    assert source.question_id not in {
+        item.question_id
+        for item in bank.search(usage_scope="teacher", usage_owner_id="teacher_a", page_size=100).items
+    }
+
+    bank.record_manual_verification(
+        source.question_id,
+        conclusion="passed",
+        computed_answer=source.answer_value or "",
+        evidence_steps=["independent administrator verification"],
+        note="formal revision reverified",
+        verifier_id="admin_owner",
+    )
+    teacher_view = bank.search(
+        usage_scope="teacher", usage_owner_id="teacher_a", page_size=100
+    )
+    formal = next(item for item in teacher_view.items if item.question_id == source.question_id)
+
+    assert formal.stem_plain.endswith("admin formal clarification")
+    assert bank.get_question(private_copy.question_id).stem_plain == "teacher_a private wording"
+
+
 def test_unverified_source_and_nonlocal_modes_are_blocked(tmp_path: Path) -> None:
     _, service = make_service(tmp_path)
 
@@ -141,3 +220,33 @@ def test_question_variant_http_endpoint_uses_private_draft_workflow(
     assert payload["question"]["difficulty"] == 4
     assert payload["question"]["visibility"] == "private"
     assert payload["question"]["review_status"] == "pending"
+
+
+def test_teacher_variant_polish_preserves_teacher_authorship_boundary(monkeypatch) -> None:
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def request(self, **kwargs):
+            captured.update(kwargs)
+            return {"output": [{"content": [{"text": json.dumps({
+                "stem_plain": "已知函数 f(x)=x²，求 f(2)。",
+                "stem_latex": "已知函数 $f(x)=x^2$，求 $f(2)$。",
+                "options": [],
+                "warnings": [],
+            }, ensure_ascii=False)}]}]}
+
+    monkeypatch.setattr(question_routes, "DeepSeekJsonClient", FakeClient)
+    settings = question_routes.get_settings()
+    monkeypatch.setattr(settings, "deepseek_api_key", "test-secret")
+    response = TestClient(app).post(
+        "/api/v1/questions/teacher-variants/polish",
+        json={"stem_plain": "已知函数f(x)=x2 求f(2)", "instruction": "只修正公式格式"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["stem_latex"] == "已知函数 $f(x)=x^2$，求 $f(2)$。"
+    assert "不得替教师另出一道题" in captured["instructions"]
+    assert captured["max_tokens"] == 2200

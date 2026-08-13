@@ -37,9 +37,12 @@ export default function SolvePage() {
   const [questionText, setQuestionText] = useState("");
   const [instruction, setInstruction] = useState("");
   const [samples, setSamples] = useState<QuestionSample[]>([]);
-  const [result, setResult] = useState<SolutionResult | null>(null);
+  const [standardResult, setStandardResult] = useState<SolutionResult | null>(null);
+  const [alternativeResult, setAlternativeResult] = useState<SolutionResult | null>(null);
+  const [activeSolution, setActiveSolution] = useState<"standard" | "alternative">("standard");
   const [busy, setBusy] = useState(false);
   const { auto: setMessage } = useToast();
+  const result = activeSolution === "alternative" ? alternativeResult : standardResult;
 
   useEffect(() => {
     fetch("/api/v1/questions?verification_status=passed&page_size=3")
@@ -59,7 +62,14 @@ export default function SolvePage() {
         body: JSON.stringify({ question_text: questionText, solution_mode: solutionMode, teacher_instruction: instruction }),
       });
       if (!response.ok) throw new Error(await errorText(response));
-      setResult(await response.json());
+      const next: SolutionResult = await response.json();
+      if (solutionMode === "standard") {
+        setStandardResult(next);
+        setAlternativeResult(null);
+      } else {
+        setAlternativeResult(next);
+      }
+      setActiveSolution(solutionMode);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "解题失败，请稍后重试。");
     } finally { setBusy(false); }
@@ -79,21 +89,21 @@ export default function SolvePage() {
         <aside className="solver-input-panel">
           <form onSubmit={submit}>
             <header><span>01</span><div><strong>输入题目</strong><small>支持正文与 $...$ LaTeX 公式</small></div></header>
-            <label className="solver-question-field"><span>题目正文</span><textarea value={questionText} onChange={(event) => setQuestionText(event.target.value)} placeholder="粘贴一道完整高中数学题目，包括必要条件和选项……" /><small>{questionText.length} / 30000</small></label>
+            <label className="solver-question-field"><span>题目正文</span><textarea value={questionText} onChange={(event) => { setQuestionText(event.target.value); setStandardResult(null); setAlternativeResult(null); setActiveSolution("standard"); }} placeholder="粘贴一道完整高中数学题目，包括必要条件和选项……" /><small>{questionText.length} / 30000</small></label>
             <label className="solver-instruction-field"><span>教师补充要求（可选）</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="例如：使用函数单调性解答，并指出学生常见错误" /></label>
             <button className="solver-submit" disabled={busy || questionText.trim().length < 5} type="submit">{busy ? "正在核对条件与推导…" : "生成标准解法"}</button>
           </form>
 
           <section className="solver-samples">
             <header><strong>从已验证题目体验</strong><span>{samples.length} 道</span></header>
-            {samples.map((sample, index) => <button type="button" key={sample.question_id} onClick={() => { setQuestionText(sample.stem_plain); setResult(null); setMessage(null); }}><b>{String(index + 1).padStart(2, "0")}</b><span><MathText text={sample.stem_plain} /><small>{sample.chapter || "高中数学"} · 难度 {sample.difficulty}</small></span></button>)}
+            {samples.map((sample, index) => <button type="button" key={sample.question_id} onClick={() => { setQuestionText(sample.stem_plain); setStandardResult(null); setAlternativeResult(null); setActiveSolution("standard"); setMessage(null); }}><b>{String(index + 1).padStart(2, "0")}</b><span><MathText text={sample.stem_plain} /><small>{sample.chapter || "高中数学"} · 难度 {sample.difficulty}</small></span></button>)}
             {!samples.length && <p>正在读取已验证题库……</p>}
           </section>
         </aside>
 
         <main className="solver-result-panel">
           {!result ? <div className="solver-empty"><span>解</span><h2>答案不是终点，证据才是。</h2><p>输入题目后，这里会显示解法步骤、最终答案、知识点、易错点和可信度依据。</p><ol><li>完整录入题目条件</li><li>查看每一步推导</li><li>根据可信度标记完成教师复核</li></ol></div> : <>
-            <header className="solver-result-heading"><div><p>{result.solution_mode === "alternative" ? "第二种解法" : "标准解法"}</p><h2>{result.explanation.method}</h2></div><span className={`solver-confidence ${result.confidence_status}`}>{confidenceLabels[result.confidence_status]}</span></header>
+            <header className="solver-result-heading"><div>{activeSolution === "alternative" && standardResult && <button className="solver-back-solution" type="button" onClick={() => setActiveSolution("standard")}>← 返回原解法</button>}<p>{result.solution_mode === "alternative" ? "第二种解法" : "标准解法"}</p><h2>{result.explanation.method}</h2></div><span className={`solver-confidence ${result.confidence_status}`}>{confidenceLabels[result.confidence_status]}</span></header>
             <section className="solver-question-preview"><span>当前题目</span><p><MathText text={result.question_text} /></p></section>
             {result.warnings.map((warning) => <p className="solver-warning" key={warning}>{warning}</p>)}
             <section className="solver-solution-card">
@@ -107,7 +117,7 @@ export default function SolvePage() {
               <section><header><span>证</span><strong>可信度依据</strong></header>{result.verification_evidence.map((item) => <p key={item}>{item}</p>)}</section>
               <section><header><span>讲</span><strong>教学提示</strong></header>{result.teaching_notes.map((item) => <p key={item}>{item}</p>)}</section>
             </div>
-            <footer className="solver-result-actions"><div><span>来源：{result.mode === "verified_bank" ? "独立验证私有题库" : result.model}</span>{result.match_score && <small>题干匹配度 {Math.round(result.match_score * 100)}%</small>}</div><button type="button" disabled={busy || !result.alternative_available} onClick={() => void solve("alternative")}>{busy ? "生成中…" : result.alternative_available ? "换一种解法" : "暂无第二种已验证解法"}</button></footer>
+            <footer className="solver-result-actions"><div><span>来源：{result.mode === "verified_bank" ? "独立验证私有题库" : result.model}</span>{result.match_score && <small>题干匹配度 {Math.round(result.match_score * 100)}%</small>}</div>{activeSolution === "alternative" ? <button type="button" disabled={busy || !standardResult} onClick={() => setActiveSolution("standard")}>查看原本解法</button> : alternativeResult ? <button type="button" disabled={busy} onClick={() => setActiveSolution("alternative")}>查看第二种解法</button> : <button type="button" disabled={busy || !result.alternative_available} onClick={() => void solve("alternative")}>{busy ? "生成中…" : result.alternative_available ? "换一种解法" : "暂无第二种已验证解法"}</button>}</footer>
           </>}
         </main>
       </ResizableColumns>

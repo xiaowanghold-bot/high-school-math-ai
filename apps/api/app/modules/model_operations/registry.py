@@ -23,6 +23,7 @@ FEATURE_LABELS = {
     "lesson_plan_generation": "教案生成",
     "lesson_block_rewrite": "教案局部改写",
     "question_variant": "题目变式",
+    "question_variant_polish": "教师变式润色",
     "solution_assistant": "解题助手",
     "private_resource_ocr": "私人资料 OCR",
 }

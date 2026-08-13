@@ -51,3 +51,20 @@ class TeacherVariantDraftCommand(BaseModel):
     final_answer: str = Field(default="待教师确认", max_length=4000)
     difficulty: int = Field(default=3, ge=1, le=5)
     teacher_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class TeacherVariantPolishCommand(BaseModel):
+    stem_plain: str = Field(min_length=5, max_length=20000)
+    stem_latex: str | None = Field(default=None, max_length=20000)
+    options: list[QuestionOptionDraft] = Field(default_factory=list, max_length=20)
+    instruction: str = Field(default="", max_length=2000)
+    teacher_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
+
+
+class TeacherVariantPolishResult(BaseModel):
+    stem_plain: str
+    stem_latex: str | None
+    options: list[QuestionOptionDraft]
+    provider: str
+    model: str
+    warnings: list[str] = Field(default_factory=list)

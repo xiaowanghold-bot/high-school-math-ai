@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -39,6 +40,8 @@ from app.modules.question_variants import (
     QuestionVariantService,
     QuestionVariantServiceError,
     TeacherVariantDraftCommand,
+    TeacherVariantPolishCommand,
+    TeacherVariantPolishResult,
 )
 from app.modules.question_quality import (
     BatchCurriculumActionResult,
@@ -54,6 +57,7 @@ from app.modules.question_quality import (
 )
 from app.modules.curriculum import CsvCurriculumCatalog
 from app.routes.model_operations import get_model_operations_registry
+from app.modules.deepseek import DeepSeekClientError, DeepSeekJsonClient
 
 
 router = APIRouter(tags=["question-bank"])
@@ -200,6 +204,7 @@ def search_questions(
     work_queue: str | None = None,
     library_state: str = Query(default="active"),
     usage_scope: str = Query(default="admin"),
+    usage_owner_id: str = Query(default="owner_teacher", min_length=1, max_length=120),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> QuestionSearchPage:
@@ -215,6 +220,7 @@ def search_questions(
             work_queue=work_queue,
             library_state=library_state,
             usage_scope=usage_scope,
+            usage_owner_id=usage_owner_id,
             page=page,
             page_size=page_size,
         )
@@ -270,6 +276,58 @@ def save_teacher_variant(question_id: str, command: TeacherVariantDraftCommand) 
         raise HTTPException(status_code=404, detail="题目不存在") from exc
     except (QuestionVariantServiceError, QuestionBankError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/questions/teacher-variants/polish",
+    response_model=TeacherVariantPolishResult,
+)
+def polish_teacher_variant(command: TeacherVariantPolishCommand) -> TeacherVariantPolishResult:
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        raise HTTPException(status_code=503, detail="尚未配置 DeepSeek API Key")
+    client = DeepSeekJsonClient(
+        api_key=settings.deepseek_api_key,
+        model=settings.deepseek_model,
+        base_url=settings.deepseek_base_url,
+        timeout_seconds=settings.deepseek_timeout_seconds,
+    )
+    schema = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "stem_plain": {"type": "string"},
+            "stem_latex": {"type": ["string", "null"]},
+            "options": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {"key": {"type": "string"}, "text": {"type": "string"}},
+                "required": ["key", "text"],
+            }},
+            "warnings": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["stem_plain", "stem_latex", "options", "warnings"],
+    }
+    try:
+        with get_model_operations_registry().track(
+            feature="question_variant_polish", provider="deepseek",
+            model=settings.deepseek_model, prompt_version="teacher-variant-polish-v1",
+            actor_id=command.teacher_id,
+        ) as run:
+            raw = client.request(
+                instructions=(
+                    "你是高中数学题目文字编辑。教师已经自行编写变式题，你只能润色表达、补全必要标点、"
+                    "规范 LaTeX 和选项排版。不得替教师另出一道题，不得擅自改变数值、已给条件、设问、"
+                    "答案倾向或知识点。若原稿存在条件不足或数学歧义，保留原意并在 warnings 中说明。"
+                ),
+                input_text=json.dumps(command.model_dump(exclude={"teacher_id"}), ensure_ascii=False),
+                action="教师变式润色", output_schema=schema, max_tokens=2200,
+            )
+            run.capture_response(raw)
+        content = json.loads(raw["output"][0]["content"][0]["text"])
+        return TeacherVariantPolishResult.model_validate(
+            {**content, "provider": "deepseek", "model": settings.deepseek_model}
+        )
+    except (DeepSeekClientError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=503, detail=f"DeepSeek 变式润色失败：{exc}") from exc
 
 
 @router.patch("/questions/{question_id}", response_model=QuestionRevisionResult)

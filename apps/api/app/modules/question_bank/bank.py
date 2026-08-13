@@ -404,6 +404,7 @@ class QuestionBank:
         page_size: int = 20,
         library_state: str = "active",
         usage_scope: str = "admin",
+        usage_owner_id: str = "owner_teacher",
     ) -> QuestionSearchPage:
         clauses: list[str] = []
         values: list[Any] = []
@@ -412,7 +413,12 @@ class QuestionBank:
         if usage_scope not in {"admin", "teacher"}:
             raise QuestionBankError("未知的题库使用范围")
         if usage_scope == "teacher":
-            clauses.append("(verification_status = 'passed' OR question_id LIKE 'q_variant_%')")
+            clauses.append(
+                "((verification_status = 'passed' AND question_id NOT LIKE 'q_variant_%') "
+                "OR (question_id LIKE 'q_variant_%' AND "
+                "json_extract(raw_json, '$.generation_request.teacher_id') = ?))"
+            )
+            values.append(usage_owner_id)
         if library_state == "active":
             clauses.append(
                 "NOT EXISTS (SELECT 1 FROM question_library_state qls "

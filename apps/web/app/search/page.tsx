@@ -82,16 +82,6 @@ type Stats = {
   publishable: number;
 };
 
-type VariantKind = "diagnostic" | "numeric" | "difficulty" | "context";
-
-type QuestionVariantResult = {
-  question: QuestionDetail;
-  source_question_id: string;
-  provider: string;
-  model: string;
-  mode: "local_rule" | "live_ai";
-  warnings: string[];
-};
 type SolutionResult = {
   explanation: { method: string; steps: string[]; final_answer: string };
 };
@@ -217,7 +207,7 @@ async function errorText(response: Response) {
 }
 
 export default function SearchPage() {
-  const { isAdmin } = useAppRole();
+  const { isAdmin, actorId } = useAppRole();
   const [stats, setStats] = useState<Stats | null>(null);
   const [items, setItems] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
@@ -237,9 +227,8 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const { auto: setMessage } = useToast();
-  const [variantKind, setVariantKind] = useState<VariantKind>("diagnostic");
-  const [variantDifficulty, setVariantDifficulty] = useState("");
   const [variantInstruction, setVariantInstruction] = useState("");
+  const [variantDraftMode, setVariantDraftMode] = useState(false);
   const [quality, setQuality] = useState<QuestionQuality | null>(null);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [verificationConclusion, setVerificationConclusion] = useState<"passed" | "inconsistent" | "inconclusive">("passed");
@@ -263,9 +252,10 @@ export default function SearchPage() {
     if (workQueue) params.set("work_queue", workQueue);
     if (knowledgePointId) params.set("knowledge_point_id", knowledgePointId);
     params.set("usage_scope", isAdmin ? "admin" : "teacher");
+    params.set("usage_owner_id", actorId);
     params.set("library_state", showRemoved ? "removed" : "active");
     return `${apiBase}/api/v1/questions?${params.toString()}`;
-  }, [query, chapter, verification, reviewStatus, module, workQueue, knowledgePointId, showRemoved, isAdmin]);
+  }, [query, chapter, verification, reviewStatus, module, workQueue, knowledgePointId, showRemoved, isAdmin, actorId]);
 
   const loadStats = () => fetch(`${apiBase}/api/v1/question-bank/stats`).then((response) => response.json()).then(setStats);
 
@@ -350,6 +340,7 @@ export default function SearchPage() {
       return;
     }
     setDetailMode("preview");
+    setVariantDraftMode(false);
     setDetail(null);
     setEditDraft(null);
     setQuality(null);
@@ -439,13 +430,14 @@ export default function SearchPage() {
           stem_latex: editDraft.stem_latex || null,
           solution_steps: editDraft.solution_steps.split("\n").map((item) => item.trim()).filter(Boolean),
           difficulty: detail.difficulty,
-          teacher_id: "owner_teacher",
+          teacher_id: actorId,
         }),
       });
       if (!response.ok) throw new Error(await errorText(response));
       const saved: QuestionDetail = await response.json();
       setItems((current) => [saved, ...current]);
       setSelectedId(saved.question_id);
+      setVariantDraftMode(false);
       setMessage("变式已另存为你的私有题目；不会修改管理员维护的原题，正式共享前仍需管理员审核。 ");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存私有变式失败");
@@ -563,33 +555,43 @@ export default function SearchPage() {
     setMessage(decision.allowed ? "全部门禁通过，题目已发布。" : `暂不可发布：${decision.blockers.map((item: string) => blockerLabels[item] ?? item).join("、")}`);
   }
 
-  async function generateVariant() {
-    if (!selectedId || !detail) return;
+  function startTeacherVariant() {
+    if (!detail) return;
+    const draft = draftFromDetail(detail);
+    setEditDraft({
+      ...draft,
+      answer_value: "",
+      solution_method: "教师自拟变式",
+      solution_steps: "",
+      final_answer: "",
+      note: "基于母题创建的教师私人变式",
+    });
+    setVariantDraftMode(true);
+    setDetailMode("edit");
+    setMessage("已复制母题作为私人变式起点。请先自行修改题干或选项，再选择 AI 润色或计算答案。 ");
+  }
+
+  async function polishTeacherVariant() {
+    if (!editDraft?.stem_plain.trim()) return;
     setWorking(true);
     try {
-      const response = await fetch(longTaskApiUrl(`${apiBase}/api/v1/questions/${selectedId}/variants`), {
+      const response = await fetch(longTaskApiUrl(`${apiBase}/api/v1/questions/teacher-variants/polish`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          variant_kind: variantKind,
-          target_difficulty: variantDifficulty ? Number(variantDifficulty) : null,
+          stem_plain: editDraft.stem_plain,
+          stem_latex: editDraft.stem_latex || null,
+          options: editDraft.options,
           instruction: variantInstruction.trim(),
-          teacher_id: "owner_teacher",
+          teacher_id: actorId,
         }),
       });
       if (!response.ok) throw new Error(await errorText(response));
-      const result: QuestionVariantResult = await response.json();
-      setItems((current) => [result.question, ...current.filter((item) => item.question_id !== result.question.question_id)]);
-      setTotal((current) => current + 1);
-      setSelectedId(result.question.question_id);
-      setDetail(result.question);
-      setEditDraft(draftFromDetail(result.question));
-      setVariantInstruction("");
-      await loadStats();
-      const modeLabel = result.mode === "local_rule" ? "本地规则" : `大模型 ${result.model}`;
-      setMessage(`已由${modeLabel}生成私有变式草稿，并进入当前审核流程。${result.warnings.join(" ")}`);
+      const polished: { stem_plain: string; stem_latex: string | null; options: EditDraft["options"]; warnings: string[] } = await response.json();
+      setEditDraft({ ...editDraft, stem_plain: polished.stem_plain, stem_latex: polished.stem_latex || "", options: polished.options });
+      setMessage(`DeepSeek 只润色了当前教师原稿，没有另行出题。${polished.warnings.join(" ")}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "题目变式生成失败");
+      setMessage(error instanceof Error ? error.message : "题目润色失败");
     } finally {
       setWorking(false);
     }
@@ -794,7 +796,7 @@ export default function SearchPage() {
         <aside className="question-detail" aria-label="题目审核详情">
           {!detail && <div className="empty-state"><strong>请选择一道题</strong><p>右侧将显示来源、答案与审核动作。</p></div>}
           {detail && editDraft && <>
-            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools"><span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span>{isAdmin && <button type="button" onClick={() => changeQuestionLibraryState(detail.library_state === "removed" ? "restore" : "remove")}>{detail.library_state === "removed" ? "恢复题目" : "移入回收站"}</button>}</div></header>
+            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools">{detail.question_id.startsWith("q_variant_") && <span>当前教师私有</span>}<span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span>{isAdmin && <button type="button" onClick={() => changeQuestionLibraryState(detail.library_state === "removed" ? "restore" : "remove")}>{detail.library_state === "removed" ? "恢复题目" : "移入回收站"}</button>}</div></header>
             <div className="detail-mode-tabs"><button className={detailMode === "preview" ? "active" : ""} type="button" onClick={() => setDetailMode("preview")}>内容预览</button><button className={detailMode === "edit" ? "active" : ""} type="button" onClick={() => setDetailMode("edit")}>编辑与配图</button></div>
 
             {detailMode === "preview" ? <>
@@ -857,18 +859,14 @@ export default function SearchPage() {
                 {!quality && !qualityLoading && <p className="quality-load-error">质量工作区暂不可用，请确认接口已启动后重试。</p>}
               </details>}
               <div className="question-editor-form">
-                <div className="editor-safety-note"><strong>生成私有变式</strong><span>只允许从独立验证通过的原题生成；新题保留母题和生成记录，并重新进入教师审核门禁。</span></div>
-                <div className="question-editor-two">
-                  <label><span>变式方式</span><select value={variantKind} onChange={(event) => setVariantKind(event.target.value as VariantKind)}><option value="diagnostic">错因诊断</option><option value="numeric">数值变式</option><option value="difficulty">难度变式</option><option value="context">情境变式</option></select></label>
-                  <label><span>目标难度</span><select value={variantDifficulty} onChange={(event) => setVariantDifficulty(event.target.value)}><option value="">自动</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level} / 5</option>)}</select></label>
-                </div>
-                <label><span>补充要求（可选）</span><input value={variantInstruction} onChange={(event) => setVariantInstruction(event.target.value)} placeholder="例如：突出补集范围，适合作为课堂纠错题" /></label>
-                <div className="question-editor-actions"><span>{detail.verification_status === "passed" ? "生成后自动打开新题，可继续修改题干、答案、解析和图片。" : "该题尚未验证，暂不能作为变式母题。"}</span><button className="primary" type="button" disabled={working || detail.verification_status !== "passed"} onClick={generateVariant}>{working ? "生成中…" : "生成变式草稿"}</button></div>
+                <div className="editor-safety-note"><strong>教师先写，AI 后润色</strong><span>系统只复制母题作为编辑起点，不会替教师直接生成新题。教师修改后的内容归当前教师私有。</span></div>
+                <div className="question-editor-actions"><span>{detail.verification_status === "passed" ? "进入编辑器后，请先修改题干、条件、数值或选项，再使用 AI 润色和答案计算。" : "该题尚未验证，暂不能作为变式母题。"}</span><button className="primary" type="button" disabled={working || detail.verification_status !== "passed"} onClick={startTeacherVariant}>开始编写私人变式</button></div>
               </div>
             </> : <div className="question-editor-form">
-              <div className="editor-safety-note"><strong>{isAdmin ? "修改即生成新版本" : "编辑自己的变式"}</strong><span>{isAdmin ? "题干、选项、答案或题干图变化会自动退回数学验算；来源原文不会被覆盖。" : "这里的修改不会覆盖正式母题；可让 DeepSeek 计算答案后另存为私人变式。"}</span></div>
+              <div className="editor-safety-note"><strong>{variantDraftMode ? "正在编写私人变式" : isAdmin ? "修改即生成新版本" : "编辑自己的变式"}</strong><span>{variantDraftMode ? "教师是这份变式的所有者；AI 只润色或计算，保存后不会覆盖正式母题。" : isAdmin ? "题干、选项、答案或题干图变化会自动退回数学验算；来源原文不会被覆盖。" : "这里的修改不会覆盖正式母题；可让 DeepSeek 计算答案后另存为私人变式。"}</span></div>
               <label><span>题干正文</span><textarea className="large" value={editDraft.stem_plain} onChange={(event) => setEditDraft({ ...editDraft, stem_plain: event.target.value })} /></label>
               <label><span>LaTeX 题干（可选）</span><textarea value={editDraft.stem_latex} onChange={(event) => setEditDraft({ ...editDraft, stem_latex: event.target.value })} placeholder="可直接输入含 $...$ 的数学公式；留空则显示题干正文" /></label>
+              <label><span>AI 润色要求（可选）</span><input value={variantInstruction} onChange={(event) => setVariantInstruction(event.target.value)} placeholder="例如：只规范语言和 LaTeX，不改变题目条件" /></label>
               {isAdmin && renderImages("stem", true)}
               <section className="option-editor"><header><strong>选项</strong><button type="button" onClick={() => setEditDraft({ ...editDraft, options: [...editDraft.options, { key: String.fromCharCode(65 + editDraft.options.length), text: "" }] })}>＋ 添加选项</button></header>{editDraft.options.map((option, index) => <div key={`${option.key}-${index}`}><input className="option-key-input" aria-label={`选项 ${index + 1} 编号`} value={option.key} onChange={(event) => setEditDraft({ ...editDraft, options: editDraft.options.map((item, itemIndex) => itemIndex === index ? { ...item, key: event.target.value } : item) })} /><textarea value={option.text} onChange={(event) => setEditDraft({ ...editDraft, options: editDraft.options.map((item, itemIndex) => itemIndex === index ? { ...item, text: event.target.value } : item) })} /><button type="button" aria-label={`删除选项 ${option.key}`} onClick={() => setEditDraft({ ...editDraft, options: editDraft.options.filter((_, itemIndex) => itemIndex !== index) })}>×</button></div>)}</section>
               <div className="question-editor-two"><label><span>参考答案</span><input value={editDraft.answer_value} onChange={(event) => setEditDraft({ ...editDraft, answer_value: event.target.value })} /></label><label><span>解析方法</span><input value={editDraft.solution_method} onChange={(event) => setEditDraft({ ...editDraft, solution_method: event.target.value })} /></label></div>
@@ -876,7 +874,7 @@ export default function SearchPage() {
               <label><span>最终答案</span><input value={editDraft.final_answer} onChange={(event) => setEditDraft({ ...editDraft, final_answer: event.target.value })} /></label>
               {isAdmin && renderImages("solution", true)}
               <label><span>修订说明</span><input value={editDraft.note} onChange={(event) => setEditDraft({ ...editDraft, note: event.target.value })} /></label>
-              <div className="question-editor-actions"><button type="button" onClick={() => { setEditDraft(draftFromDetail(detail)); setDetailMode("preview"); }}>放弃未保存修改</button><button type="button" disabled={working || !editDraft.stem_plain.trim()} onClick={calculateVariantAnswer}>{working ? "计算中…" : "用 DeepSeek 计算答案"}</button><button className="primary" type="button" disabled={working || !editDraft.stem_plain.trim()} onClick={isAdmin || detail.question_id.startsWith("q_variant_") ? saveRevision : saveAsTeacherVariant}>{working ? "保存中…" : isAdmin ? "保存为新修订" : detail.question_id.startsWith("q_variant_") ? "保存我的变式" : "存入我的私人题库"}</button></div>
+              <div className="question-editor-actions"><button type="button" onClick={() => { setEditDraft(draftFromDetail(detail)); setVariantDraftMode(false); setDetailMode("preview"); }}>放弃未保存修改</button><button type="button" disabled={working || editDraft.stem_plain.trim().length < 5} onClick={polishTeacherVariant}>{working ? "处理中…" : "用 DeepSeek 润色原稿"}</button><button type="button" disabled={working || !editDraft.stem_plain.trim()} onClick={calculateVariantAnswer}>{working ? "计算中…" : "用 DeepSeek 计算答案"}</button><button className="primary" type="button" disabled={working || !editDraft.stem_plain.trim()} onClick={variantDraftMode || (!isAdmin && !detail.question_id.startsWith("q_variant_")) ? saveAsTeacherVariant : saveRevision}>{working ? "保存中…" : variantDraftMode ? "存入我的私人题库" : isAdmin ? "保存为新修订" : detail.question_id.startsWith("q_variant_") ? "保存我的变式" : "存入我的私人题库"}</button></div>
             </div>}
 
             {isAdmin && <><dl className="source-meta"><div><dt>来源文件</dt><dd>{detail.source_document}</dd></div><div><dt>定位页</dt><dd>{detail.source_page_start ?? "—"}{detail.source_page_end && detail.source_page_end !== detail.source_page_start ? `–${detail.source_page_end}` : ""}</dd></div><div><dt>审核状态</dt><dd>{reviewLabels[detail.review_status] ?? detail.review_status}</dd></div></dl><div className="gate-list"><h3>发布门禁</h3>{detail.publication_blockers.map((item) => <span key={item}>○ {blockerLabels[item] ?? item}</span>)}</div><div className="review-actions"><button type="button" className="approve" disabled={detail.verification_status !== "passed"} onClick={() => review("approved")}>教师通过</button><button type="button" onClick={() => review("changes_requested")}>需要修改</button><button type="button" className="reject" onClick={() => review("rejected")}>拒绝入库</button></div><button className="publish-check" type="button" onClick={checkPublish}>检查是否可以发布</button></>}
