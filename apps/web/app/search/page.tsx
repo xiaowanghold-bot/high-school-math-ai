@@ -53,6 +53,7 @@ type QuestionDetail = Question & {
     verification?: { status?: string; details?: string[]; computed_answer?: string | null; computed_canonical_value?: string };
     source?: { source_reference?: string | null };
     curation?: { disposition?: string; adaptation_candidate?: { change?: string; result?: string } | null };
+    generation_request?: { teacher_id?: string };
   };
   reviews: { reviewer_id: string; decision: string; note: string; reviewed_at: string }[];
   images: QuestionImage[];
@@ -348,8 +349,11 @@ export default function SearchPage() {
     setCurriculumQuery("");
     setCurriculumResults([]);
     setCurriculumTotal(0);
-    Promise.all([refreshDetail(selectedId), refreshQuality(selectedId)]).catch(() => setMessage("无法读取题目详情或质量工作区。"));
-  }, [selectedId]);
+    const requests = isAdmin
+      ? [refreshDetail(selectedId), refreshQuality(selectedId)]
+      : [refreshDetail(selectedId)];
+    Promise.all(requests).catch(() => setMessage(isAdmin ? "无法读取题目详情或质量工作区。" : "无法读取题目详情。"));
+  }, [selectedId, isAdmin]);
 
   function submitSearch(event: FormEvent) {
     event.preventDefault();
@@ -672,12 +676,25 @@ export default function SearchPage() {
 
   async function changeQuestionLibraryState(action: "remove" | "restore") {
     if (!selectedId) return;
-    if (action === "remove" && !window.confirm("题目将移入回收站，不再参与搜索、组卷、教案和推荐；正文、图片、来源及审核历史均保留。继续吗？")) return;
+    const privateVariant = detail?.question_id.startsWith("q_variant_") && detail.raw.generation_request?.teacher_id === actorId;
+    if (!isAdmin && !privateVariant) {
+      setMessage("正式题库原题仅管理员可以管理；教师只能删除自己创建的私人变式。");
+      return;
+    }
+    if (action === "remove" && !window.confirm(isAdmin
+      ? "题目将移入回收站，不再参与搜索、组卷、教案和推荐；正文、图片、来源及审核历史均保留。继续吗？"
+      : "这道私人变式将移入你的回收站，不再参与搜题、组卷和教案。继续吗？")) return;
     setWorking(true); setMessage(null);
     try {
       const response = await fetch(`${apiBase}/api/v1/questions/library-state`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_ids: [selectedId], action, reason: action === "remove" ? "用户从题库审核移入回收站" : "用户从题库回收站恢复" }),
+        body: JSON.stringify({
+          question_ids: [selectedId],
+          action,
+          actor_role: isAdmin ? "admin" : "teacher",
+          actor_id: actorId,
+          reason: action === "remove" ? "用户从题库移入回收站" : "用户从题库回收站恢复",
+        }),
       });
       if (!response.ok) throw new Error(await errorText(response));
       setSelectedId(null); setListVersion((value) => value + 1); await loadStats();
@@ -746,6 +763,12 @@ export default function SearchPage() {
     );
   }
 
+  const selectedIsOwnedPrivateVariant = Boolean(
+    detail?.question_id.startsWith("q_variant_")
+    && detail.raw.generation_request?.teacher_id === actorId
+  );
+  const canManageSelectedQuestion = isAdmin || selectedIsOwnedPrivateVariant;
+
   return (
     <div className="page-content question-workspace">
       <section className="page-title question-title">
@@ -786,26 +809,26 @@ export default function SearchPage() {
 
       <ResizableColumns className="question-layout" storageKey="question-search" initialLeftPercent={42} leftMin={320} rightMin={420} collapse="wide" label="调整题目列表与题目详情宽度">
         <section className="question-results" aria-label="题目列表">
-          <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong>{isAdmin && <button type="button" onClick={() => { setShowRemoved((current) => !current); setSelectedId(null); }}>{showRemoved ? "返回正常题库" : `题目回收站 ${stats?.removed ?? 0}`}</button>}</div>
+          <div className="results-heading"><strong>{loading ? "正在检索…" : `${total} 道题`}</strong><button type="button" onClick={() => { setShowRemoved((current) => !current); setSelectedId(null); }}>{showRemoved ? "返回正常题库" : isAdmin ? `题目回收站 ${stats?.removed ?? 0}` : "我的回收站"}</button></div>
           <div className="result-list">
             {items.map((item, index) => <button className={selectedId === item.question_id ? "question-row selected" : "question-row"} type="button" key={item.question_id} onClick={() => setSelectedId(item.question_id)}><span className="question-index">{String(index + 1).padStart(2, "0")}</span><span className="question-main"><span className="question-tags"><em>{item.question_type === "single_choice" ? "单选题" : "解答题"}</em><i className={`quality-tag ${item.verification_status}`}>{verificationLabels[item.verification_status] ?? item.verification_status}</i></span><b>{item.stem_plain}</b><small>{item.chapter} · 难度 {item.difficulty}/5</small></span><span className="review-mark">{reviewLabels[item.review_status] ?? item.review_status}</span></button>)}
             {!loading && items.length === 0 && <div className="empty-state"><strong>没有匹配题目</strong><p>换一个关键词或清空筛选条件。</p></div>}
           </div>
         </section>
 
-        <aside className="question-detail" aria-label="题目审核详情">
-          {!detail && <div className="empty-state"><strong>请选择一道题</strong><p>右侧将显示来源、答案与审核动作。</p></div>}
+        <aside className="question-detail" aria-label={isAdmin ? "题目审核详情" : "题目详情"}>
+          {!detail && <div className="empty-state"><strong>请选择一道题</strong><p>{isAdmin ? "右侧将显示来源、答案与审核动作。" : "右侧将显示题干、答案、解析和变式入口。"}</p></div>}
           {detail && editDraft && <>
-            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools">{detail.question_id.startsWith("q_variant_") && <span>当前教师私有</span>}<span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span>{isAdmin && <button type="button" onClick={() => changeQuestionLibraryState(detail.library_state === "removed" ? "restore" : "remove")}>{detail.library_state === "removed" ? "恢复题目" : "移入回收站"}</button>}</div></header>
-            <div className="detail-mode-tabs"><button className={detailMode === "preview" ? "active" : ""} type="button" onClick={() => setDetailMode("preview")}>内容预览</button><button className={detailMode === "edit" ? "active" : ""} type="button" onClick={() => setDetailMode("edit")}>编辑与配图</button></div>
+            <header className="detail-heading"><div><p>{detail.volume}{detail.section ? ` · ${detail.section}` : ""}</p><h2>{detail.chapter}</h2></div><div className="detail-heading-tools">{detail.question_id.startsWith("q_variant_") && <span>私人变式</span>}<span>难度 {detail.difficulty}</span><span>修订 {detail.revision_count}</span>{canManageSelectedQuestion && <button type="button" onClick={() => changeQuestionLibraryState(detail.library_state === "removed" ? "restore" : "remove")}>{detail.library_state === "removed" ? "恢复题目" : selectedIsOwnedPrivateVariant && !isAdmin ? "删除我的变式" : "移入回收站"}</button>}</div></header>
+            <div className="detail-mode-tabs"><button className={detailMode === "preview" ? "active" : ""} type="button" onClick={() => setDetailMode("preview")}>内容预览</button><button className={detailMode === "edit" ? "active" : ""} type="button" onClick={() => setDetailMode("edit")}>{isAdmin ? "编辑与配图" : "编辑题目"}</button></div>
 
             {detailMode === "preview" ? <>
-              {detail.verification_status === "passed" ? <div className="verification-passed"><strong>独立验证通过</strong><p>答案已由规则模块独立计算；教师修订数学内容后，本结论会自动失效。</p></div> : <div className="formula-warning"><strong>{verificationLabels[detail.verification_status]}</strong><p>{detail.raw.verification?.details?.[0] || "该题需要重新校正或独立验算后才能审核发布。"}</p></div>}
+              {isAdmin && (detail.verification_status === "passed" ? <div className="verification-passed"><strong>独立验证通过</strong><p>答案已由规则模块独立计算；教师修订数学内容后，本结论会自动失效。</p></div> : <div className="formula-warning"><strong>{verificationLabels[detail.verification_status]}</strong><p>{detail.raw.verification?.details?.[0] || "该题需要重新校正或独立验算后才能审核发布。"}</p></div>)}
               <div className="stem-card"><p><MathText text={detail.raw.stem?.latex || detail.stem_plain} /></p></div>
               {renderImages("stem")}
               {!!detail.raw.options?.length && <ol className="option-list">{detail.raw.options.map((option) => <li key={option.key}><b>{option.key}</b><span><MathText text={option.latex || option.plain_text || "选项内容需重建"} /></span></li>)}</ol>}
               <div className="answer-line"><span>{detail.verification_status === "passed" ? "独立验证答案" : "当前答案"}</span><strong>{detail.raw.verification?.computed_answer || detail.answer_value || "待独立求解"}</strong></div>
-              {!!detail.raw.solutions?.[0]?.steps_latex?.length && <div className="solution-card"><header><span>自有解析草稿</span><strong>{detail.raw.solutions[0].method}</strong></header><ol>{detail.raw.solutions[0].steps_latex?.map((step, index) => <li key={index}><MathText text={step} /></li>)}</ol><small>需由教师确认后才可作为正式解析</small></div>}
+              {!!detail.raw.solutions?.[0]?.steps_latex?.length && <div className="solution-card"><header><span>{isAdmin ? "自有解析草稿" : "解析"}</span><strong>{detail.raw.solutions[0].method}</strong></header><ol>{detail.raw.solutions[0].steps_latex?.map((step, index) => <li key={index}><MathText text={step} /></li>)}</ol>{isAdmin && <small>需由教师确认后才可作为正式解析</small>}</div>}
               {renderImages("solution")}
               {isAdmin && <details className="question-quality-workspace" open={detail.verification_status !== "passed" || !detail.knowledge_point_ids.length}>
                 <summary><span><strong>教材映射与数学核验</strong><small>建议只供参考，应用与通过均由教师确认</small></span><i>{qualityLoading ? "读取中" : detail.verification_status === "passed" ? "已核验" : "待处理"}</i></summary>
@@ -858,12 +881,12 @@ export default function SearchPage() {
                 </div>}
                 {!quality && !qualityLoading && <p className="quality-load-error">质量工作区暂不可用，请确认接口已启动后重试。</p>}
               </details>}
-              <div className="question-editor-form">
-                <div className="editor-safety-note"><strong>教师先写，AI 后润色</strong><span>系统只复制母题作为编辑起点，不会替教师直接生成新题。教师修改后的内容归当前教师私有。</span></div>
-                <div className="question-editor-actions"><span>{detail.verification_status === "passed" ? "进入编辑器后，请先修改题干、条件、数值或选项，再使用 AI 润色和答案计算。" : "该题尚未验证，暂不能作为变式母题。"}</span><button className="primary" type="button" disabled={working || detail.verification_status !== "passed"} onClick={startTeacherVariant}>开始编写私人变式</button></div>
+              <div className={isAdmin ? "question-editor-form" : "teacher-variant-entry"}>
+                {isAdmin && <div className="editor-safety-note"><strong>教师先写，AI 后润色</strong><span>系统只复制母题作为编辑起点，不会替教师直接生成新题。教师修改后的内容归当前教师私有。</span></div>}
+                <div className="question-editor-actions">{isAdmin && <span>{detail.verification_status === "passed" ? "进入编辑器后，请先修改题干、条件、数值或选项，再使用 AI 润色和答案计算。" : "该题尚未验证，暂不能作为变式母题。"}</span>}<button className="primary" type="button" disabled={working || detail.verification_status !== "passed"} onClick={startTeacherVariant}>{isAdmin ? "开始编写私人变式" : "创建我的变式"}</button></div>
               </div>
             </> : <div className="question-editor-form">
-              <div className="editor-safety-note"><strong>{variantDraftMode ? "正在编写私人变式" : isAdmin ? "修改即生成新版本" : "编辑自己的变式"}</strong><span>{variantDraftMode ? "教师是这份变式的所有者；AI 只润色或计算，保存后不会覆盖正式母题。" : isAdmin ? "题干、选项、答案或题干图变化会自动退回数学验算；来源原文不会被覆盖。" : "这里的修改不会覆盖正式母题；可让 DeepSeek 计算答案后另存为私人变式。"}</span></div>
+              {isAdmin ? <div className="editor-safety-note"><strong>{variantDraftMode ? "正在编写私人变式" : "修改即生成新版本"}</strong><span>{variantDraftMode ? "教师是这份变式的所有者；AI 只润色或计算，保存后不会覆盖正式母题。" : "题干、选项、答案或题干图变化会自动退回数学验算；来源原文不会被覆盖。"}</span></div> : <div className="teacher-private-note"><strong>编辑私人变式</strong><span>仅你可见</span></div>}
               <label><span>题干正文</span><textarea className="large" value={editDraft.stem_plain} onChange={(event) => setEditDraft({ ...editDraft, stem_plain: event.target.value })} /></label>
               <label><span>LaTeX 题干（可选）</span><textarea value={editDraft.stem_latex} onChange={(event) => setEditDraft({ ...editDraft, stem_latex: event.target.value })} placeholder="可直接输入含 $...$ 的数学公式；留空则显示题干正文" /></label>
               <label><span>AI 润色要求（可选）</span><input value={variantInstruction} onChange={(event) => setVariantInstruction(event.target.value)} placeholder="例如：只规范语言和 LaTeX，不改变题目条件" /></label>

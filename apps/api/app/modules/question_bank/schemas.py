@@ -158,6 +158,7 @@ class QuestionBankStats(BaseModel):
 class QuestionLibraryStateCommand(BaseModel):
     question_ids: list[str] = Field(min_length=1, max_length=200)
     action: Literal["remove", "restore"]
+    actor_role: Literal["admin", "teacher"]
     actor_id: str = Field(default="owner_teacher", min_length=1, max_length=120)
     reason: str = Field(default="重复题校对", max_length=2000)
     relation_candidate_id: str | None = Field(default=None, max_length=160)

@@ -15,6 +15,9 @@
   --module-control-text: 13px;
   --module-control-height: 36px;
   --module-resizer-width: 14px;
+  --text-math-body: 16px;
+  --text-math-support: 14px;
+  --text-math-meta: 12px;
   --toast-info: #3559d9;
   --toast-info-soft: #edf1ff;
   --toast-success: #168a7a;
@@ -259,6 +262,16 @@ h1 { margin: 0; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-s
 .gate-list { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }.gate-list h3 { margin: 0 0 8px; font-size: 11px; }.gate-list span { display: block; color: #737e90; font-size: 10px; padding: 3px 0; }
 .review-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; margin-top: 14px; }.review-actions button, .publish-check { border: 1px solid var(--line); border-radius: 8px; background: white; color: #536077; padding: 9px 7px; cursor: pointer; font-size: 10px; }.review-actions .approve { color: #16705f; border-color: #a9d9ce; background: #f1fbf8; }.review-actions .reject { color: #a43e3e; border-color: #ecc0c0; }.publish-check { width: 100%; margin-top: 8px; color: #3f58b6; border-color: #c6cff3; background: #f5f7ff; }
 .review-actions button:disabled { cursor: not-allowed; opacity: .45; }
+
+/* Hallmark · scoped refinement: teacher question actions · internal admin copy stays role-gated */
+.teacher-variant-entry { display: flex; justify-content: flex-end; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.teacher-variant-entry .question-editor-actions { padding: 0; }
+.teacher-variant-entry .question-editor-actions button { min-height: 40px; padding: 10px 15px; font-size: var(--module-control-text); font-weight: 700; white-space: nowrap; }
+.teacher-variant-entry .question-editor-actions button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.teacher-variant-entry .question-editor-actions button:active { outline: 1px solid var(--ink); outline-offset: 0; }
+.teacher-private-note { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 0 0 10px; }
+.teacher-private-note strong { font-size: var(--module-text-sm); }
+.teacher-private-note span { color: var(--muted); font-size: var(--module-text-xs); }
 
 .lesson-page { max-width: 1680px; }
 .lesson-title { align-items: center; }

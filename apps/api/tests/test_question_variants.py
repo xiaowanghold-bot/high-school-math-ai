@@ -8,7 +8,12 @@ from fastapi.testclient import TestClient
 from app.core.config import PROJECT_ROOT
 from app.main import app
 from app.modules.math_verifier import MathVerifier
-from app.modules.question_bank import QuestionBank, QuestionRevisionCommand
+from app.modules.question_bank import (
+    QuestionBank,
+    QuestionBankError,
+    QuestionLibraryStateCommand,
+    QuestionRevisionCommand,
+)
 from app.modules.question_variants import (
     LocalDiagnosticVariantProvider,
     QuestionVariantGenerationRequest,
@@ -187,6 +192,74 @@ def test_admin_revision_flows_to_teachers_after_reverification_without_touching_
 
     assert formal.stem_plain.endswith("admin formal clarification")
     assert bank.get_question(private_copy.question_id).stem_plain == "teacher_a private wording"
+
+
+def test_teacher_can_remove_only_their_own_private_variant_while_admin_can_remove_any_question(
+    tmp_path: Path,
+) -> None:
+    bank, service = make_service(tmp_path)
+    teacher_a = service.save_teacher_draft(
+        "q_pilot_set_1_1",
+        TeacherVariantDraftCommand(
+            question_type="single_choice",
+            stem_plain="teacher_a private variant",
+            teacher_id="teacher_a",
+        ),
+    )
+    teacher_b = service.save_teacher_draft(
+        "q_pilot_set_1_1",
+        TeacherVariantDraftCommand(
+            question_type="single_choice",
+            stem_plain="teacher_b private variant",
+            teacher_id="teacher_b",
+        ),
+    )
+
+    with pytest.raises(QuestionBankError, match="正式题库"):
+        bank.change_library_state(
+            QuestionLibraryStateCommand(
+                question_ids=["q_pilot_set_1_1"],
+                action="remove",
+                actor_role="teacher",
+                actor_id="teacher_a",
+            )
+        )
+    with pytest.raises(QuestionBankError, match="其他教师"):
+        bank.change_library_state(
+            QuestionLibraryStateCommand(
+                question_ids=[teacher_b.question_id],
+                action="remove",
+                actor_role="teacher",
+                actor_id="teacher_a",
+            )
+        )
+
+    own_result = bank.change_library_state(
+        QuestionLibraryStateCommand(
+            question_ids=[teacher_a.question_id],
+            action="remove",
+            actor_role="teacher",
+            actor_id="teacher_a",
+        )
+    )
+    admin_result = bank.change_library_state(
+        QuestionLibraryStateCommand(
+            question_ids=["q_pilot_set_1_1"],
+            action="remove",
+            actor_role="admin",
+            actor_id="admin_owner",
+        )
+    )
+
+    assert own_result.changed_question_ids == [teacher_a.question_id]
+    assert admin_result.changed_question_ids == ["q_pilot_set_1_1"]
+    teacher_recycle = bank.search(
+        usage_scope="teacher",
+        usage_owner_id="teacher_a",
+        library_state="removed",
+        page_size=100,
+    )
+    assert [item.question_id for item in teacher_recycle.items] == [teacher_a.question_id]
 
 
 def test_unverified_source_and_nonlocal_modes_are_blocked(tmp_path: Path) -> None:

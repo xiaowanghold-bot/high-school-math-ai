@@ -345,6 +345,7 @@ class QuestionSimilarityRegistry:
             QuestionLibraryStateCommand(
                 question_ids=requested,
                 action=command.action,
+                actor_role="admin",
                 actor_id=command.actor_id,
                 reason=command.reason,
                 relation_candidate_id=candidate_id,

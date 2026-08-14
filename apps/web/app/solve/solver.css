@@ -1,3 +1,6 @@
+/* Hallmark · component: solver reading surface · genre: utilitarian · theme: existing app system
+ * pre-emit critique: P5 H5 E5 S5 R5 V4
+ */
 .solver-workspace { max-width: 1520px; }
 .solver-title { align-items: center; }
 .solver-title > div:first-child { flex: 1; min-width: 0; }
@@ -98,3 +101,24 @@
 /* Hallmark · readability pass: solver workspace · navigation unchanged */
 .solver-page :is(.solver-safety-badge span, .solver-input-panel header small, .solver-question-field > span, .solver-instruction-field > span, .solver-question-field > small, .solver-samples > header strong, .solver-samples > header span, .solver-samples > p, .solver-empty ol, .solver-result-heading p, .solver-confidence, .solver-question-preview > span, .solver-warning, .solver-solution-card header span, .solver-solution-card header strong, .solver-solution-card header a, .solver-solution-card > footer span, .solver-insight-grid header span, .solver-insight-grid header strong, .solver-insight-grid p, .solver-result-actions div span, .solver-result-actions div small) { font-size: var(--module-text-sm) !important; }
 .solver-page :is(.solver-submit, .solver-result-actions button) { min-height: 40px; padding: 10px 14px; font-size: var(--module-control-text) !important; }
+
+/* Hallmark · teacher-facing reading hierarchy: question → derivation → supporting insight */
+.solver-page .solver-question-preview > span { font-size: var(--text-math-meta) !important; }
+.solver-page .solver-question-preview p { font-size: var(--text-math-body); line-height: 1.85; }
+.solver-page .solver-solution-card > header { padding: 13px 15px; }
+.solver-page .solver-solution-card header span,
+.solver-page .solver-solution-card header a { font-size: var(--text-math-meta) !important; }
+.solver-page .solver-solution-card header strong { font-size: var(--text-math-support) !important; }
+.solver-page .solver-solution-card ol { padding-inline: 15px; }
+.solver-page .solver-solution-card li { grid-template-columns: 34px minmax(0,1fr); gap: 12px; padding: 14px 0; }
+.solver-page .solver-solution-card li > b { width: 30px; height: 30px; font-size: var(--module-text-xs); }
+.solver-page .solver-solution-card li p { margin-top: 1px; font-size: var(--text-math-body); line-height: 1.85; }
+.solver-page .solver-solution-card > footer span { font-size: var(--text-math-meta) !important; }
+.solver-page .solver-solution-card > footer strong { font-size: var(--text-math-body); }
+.solver-page .solver-insight-grid { gap: 12px; margin-top: 13px; }
+.solver-page .solver-insight-grid > section { min-height: 118px; padding: 14px; }
+.solver-page .solver-insight-grid header { margin-bottom: 9px; }
+.solver-page .solver-insight-grid header span { width: 28px; height: 28px; font-size: var(--module-text-xs) !important; }
+.solver-page .solver-insight-grid header strong { font-size: var(--text-math-support) !important; }
+.solver-page .solver-insight-grid p { margin-top: 7px; padding-left: 12px; font-size: var(--text-math-support) !important; line-height: 1.7; }
+.solver-page .solver-insight-grid p::before { top: 8px; }

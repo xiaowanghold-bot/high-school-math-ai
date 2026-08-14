@@ -413,11 +413,17 @@ class QuestionBank:
         if usage_scope not in {"admin", "teacher"}:
             raise QuestionBankError("未知的题库使用范围")
         if usage_scope == "teacher":
-            clauses.append(
-                "((verification_status = 'passed' AND question_id NOT LIKE 'q_variant_%') "
-                "OR (question_id LIKE 'q_variant_%' AND "
-                "json_extract(raw_json, '$.generation_request.teacher_id') = ?))"
-            )
+            if library_state == "removed":
+                clauses.append(
+                    "(question_id LIKE 'q_variant_%' AND "
+                    "json_extract(raw_json, '$.generation_request.teacher_id') = ?)"
+                )
+            else:
+                clauses.append(
+                    "((verification_status = 'passed' AND question_id NOT LIKE 'q_variant_%') "
+                    "OR (question_id LIKE 'q_variant_%' AND "
+                    "json_extract(raw_json, '$.generation_request.teacher_id') = ?))"
+                )
             values.append(usage_owner_id)
         if library_state == "active":
             clauses.append(
@@ -570,16 +576,28 @@ class QuestionBank:
         unchanged: list[str] = []
         with self._connect() as connection:
             placeholders = ",".join("?" for _ in question_ids)
-            existing = {
-                row["question_id"]
+            existing_rows = {
+                row["question_id"]: row
                 for row in connection.execute(
-                    f"SELECT question_id FROM questions WHERE question_id IN ({placeholders})",
+                    f"SELECT question_id, raw_json FROM questions WHERE question_id IN ({placeholders})",
                     question_ids,
                 ).fetchall()
             }
-            missing = [question_id for question_id in question_ids if question_id not in existing]
+            missing = [question_id for question_id in question_ids if question_id not in existing_rows]
             if missing:
                 raise QuestionBankError(f"题目不存在：{', '.join(missing)}")
+            if command.actor_role == "teacher":
+                for question_id in question_ids:
+                    if not question_id.startswith("q_variant_"):
+                        raise QuestionBankError(
+                            "教师只能移除或恢复自己创建的私人变式；正式题库原题仅管理员可以管理"
+                        )
+                    raw = json.loads(existing_rows[question_id]["raw_json"])
+                    owner_id = str(
+                        (raw.get("generation_request") or {}).get("teacher_id") or ""
+                    )
+                    if owner_id != command.actor_id:
+                        raise QuestionBankError("不能处理其他教师创建的私人变式")
             states = {
                 row["question_id"]: row["state"]
                 for row in connection.execute(
