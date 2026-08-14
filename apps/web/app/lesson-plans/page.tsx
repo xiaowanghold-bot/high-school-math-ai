@@ -231,9 +231,17 @@ export default function LessonPlansPage() {
       .then(([tree, planList]) => {
         const nextOptions = curriculumOptions(tree);
         setOptions(nextOptions);
-        const preferred = nextOptions.find((item) => item.id === "pep_a_r1_c3_s2") ?? nextOptions[0];
+        const params = new URLSearchParams(window.location.search);
+        const requestedCurriculumId = params.get("curriculum");
+        const requestedPlanId = params.get("open");
+        const preferred = nextOptions.find((item) => item.id === requestedCurriculumId)
+          ?? nextOptions.find((item) => item.id === "pep_a_r1_c3_s2")
+          ?? nextOptions[0];
         if (preferred) setForm((current) => ({ ...current, curriculum_node_id: preferred.id }));
         setPlans(planList.items);
+        if (requestedPlanId && planList.items.some((item: LessonPlanSummary) => item.lesson_plan_id === requestedPlanId)) {
+          return openPlan(requestedPlanId);
+        }
       })
       .catch((error: Error) => setMessage(`${error.message}，请确认 FastAPI 已启动。`));
   }, []);

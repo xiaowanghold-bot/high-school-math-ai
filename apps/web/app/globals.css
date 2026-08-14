@@ -34,6 +34,10 @@
   --toast-ease-out: cubic-bezier(.2,.8,.2,1);
   --toast-ease-in: cubic-bezier(.4,0,1,1);
   --toast-layer: 500;
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --focus-ring: 3px solid var(--blue);
 }
 
 * { box-sizing: border-box; }
@@ -353,6 +357,141 @@ h1 { margin: 0; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-s
 @media (max-width: 700px) { .quality-strip > div:nth-child(2n) { border-right: 0; }.quality-strip > div:nth-last-child(-n+2) { border-bottom: 0; } }
 
 .page-content a:not(.quick-card):not(.chapter) { font-size: var(--module-text-sm) !important; }
+
+/* Hallmark · component: actionable teacher dashboard and curriculum navigator · genre: modern-minimal · theme: existing system
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
+ */
+.dashboard-page .welcome-row h1 { max-width: 900px; overflow-wrap: anywhere; }
+.dashboard-page .chapter-list { grid-template-columns: repeat(5,minmax(0,1fr)); }
+.dashboard-page .chapter {
+  position: relative;
+  min-width: 0;
+  min-height: 162px;
+  color: var(--ink);
+  background: var(--paper);
+  transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+.dashboard-page .chapter > div { min-width: 0; }
+.dashboard-page .chapter h3 { font-size: 15px; }
+.dashboard-page .chapter p { margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+.chapter-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; color: var(--blue); font-size: 12px; font-weight: 700; }
+.chapter-action b { transition: transform var(--dur-micro) var(--ease-out); }
+.dashboard-page .chapter:focus-visible,
+.recent-work-list > a:focus-visible,
+.teacher-assets-list > a:focus-visible,
+.curriculum-chapter-start:focus-visible,
+.curriculum-section summary:focus-visible,
+.curriculum-section-content a:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+}
+.dashboard-page .chapter:active { transform: translateY(1px); }
+.dashboard-skeleton { min-height: 162px; display: grid; place-items: center; border: 1px dashed var(--line); border-radius: 15px; color: var(--muted); background: var(--paper); font-size: 14px; }
+.dashboard-page[data-state="error"] .dashboard-skeleton { border-color: var(--amber); color: var(--amber); }
+.dashboard-work-grid { grid-template-columns: minmax(0,1.35fr) minmax(310px,.65fr); align-items: stretch; }
+.dashboard-work-grid > .panel { min-width: 0; }
+.section-heading-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 14px; }
+.recent-work-list { display: grid; }
+.recent-work-list > a { display: grid; grid-template-columns: 38px minmax(0,1fr) auto 16px; gap: 12px; align-items: center; min-height: 68px; border-top: 1px solid var(--line); color: var(--ink); padding: 10px 2px; transition: background-color var(--dur-short) var(--ease-out); }
+.recent-work-list > a > span { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--blue); background: color-mix(in srgb,var(--blue) 9%,var(--paper)); font-weight: 700; }
+.recent-work-list > a > span.paper { color: var(--amber); background: color-mix(in srgb,var(--amber) 9%,var(--paper)); }
+.recent-work-list strong,
+.recent-work-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-work-list strong { font-size: 14px; }
+.recent-work-list small { margin-top: 4px; color: var(--muted); }
+.recent-work-list time { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.recent-work-list > a > b { color: var(--muted); }
+.recent-work-panel .empty-state > a { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; margin-top: 8px; border: 1px solid var(--blue); border-radius: 9px; color: var(--blue); padding: 8px 12px; white-space: nowrap; }
+.teacher-assets-panel .section-heading { align-items: flex-start; }
+.teacher-assets-panel .section-heading p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.teacher-assets-list { display: grid; }
+.teacher-assets-list > a { display: grid; grid-template-columns: minmax(48px,auto) 40px minmax(0,1fr) 16px; gap: 10px; align-items: center; min-height: 64px; border-top: 1px solid var(--line); color: var(--ink); padding: 8px 2px; transition: background-color var(--dur-short) var(--ease-out); }
+.teacher-assets-list span { font-size: 13px; font-weight: 700; }
+.teacher-assets-list strong { color: var(--blue); font-size: 22px; font-variant-numeric: tabular-nums; text-align: center; }
+.teacher-assets-list small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.teacher-assets-list b { color: var(--muted); }
+
+.curriculum-volume-tabs button { min-height: 58px; }
+.curriculum-volume-tabs button strong { font-size: 13px; }
+.curriculum-volume-tabs button span { font-size: 11px; }
+.curriculum-review-banner { padding: 12px 14px; }
+.curriculum-review-banner strong { font-size: 11px; }
+.curriculum-review-banner span { font-size: 12px; }
+.curriculum-prep-card { scroll-margin-top: 92px; transition: border-color var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out); }
+.curriculum-prep-card.highlighted { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb,var(--blue) 12%,transparent); }
+.curriculum-prep-card > header { align-items: center; }
+.curriculum-prep-card > header > div { min-width: 0; flex: 1; }
+.curriculum-chapter-start { flex: none; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--blue); border-radius: 9px; color: var(--blue); padding: 8px 11px; white-space: nowrap; transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
+.curriculum-chapter-start:active,
+.curriculum-section-content a:active { transform: translateY(1px); }
+.curriculum-section-list { display: grid; padding-top: 8px; }
+.curriculum-section { border-bottom: 1px solid var(--line); }
+.curriculum-section:last-child { border-bottom: 0; }
+.curriculum-section summary { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--ink); padding: 8px 2px; cursor: pointer; list-style: none; transition: background-color var(--dur-short) var(--ease-out); }
+.curriculum-section summary::-webkit-details-marker { display: none; }
+.curriculum-section summary > div { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.curriculum-section summary > div b { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.curriculum-section summary > div span { overflow: hidden; font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.curriculum-section summary > span { flex: none; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.curriculum-section summary > span b { display: inline-block; color: var(--blue); transition: transform var(--dur-short) var(--ease-out); }
+.curriculum-section[open] summary > span b { transform: rotate(180deg); }
+.curriculum-section-content { display: grid; gap: 8px; padding: 2px 0 14px 28px; }
+.curriculum-whole-section { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-radius: 9px; color: var(--ink); background: color-mix(in srgb,var(--blue) 6%,var(--paper)); padding: 9px 11px; }
+.curriculum-whole-section span { font-size: 13px; font-weight: 700; }
+.curriculum-whole-section b { color: var(--blue); font-size: 12px; white-space: nowrap; }
+.curriculum-knowledge-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 14px; }
+.curriculum-knowledge-list > a { min-width: 0; min-height: 44px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); color: var(--ink); padding: 7px 2px; transition: background-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
+.curriculum-knowledge-list span { min-width: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.curriculum-knowledge-list b { color: var(--blue); font-size: 11px; white-space: nowrap; }
+
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-page .chapter:hover { background: color-mix(in srgb,var(--blue) 5%,var(--paper)); }
+  .dashboard-page .chapter:hover .chapter-action b { transform: translateX(3px); }
+  .recent-work-list > a:hover,
+  .teacher-assets-list > a:hover,
+  .curriculum-section summary:hover,
+  .curriculum-knowledge-list > a:hover { background: color-mix(in srgb,var(--blue) 4%,var(--paper)); }
+  .curriculum-chapter-start:hover { color: var(--paper); background: var(--blue); }
+}
+
+@media (max-width: 1150px) {
+  .dashboard-page .chapter-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .dashboard-work-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .dashboard-page .chapter-list { grid-template-columns: 1fr; }
+  .dashboard-page .chapter { min-height: 140px; border-right: 0; }
+  .section-heading-links { justify-content: flex-start; }
+  .recent-work-list > a { grid-template-columns: 38px minmax(0,1fr) 16px; }
+  .recent-work-list time { display: none; }
+  .curriculum-prep-card > header { align-items: flex-start; flex-wrap: wrap; }
+  .curriculum-chapter-start { width: 100%; }
+  .curriculum-section summary { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .curriculum-section summary > div span { white-space: normal; }
+  .curriculum-section-content { padding-left: 0; }
+  .curriculum-knowledge-list { grid-template-columns: 1fr; }
+}
+@media (pointer: coarse) {
+  .dashboard-page .chapter,
+  .recent-work-list > a,
+  .teacher-assets-list > a,
+  .curriculum-chapter-start,
+  .curriculum-section summary,
+  .curriculum-section-content a { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-page .chapter,
+  .chapter-action b,
+  .recent-work-list > a,
+  .teacher-assets-list > a,
+  .curriculum-prep-card,
+  .curriculum-chapter-start,
+  .curriculum-section summary,
+  .curriculum-section summary > span b,
+  .curriculum-section-content a { transition-duration: 0ms; }
+  .curriculum-section[open] summary > span b { transform: none; }
+}
 .page-content :is(.control-heading p, .lesson-context-strip span, .lesson-warning, .block-lock-badge, .block-rewrite-bar label span, .rewrite-review-panel span, .rewrite-review-panel small, .phase-title label, .phase-fields > label span, .question-recommendations article span, .question-recommendations article small, .paper-template-note b, .paper-template-note p, .paper-template-note strong, .paper-breakdown, .paper-export-row strong) { font-size: var(--module-text-xs) !important; }
 .page-content :is(.catalog-review-filters label > span, .catalog-review-field > span, .catalog-review-readonly > span, .catalog-review-list b, .catalog-review-list-heading strong, .catalog-review-editor-heading p, .catalog-review-editor-heading span, .catalog-review-history p, .catalog-review-history small) { font-size: var(--module-text-sm) !important; }
 .page-content :is(.question-row strong, .question-row p, .results-heading, .source-meta, .gate-list span, .lesson-history b, .lesson-history span, .lesson-history p, .paper-candidates b, .paper-candidates p, .paper-item-list article header div b, .paper-item-list article header div span, .paper-item-list article small) { font-size: var(--module-text-sm) !important; }

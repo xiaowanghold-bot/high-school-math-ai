@@ -86,19 +86,22 @@ export default function PapersPage() {
     setIsDirty(false);
   }
 
-  async function loadPapers(openFirst = false) {
+  async function loadPapers(openFirst = false, requestedPaperId = "") {
     const response = await fetch(`${apiBase}/api/v1/exam-papers?lifecycle_state=${showTrash ? "trashed" : "active"}`);
     if (!response.ok) throw new Error(await errorText(response));
     const payload = await response.json(); setPapers(payload.items);
-    if (openFirst && payload.items[0]) await openPaper(payload.items[0].exam_paper_id);
+    if (requestedPaperId && payload.items.some((item: PaperSummary) => item.exam_paper_id === requestedPaperId)) await openPaper(requestedPaperId);
+    else if (openFirst && payload.items[0]) await openPaper(payload.items[0].exam_paper_id);
   }
 
   useEffect(() => {
-    const createNew = new URLSearchParams(window.location.search).get("create") === "new";
+    const params = new URLSearchParams(window.location.search);
+    const createNew = params.get("create") === "new";
+    const requestedPaperId = params.get("open") ?? "";
     Promise.all([
       fetch(`${apiBase}/api/v1/questions?verification_status=passed&page_size=100`).then(async (response) => { if (!response.ok) throw new Error(await errorText(response)); const payload = await response.json(); setQuestions(payload.items); }),
       fetch(`${apiBase}/api/v1/exam-papers/templates`).then(async (response) => { if (!response.ok) throw new Error(await errorText(response)); const payload = await response.json(); setTemplates(payload.items); }),
-      loadPapers(!createNew),
+      loadPapers(!createNew, requestedPaperId),
     ]).catch((error: Error) => setMessage(error.message));
     if (createNew) newPaper();
     function receiveCreate(event: Event) {
