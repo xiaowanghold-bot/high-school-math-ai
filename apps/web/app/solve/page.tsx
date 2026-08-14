@@ -78,7 +78,7 @@ export default function SolvePage() {
   function submit(event: FormEvent) { event.preventDefault(); void solve("standard"); }
 
   return (
-    <div className="page-content solver-workspace">
+    <div className="page-content solver-workspace solver-page">
       <section className="page-title solver-title">
         <div><p className="eyebrow">解题助手 · 教师复核优先</p><h1>把答案、依据和风险放在一起看。</h1><p className="subtle">优先匹配独立验证题库；题库外答案会明确标记为待教师复核。</p></div>
         <div className="solver-safety-badge"><strong>三档可信度</strong><span>程序验证 · 模型复核 · 教师复核</span></div>
@@ -107,7 +107,7 @@ export default function SolvePage() {
             <section className="solver-question-preview"><span>当前题目</span><p><MathText text={result.question_text} /></p></section>
             {result.warnings.map((warning) => <p className="solver-warning" key={warning}>{warning}</p>)}
             <section className="solver-solution-card">
-              <header><div><span>解题过程</span><strong>{result.explanation.steps.length} 个关键步骤</strong></div>{result.matched_question_id && <Link href="/search">查看题库原题 →</Link>}</header>
+              <header><div><span>解题过程</span><strong>{result.explanation.steps.length} 个关键步骤</strong></div>{result.matched_question_id && <Link className="solver-source-link" href="/search">查看题库原题 →</Link>}</header>
               <ol>{result.explanation.steps.map((step, index) => <li key={`${index}-${step}`}><b>{String(index + 1).padStart(2, "0")}</b><p><MathText text={step} /></p></li>)}</ol>
               <footer><span>最终答案</span><strong><MathText text={result.explanation.final_answer} /></strong></footer>
             </section>
